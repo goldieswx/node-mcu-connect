@@ -1,5 +1,5 @@
 /*
-    node-arduino interface. 
+    node-mcu-connect. A node.js UDP Interface for embedded devices.
     Copyright (C) 2013-2014 David Jakubowski
 
     This program is free software: you can redistribute it and/or modify
