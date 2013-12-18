@@ -1,5 +1,5 @@
-node-arduino
-============
+node-mcu-connect 
+================
 
 node.js helper functions to interface with embedded ethernet devices through UDP.
 Currently only arduino is supported, but a raspberry GPIO client is in the plans.
