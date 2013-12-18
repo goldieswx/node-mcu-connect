@@ -1,7 +1,6 @@
-
 /*
-    node-arduino. UDP Interface for arduino and embedded devices.
-    Copyright (C) 2013 David Jakubowski
+    node-mcu-connect. A node.js UDP Interface for embedded devices.
+    Copyright (C) 2013-4 David Jakubowski
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
