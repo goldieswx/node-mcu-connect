@@ -120,6 +120,23 @@ lowLevelArduinoInterface.setDigitalStateMessage = function(digitalPinId,state) {
 
 }
 
+/**
+ * Function setAnalogState()
+ */
+lowLevelArduinoInterface.setAnalogStateMessage = function(digitalPinId,state) {
+
+  if (digitalPinId < 0)   { return; }
+  if (digitalPinId >= 10) { return; }
+  state = Math.min(255,Math.max(state,0));
+
+  var message = new Buffer("SE/Axx");
+  message.writeUInt8(digitalPinId, 4);
+  message.writeUInt8(state, 5);
+  return message;
+
+}
+
+
 lowLevelArduinoInterface.setDigitalStateMessageDuration = function(digitalPinId,state,duration) {
 
   if (digitalPinId < 0)   { return; }

@@ -17,17 +17,67 @@
  */
 
 var mcuConnect = require('../js/core.js');
-var UDPInterface = mcuConnect.UDPInterface; 
+var UI = mcuConnect.UDPInterface; 
 
-var ai = new UDPInterface({host:'192.168.0.177', port: 8888, analogScale:1024});
+var ai = new UI(
+            { host:'192.168.0.178', 
+              port: 8888, 
+              analogScale:1024});
 
-ai.select('D/8').disable();
+(function ($) {
 
-ai.select('D/4').on({state:'any'},function(e,bMsg){
- console.log (e,bMsg);
-});
+   $('D/2').on({state:'change'},function(e,bMsg){
 
-var ntc1Sensor = { type:'ntc',
+      if (e.state == UI.const.state.initial) { 
+          $('D/3').disable();
+          e.event.myInterruptState = 0;
+          return; 
+      } 
+
+      if (e.state == UI.const.state.low) {
+          e.event.myInterruptState = (e.event.myInterruptState)?0:1;
+          
+          if (e.event.myInterruptState) { 
+            $('D/3').pwm(4);
+          } else {
+            $('D/3').disable();
+          }
+      }
+  });
+
+})(ai.select.bind(ai)); 
+
+/*  var x = 1;
+
+  var _b = function(x1,x2,y1,y2) { return  Math.log(y1/y2)/(x1-x2); };
+  var _a = function(b,x1,y1) { return y1/Math.exp(b*x1); }
+
+  var b = _b(1,256,1,256);
+  var a = _a(b,1,1);
+
+  var _y = function(a,b,x) { return Math.round(a*Math.exp(b*x)); }
+
+
+setInterval(function(){
+  console.log('test');
+
+  ai.select('D/3').pwm(_y(a,b,x));
+  x++;
+  x %= 256;
+
+  console.log("--"+x + " --" + _y(a,b,x));
+
+},10);*/
+
+
+
+
+
+
+
+
+
+/*var ntc1Sensor = { type:'ntc',
                    b25:3988,
                    rI:22000,
                    vI:5,
@@ -69,7 +119,7 @@ ai.select('A/0').on({state:'treshold'},function(e,bMsg){
 
    //console.log(e.event);
 
-});
+})*/
 
 
 

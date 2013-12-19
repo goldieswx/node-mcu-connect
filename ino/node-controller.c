@@ -107,6 +107,13 @@ void loop() {
        setState(pinId,state);
     }
 
+    if (0 ==  strncmp(packetBuffer,"SE/A",4)) {
+       pinId = packetBuffer[4];
+       state = packetBuffer[5];
+       setStateAnalog(pinId,state);
+    }
+
+
     if (0 ==  strncmp(packetBuffer,"SD/D",4)) {
        pinId = packetBuffer[4];
        state = packetBuffer[5];
@@ -170,6 +177,15 @@ void setState(int pinId,int state) {
    } else {
      digitalWrite(pinId,LOW);
    }
+   if ((pinId < 16) &&  (pinId >=0)) {
+     durationsSet[pinId] = 0;
+   }
+};
+
+void setStateAnalog(int pinId,int state) {
+
+   analogWrite(pinId,state);
+   
    if ((pinId < 16) &&  (pinId >=0)) {
      durationsSet[pinId] = 0;
    }

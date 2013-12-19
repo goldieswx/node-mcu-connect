@@ -47,7 +47,7 @@ var ArduinoInterface = function(arduinoSettings) {
 };
 
 
-ArduinoInterface.const = { HIGH:1, LOW:0, ANALOG: 2, DIGITAL: 1, state: { initial:1,loTreshold:2,hiTreshold:3} };
+ArduinoInterface.const = { HIGH:1, LOW:0, ANALOG: 2, DIGITAL: 1, state: { initial:-1,loTreshold:2,hiTreshold:3,high:1,low:0} };
 
 ArduinoInterface.prototype.select = function($select) {
     for (var i=0;i<this.selectInterfaces.length;i++) {
@@ -210,6 +210,23 @@ ArduinoInterfaceSelect.prototype._execute = function(fn){
 
 };
 
+ArduinoInterfaceSelect.prototype.pwm = function(value,option) {
+
+   var _this = this;
+   var _arguments = arguments;
+
+   var setPWMFn = function() {
+
+     _this._arduinoInterface._sendMessage(
+     lowLevelArduinoInterface.setAnalogStateMessage(_this.alias.pinId,value));
+
+   }
+   this._execute(function(){setPWMFn();});
+   return this;
+
+
+}
+
 ArduinoInterfaceSelect.prototype.enable = function(option) {
 
    var _this = this;
@@ -350,9 +367,16 @@ var ArduinoInterfaceEvent = function(settings,$function,arduinoInterface,arduino
         },
     };
 
-     if (settings.state=='treshold') {
-        $function.call(arduinoInterface,{state:ArduinoInterface.const.state.initial,event:this});
-     }
+    $function.call(arduinoInterface,{state:ArduinoInterface.const.state.initial,event:this});
+
+    if (settings.state=='change') {
+          this.notificationId = this._arduinoInterface.getAnalogNotificationId();
+
+          var message = lowLevelArduinoInterface.notifyDigitalMessage(this.notificationId,
+                                                       this._arduinoSelectInterface.alias.pinId);
+          this._arduinoInterface._sendMessage(message);
+    }
+
 }
 
 ArduinoInterfaceEvent.prototype.trigger = function (message) {
@@ -395,6 +419,11 @@ ArduinoInterfaceEvent.prototype.trigger = function (message) {
               },message);
        }
       }
+    } else if (this.settings.state == 'change'){ 
+         this._callback.call(this.arduinoInterface,
+              { state: message.value,
+                event:this
+              },message);
     }
 
 }
