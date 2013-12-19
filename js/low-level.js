@@ -16,8 +16,7 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>. 
 */
 
-
-var lowLevelArduinoInterface = {};
+(function(lowLevelArduinoInterface) {
 
 /**
  * Function listenMessage
@@ -135,3 +134,6 @@ lowLevelArduinoInterface.setDigitalStateMessageDuration = function(digitalPinId,
   return message;
 
 }
+
+})(exports);
+

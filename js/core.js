@@ -18,7 +18,7 @@
 
 
 var dgram = require('dgram');
-var lowLevelArduinoInterface = require('low-level.js');
+var lowLevelArduinoInterface = require('./low-level.js');
 
 var ArduinoInterface = function(arduinoSettings) {
 
@@ -45,6 +45,7 @@ var ArduinoInterface = function(arduinoSettings) {
   // tell ardino we are alive and are listenning.
   this._sendMessage(lowLevelArduinoInterface.listenMessage());
 };
+
 
 ArduinoInterface.const = { HIGH:1, LOW:0, ANALOG: 2, DIGITAL: 1, state: { initial:1,loTreshold:2,hiTreshold:3} };
 
@@ -434,3 +435,5 @@ ArduinoInterfaceEvent.prototype.setTreshold = function(settings) {
   return this;
 }
 
+
+exports.UDPInterface = ArduinoInterface;

@@ -16,9 +16,10 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>. 
  */
 
-var arduino = require('../js/core.js');
+var mcuConnect = require('../js/core.js');
+var UDPInterface = mcuConnect.UDPInterface; 
 
-var ai = new arduino.ArduinoInterface({host:'192.168.0.177', port: 8888, analogScale:1024});
+var ai = new UDPInterface({host:'192.168.0.177', port: 8888, analogScale:1024});
 
 ai.select('D/8').disable();
 
@@ -30,11 +31,11 @@ var ntc1Sensor = { type:'ntc',
                    b25:3988,
                    rI:22000,
                    vI:5,
-                   r25:10000 };
+                   r25:10000,scale: 1024 };
 
 ai.select('A/0').on({state:'treshold'},function(e,bMsg){
 
-   if (e.state == ArduinoInterface.const.state.initial) {
+   if (e.state == UDPInterface.const.state.initial) {
        console.log("initial");
 
        e.event.setMap('ntc1',ntc1Sensor)
@@ -43,11 +44,11 @@ ai.select('A/0').on({state:'treshold'},function(e,bMsg){
                   loRange :   0,
                   hiRange :   4,
                   useMap  :   'ntc1'});
-
+       
       return;
    }
 
-   if (e.state == ArduinoInterface.const.state.loTreshold) {
+   if (e.state == UDPInterface.const.state.loTreshold) {
       console.log("loTreshold, enabling in 5s",bMsg);
 
       ai.select('D/9').unbind();
@@ -58,7 +59,7 @@ ai.select('A/0').on({state:'treshold'},function(e,bMsg){
 
    }
 
-   if (e.state == ArduinoInterface.const.state.hiTreshold) {
+   if (e.state == UDPInterface.const.state.hiTreshold) {
       console.log("hiTreshold, disable in 5s",bMsg);
 
       ai.select('D/9').unbind();
