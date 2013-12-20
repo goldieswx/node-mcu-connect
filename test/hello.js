@@ -44,8 +44,53 @@ var ai = new UI(
           }
       }
   });
+  
+  /*
+  // to come
+  // groups
+  $('D/2,D/3,D/4').enable().on('change',function() {
+      
+  });
+  
+  // aliases
+  $('D/2,D/3,D/4').alias('myAlias');
+  $('myAlias').enable();
+  
+  // long pulses
+  // simplified event notation x = {state:x}
+  $('D/3').on('long-pulse'),function(){
+      
+      if (e.state == UI.const.state.longPulse) {
+          // ard sends a pulse each second
+          // allowing to select long pulse duration
+          if (e.state.duration >= 3) {
+              
+              
+          }
+      }
+  });
+
+  // button-up
+  $('D/3').on('button-up'),function(){
+  });
+
+  // button-down
+  $('D/3').on('button-down'),function(){
+  });
+  
+  // multiple events
+  $('D/3').on('button-down button-up'),function(){
+  });
+  
+  // pwm/voltage fade enable, sequence enable (multiple events ordered by index)
+  $('D/3').enable('30s fade-in fade-out sequence-in sequence-out');
+
+  // locks
+  $('D/3,D/4,D/5').unbind().lock('myLock').enable().in('30s').disable(function(){ this.unlock }); */
 
 })(ai.select.bind(ai)); 
+
+
 
 /*  var x = 1;
 
