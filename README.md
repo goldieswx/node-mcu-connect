@@ -2,7 +2,7 @@ node-mcu-connect
 ================
 
 node.js helper functions to interface with embedded ethernet devices through UDP.
-Currently only arduino is supported, but a raspberry GPIO client is in the plans.
+Currently only arduino is supported, but a raspberry GPIO client an a dual way MSP430 spi interface communication protocol is in experimentation.
 
 This project is open source, licensed under GPLv3 terms (http://www.gnu.org/licenses/).
 
