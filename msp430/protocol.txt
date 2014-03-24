@@ -43,7 +43,7 @@ SNCC Mode (Slave Notification Control Code) // A slave wants to send data to mas
 
   -> SNCC (4B) P,0,C,C (cmd=SNCC) (0.125ms)
 
-  -> Master goes to sleep (check MISO every < 1ms)
+  -> Master goes to sleep (check MISO every < 1ms / poll or rbi interrupt)
 
     Either  
      -> Slave brings MISO UP continuously (1ms+)
