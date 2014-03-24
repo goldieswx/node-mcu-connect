@@ -1,0 +1,55 @@
+
+
+Master POV
+
+
+Active Mode.
+
+  MI (4B)  P,L,C,C (switches of SNCC) (0.125ms)
+	
+    dT (short) (0.5ms (low 0.1ms))  (slave prepares to receive bfr)
+
+  MIBFR (64B typ) ID,ID,ID,Bfr,Bfr,Bfr,CS. (2ms)
+
+    dT (long)  (1ms (low 0.25ms))  (slave execute cmd and store resp in bfr)
+ 
+  MIRESP (64B == MIBFRsZ) 0,0,0,RESP(CS),RESP(CS),RESP(CS) (2ms)
+
+       
+  Either
+  	- MI (4B)  P,L,C,C
+        - MIRESEND (4B) P,0,C,C (cmd = mi_resend)
+        - SNCC (4B) P,0,C,C (cmd=SNCC)
+          
+
+SNCC Mode
+
+  -> SNCC (4B) P,0,C,C (cmd=SNCC) (0.125ms)
+
+  -> Master goes to sleep (check MISO every < 1ms)
+
+    Either  
+     -> Slave brings MISO UP continuously (1ms+)
+     -> Master wants go get out of SNCC mode
+
+
+  -> MICHECK (P0CC cmd = mi_check) (0.125ms)
+
+  -> dT (short) (0.5ms)
+
+  -> MIUPID (4B) 0000(IN MOSI) vs IDMASK (OUT MOSI). 
+  
+  -> dT (short) (0.5ms)
+
+    Either
+      -> MIUPBFR (22,44,or 64B) 0,0,0,RESP(CS),RESP(CS),RESP(CS) (2ms) (gets response 	
+
+and leave SNCC)
+      -> MIUPBFRAM (same as MIUPBFR) but sets active mode just after. 
+        After 10ms of master inactivity in Active mode, SNCC is implied.
+      -> AM (P0CC cmd = mi_AM) just sets active mode.
+
+
+/////////  
+
+UPON SLAVE RESET, wait until a implicit SNCC happens.  
