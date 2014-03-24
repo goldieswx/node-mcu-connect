@@ -1,4 +1,3 @@
-
 /*
     node-mcu-connect . node.js UDP Interface for embedded devices.
     Copyright (C) 2013-4 David Jakubowski
@@ -40,7 +39,7 @@ Active Mode.
         - SNCC (4B) P,0,C,C (cmd=SNCC)
           
 
-SNCC Mode
+SNCC Mode (Slave Notification Control Code) // A slave wants to send data to master.
 
   -> SNCC (4B) P,0,C,C (cmd=SNCC) (0.125ms)
 
