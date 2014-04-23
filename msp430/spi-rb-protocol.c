@@ -101,6 +101,22 @@ void storeResponse(i) {
 
 }
 
+
+void sendSPI(char * buf, int len, char p2Mask) {
+
+    P2OUT |= p2Mask;
+    __delay_cycles(10);
+    
+    while (len--) {
+        transfer(*c++);
+    }
+
+    P2OUT &= ~p2Mask;
+    __delay_cycles(10);
+    
+} 
+
+
 inline void processBuffer() {
 
     p = bfr;
@@ -269,7 +285,7 @@ int  main(void) {
   DCOCTL = CALDCO_8MHZ;
   P1REN &= 0; 
   P1DIR |= BIT0 | BIT3 | BIT1;
-
+  
   P1OUT &= 0;
   
   state = 0;
@@ -287,8 +303,13 @@ int  main(void) {
 //    P1OUT &= ~BIT3;
 
   // prep SLAVE SPI (bit1 = MISO, bit2 = MOSI, BIT4 = SCLK)
-  P1SEL =  BIT1 + BIT2 + BIT4 ; 
-  P1SEL2 =  BIT1 + BIT2 + BIT4 ;
+  // prev MASTER SPI (bit 5 CLK,6 MISO, 7 MOSI)
+  P1SEL =  BIT1 + BIT2 + BIT4 + BIT5 + BIT6 + BIT7 ; 
+  P1SEL2 =  BIT1 + BIT2 + BIT4  + BIT5 + BIT6 + BIT7 ;
+  
+  P2SEL = BIT0;
+  P2OUT &= 0;
+  
   
   UCA0CTL1 = UCSWRST;                       // **Put state machine in reset**
   UCA0CTL0 |= UCCKPH + UCMSB  + UCSYNC;     // 3-pin, 8-bit SPI slave
@@ -298,8 +319,12 @@ int  main(void) {
   IE2 |= UCA0RXIE;                          // Enable USCI0 RX interrupt
   UCA0TXBUF = 0x00;         // We do not want to ouput anything on the line
  
-  //UCA0CTL1 = UCSWRST; 
-  
+ 
+  UCB0CTL1 = UCSWRST + UCSSEL2; // or UCSSEL3  ?
+  UCB0CTL0 |= UCCKPH + UCMSB + UCSYNC + UCMST;
+  UCB0CTL1 &= ~UCSWRST; 
+  UCB0TXBUF = 0x00; 
+
 
   BCSCTL3 |= LFXT1S_2;                      // Set clock source to VLO
   TA0R = 0;
@@ -336,6 +361,16 @@ interrupt(TIMER0_A1_VECTOR) ta1_isr(void) {
    TA0CCTL1 = CCIE ;   
    return;
 } 
+
+
+interrupt(PORT2_VECTOR) p2_isr(void) {
+
+   //WDTCTL = WDTHOLD;  // Write to WD without password to reboot.
+   char[] myBuf = {0x8,0x9,0xa};
+   sendSPI(myBuf, 3, BIT0);
+   return;
+} 
+
 
 
 interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
