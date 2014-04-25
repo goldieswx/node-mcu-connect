@@ -102,18 +102,38 @@ void storeResponse(i) {
 }
 
 
-void sendSPI(char * buf, int len, char p2Mask) {
+void checkDAC(int * inbfr) {
 
-    P2OUT |= p2Mask;
-    __delay_cycles(10);
-    
-    while (len--) {
-        transfer(*c++);
-    }
+    char chan;
 
-    P2OUT &= ~p2Mask;
-    __delay_cycles(10);
-    
+    for(chan=0;chan<7;chan++) {
+      
+      // bring cs high
+      P2OUT |= p2Mask;
+
+      char d[3];
+      d[0] = 0b00000001; // start bit    
+      d[1] = chan << 4;
+      d[2] = 0;
+
+      // bring cs low (active)
+      P2OUT &= ~p2Mask;
+      
+      // start spi transfer
+      // Ob00000001  // start bit
+      // 0b0ddd00xx chan
+      // 0bxxxxxxxx
+      int i;
+      while (i=0;i<3;i++) {
+          transfer(d[i]);
+          d[i] =  UCB0RXBUF;
+      }
+
+      d[1] &= 0b00000011;
+      *inbfr++ = (int*)(&d[1]);
+   }
+   // cs left low (power saving)  
+
 } 
 
 
