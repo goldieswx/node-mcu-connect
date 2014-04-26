@@ -20,15 +20,6 @@
 #include "msp430g2553.h"
 #include <legacymsp430.h>
 
-void inline transfer(char s) {
-    while (!(IFG2 & UCB0TXIFG));
-    UCB0TXBUF = s;
-}
-
-void inline signalMaster () {
-   IFG2 &= ~UCA0TXIFG;
-   UCA0TXBUF = 0xFF;
-}
 
 unsigned char id = 0x02;
 
@@ -39,6 +30,7 @@ unsigned char lastrespLen;
 unsigned  char * p, * boundary;
 
 unsigned int state;
+unsigned int action;
 
 #define MI_HEADER_SIZE 4
 #define MI_PREAMBLE 0b10101100
@@ -51,6 +43,56 @@ unsigned int state;
 #define MI_UPBFRAM   21233
 #define MI_AM        3409
   
+#define PROCESS_BUFFER 0X01
+#define ADC_CHECK      0x02
+#define SIGNAL_MASTER  0X04
+
+#define MOSI  BIT5 
+#define MISO  BIT6
+#define SCK   BIT7
+
+char transfer(char s) {
+  
+    char ret=0;
+    int i;
+     
+    for(i=0;i<8;i++) {
+        ret >>=1;
+        // Put bits on the line, most significant bit first.
+        if(s & 0x80) {
+              P1OUT |= MOSI;
+        } else {
+              P1OUT &= ~MOSI;
+        }
+        s <<= 1;
+
+        // Pulse the clock low and wait to send the bit.  According to
+         // the data sheet, data is transferred on the rising edge.
+        P1OUT &= ~SCK;
+        __delay_cycles( 10 );
+
+        // Send the clock back high and wait to set the next bit.  
+        if (P1IN & MISO) {
+          ret |= 0x01;
+        } else {
+          ret &= 0xFE;
+        }
+
+        P1OUT |= SCK;
+        __delay_cycles( 10 );
+    }
+    P1OUT &= ~SCK;
+    return ret;
+
+}
+
+void inline signalMaster () {
+
+   action &= ~SIGNAL_MASTER;
+   IFG2 &= ~UCA0TXIFG;
+   UCA0TXBUF = 0xFF;
+}
+
 
 void execCmd(int i) {
 
@@ -93,51 +135,72 @@ void notifyCmd() {
      }
 }
 
-void storeResponse(i) {
+void storeResponse() {
 
     zeroMem(bfr);
-    bfr[16] = 0xab;
+    //bfr[16] = 0xab;
+    int i;
+    for (i=0;i<20;i++) {
+      bfr[i+1] = lastresp[i];
+    }
 
 
 }
 
+void checkADC() {
 
-void checkDAC(int * inbfr) {
+   action &= ~ADC_CHECK;
 
-    char chan;
+   P1OUT |= BIT3;
+
+   unsigned char * inbfr = &lastresp[0];
+   char chan;
+   //lastrespLen += 14;
+
+    // Small preamble to ensure MCP3008 is in active state
+    // Bring cs low temporarily (active)
+    P2OUT &= ~BIT0;
+    __delay_cycles(10);
+
+    // Bring cs high
+    P2OUT |= BIT0;
 
     for(chan=0;chan<7;chan++) {
-      
-      // bring cs high
-      P2OUT |= p2Mask;
+
+      // bring cs low (active)
+      P2OUT &= ~BIT0;
 
       char d[3];
       d[0] = 0b00000001; // start bit    
       d[1] = chan << 4;
       d[2] = 0;
-
-      // bring cs low (active)
-      P2OUT &= ~p2Mask;
       
       // start spi transfer
       // Ob00000001  // start bit
       // 0b0ddd00xx chan
       // 0bxxxxxxxx
       int i;
-      while (i=0;i<3;i++) {
-          transfer(d[i]);
-          d[i] =  UCB0RXBUF;
+      for (i=0;i<3;i++) {
+          d[i] = transfer(d[i]);
       }
 
-      d[1] &= 0b00000011;
-      *inbfr++ = (int*)(&d[1]);
+      // bring cs high
+      P2OUT |= BIT0;
+
+      *inbfr++ = d[1] & 0b00000011;
+      *inbfr++ = d[2];
+
    }
-   // cs left low (power saving)  
+   // cs left high (power saving (shutdown) mode)  
+   //P1OUT &= ~BIT3;
+   action |= SIGNAL_MASTER; 
 
 } 
 
 
 inline void processBuffer() {
+
+    action &= ~PROCESS_BUFFER;
 
     p = bfr;
     int bfrlen = boundary - p; 
@@ -309,6 +372,7 @@ int  main(void) {
   P1OUT &= 0;
   
   state = 0;
+  action = 0;
 
   unsigned long int cycles;
   // find 20 (100us) low cycles (so there's good chance transmission is finished).
@@ -327,9 +391,11 @@ int  main(void) {
   P1SEL =  BIT1 + BIT2 + BIT4 + BIT5 + BIT6 + BIT7 ; 
   P1SEL2 =  BIT1 + BIT2 + BIT4  + BIT5 + BIT6 + BIT7 ;
   
-  P2SEL = BIT0;
+  P2DIR &= !BIT1;
+  P2DIR |= BIT0;
   P2OUT &= 0;
-  
+  P2IE |= BIT1; //low to high for bit0
+  P2IES &= ~BIT1;
   
   UCA0CTL1 = UCSWRST;                       // **Put state machine in reset**
   UCA0CTL0 |= UCCKPH + UCMSB  + UCSYNC;     // 3-pin, 8-bit SPI slave
@@ -340,8 +406,8 @@ int  main(void) {
   UCA0TXBUF = 0x00;         // We do not want to ouput anything on the line
  
  
-  UCB0CTL1 = UCSWRST + UCSSEL2; // or UCSSEL3  ?
-  UCB0CTL0 |= UCCKPH + UCMSB + UCSYNC + UCMST;
+  UCB0CTL1 = UCSWRST + UCSSEL_2; // or UCSSEL3  ?
+  UCB0CTL0 |= UCCKPL + UCMSB + UCSYNC + UCMST;
   UCB0CTL1 &= ~UCSWRST; 
   UCB0TXBUF = 0x00; 
 
@@ -352,14 +418,24 @@ int  main(void) {
   TA0CTL = TASSEL_1 | MC_1;                 // Clock source ACLK
   TA0CCTL1 = CCIE ;                          // Timer A interrupt enable
 
-
   p = &bfr[0];
   boundary = &bfr[MI_HEADER_SIZE]; // waits for MI header by default
   zeroMem(p);
 
   while(1) {
-    __bis_SR_register(LPM3_bits + GIE);   // Enter LPM3, enable interrupts // we need ACLK for timeout.
-    processBuffer(); // after boundary bytes received, process buffer.
+    if (!action) {
+      __bis_SR_register(LPM3_bits + GIE);   // Enter LPM3, enable interrupts // we need ACLK for timeout.
+    }
+
+    if (action & PROCESS_BUFFER) {
+        processBuffer();
+    }
+    if (action & ADC_CHECK) { 
+        checkADC();
+    }
+    if (action & SIGNAL_MASTER) {
+        signalMaster();
+    }
 
   };      
  
@@ -368,40 +444,33 @@ int  main(void) {
 
 interrupt(TIMER0_A1_VECTOR) ta1_isr(void) {
 
-   //WDTCTL = WDTHOLD;  // Write to WD without password to reboot.
+  TA0CCTL1 = ~CCIFG; // Clear TIMERA Interrupt   
+  TA0R = 0;          // Reset counter to 0.
+  TA0CCR0 = 0;      // Stop counting as of now
+  TA0CCTL1 = CCIE ;   // Enable timer interrupt.
 
-   TA0CCTL1 = ~CCIFG;  
-   TA0R = 0;
-   
-   P1OUT ^= BIT0 | BIT3;
-     
-   signalMaster();
-
-   TA0CCR0 = 0;
-   TA0CCTL1 = CCIE ;   
-   return;
+  return;
 } 
-
 
 interrupt(PORT2_VECTOR) p2_isr(void) {
 
-   //WDTCTL = WDTHOLD;  // Write to WD without password to reboot.
-   char[] myBuf = {0x8,0x9,0xa};
-   sendSPI(myBuf, 3, BIT0);
-   return;
+  if (P2IFG & BIT1) {
+    action |= ADC_CHECK;
+    P2IES ^= BIT1; // toggle edge (falling/raising) detection
+    P2IE |= BIT1;
+    P2IFG &= ~BIT1;
+    LPM3_EXIT;
+  }
+  return;
 } 
-
-
 
 interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
-      //register unsigned short x asm("r10");
-
-      (*p++) = UCA0RXBUF;
-      UCA0TXBUF = (*p);
-      //TA0CCTL1 = CCIE;
-      if (p == boundary) {
-        LPM3_EXIT;
-      }
-      return;
+  (*p++) = UCA0RXBUF;
+  UCA0TXBUF = (*p);
+  if (p == boundary) {
+    action |= PROCESS_BUFFER;
+    LPM3_EXIT;
+  }
+  return;
  }

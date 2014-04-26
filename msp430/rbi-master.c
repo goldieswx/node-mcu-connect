@@ -71,6 +71,10 @@ int i = 0;
 while (1) 
 {
 
+
+   // SEND MI_CMD HEADER
+   // Rest of the cmd follows.
+
    d[0] = MI_PREAMBLE;
    d[1] = 64; 
    *(unsigned short *) (&d[2]) = MI_CMD; 
@@ -81,6 +85,8 @@ while (1)
   
    usleep(100);
 
+
+   // SEND CMDs to devices (0x01, 0x02, 0x03)
    d[0] = MI_PREAMBLE; 
 
    d[1] = 0x01;
@@ -94,31 +100,29 @@ while (1)
    d[32] = 0x01;
    d[33] = 0x01;
 
-
    bcm2835_spi_transfern (d,64);
-
    usleep(500);
 
+   // get responses.
    bcm2835_spi_transfern (d,64);
- 
    printBuffer(d,64);
 
    // sets in SNCC
-
    usleep (500);
-
    printf("Staring SNCC\n");
 
    d[0] = MI_PREAMBLE;
    d[1] = 0; 
    *(unsigned short *) (&d[2]) = SNCC_CMD; 
-   
+  
    printBuffer(d,4); 
    bcm2835_spi_transfern (d,4);
    printBuffer(d,4); 
 
    usleep(250);
 
+
+   // wait slave message
    while (!bcm2835_gpio_lev(latch))
    {
      usleep(750);
@@ -126,6 +130,7 @@ while (1)
    
    usleep(1000);
 
+   // check which slave sent the message
    printf("MI_CHECK\n");
 
    d[0] = MI_PREAMBLE;
@@ -137,6 +142,8 @@ while (1)
    printBuffer(d,4); 
 
    usleep(1000);
+
+
 
    printf("SEND IDS\n");
 
