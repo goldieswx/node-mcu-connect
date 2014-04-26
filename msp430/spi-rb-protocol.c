@@ -47,9 +47,9 @@ unsigned int action;
 #define ADC_CHECK      0x02
 #define SIGNAL_MASTER  0X04
 
-#define MOSI  BIT5 
+#define MOSI  BIT7 
 #define MISO  BIT6
-#define SCK   BIT7
+#define SCK   BIT5
 
 char transfer(char s) {
   
@@ -388,8 +388,8 @@ int  main(void) {
 
   // prep SLAVE SPI (bit1 = MISO, bit2 = MOSI, BIT4 = SCLK)
   // prev MASTER SPI (bit 5 CLK,6 MISO, 7 MOSI)
-  P1SEL =  BIT1 + BIT2 + BIT4 + BIT5 + BIT6 + BIT7 ; 
-  P1SEL2 =  BIT1 + BIT2 + BIT4  + BIT5 + BIT6 + BIT7 ;
+  P1SEL =  BIT1 + BIT2 + BIT4; // + BIT5 + BIT6 + BIT7 ; 
+  P1SEL2 =  BIT1 + BIT2 + BIT4; //  + BIT5 + BIT6 + BIT7 ;
   
   P2DIR &= !BIT1;
   P2DIR |= BIT0;
@@ -406,11 +406,11 @@ int  main(void) {
   UCA0TXBUF = 0x00;         // We do not want to ouput anything on the line
  
  
-  UCB0CTL1 = UCSWRST + UCSSEL_2; // or UCSSEL3  ?
+  /*UCB0CTL1 = UCSWRST + UCSSEL_2; // or UCSSEL3  ?
   UCB0CTL0 |= UCCKPL + UCMSB + UCSYNC + UCMST;
   UCB0CTL1 &= ~UCSWRST; 
   UCB0TXBUF = 0x00; 
-
+*/
 
   BCSCTL3 |= LFXT1S_2;                      // Set clock source to VLO
   TA0R = 0;
