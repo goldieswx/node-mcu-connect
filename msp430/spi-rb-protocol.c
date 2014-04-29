@@ -366,6 +366,9 @@ int  main(void) {
 
   BCSCTL1 = CALBC1_8MHZ;
   DCOCTL = CALDCO_8MHZ;
+  
+  BCSCTL2  = SELM0 + DIVM0 + DIVS3; // MCLK = DCOCLK/1 ; SMCLK = DCOCLK/8
+  
   P1REN &= 0; 
   P1DIR |= BIT0 | BIT3 | BIT1;
   
