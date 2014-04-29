@@ -53,16 +53,15 @@ unsigned int action;
 
 char transfer(char s) {
     
-    while (!(IFG2 & UCB0TXIFG));
-    UCB0TXBUF = s;
-    while (!(IFG2 & UCB0RXIFG));
-    return UCB0RXBUF;
-  /*
+    //while (!(IFG2 & UCB0TXIFG));
+    //UCB0TXBUF = s;
+    //return UCB0RXBUF;
+  
     char ret=0;
     int i;
      
     for(i=0;i<8;i++) {
-        ret >>=1;
+        ret <<=1;
         // Put bits on the line, most significant bit first.
         if(s & 0x80) {
               P1OUT |= MOSI;
@@ -87,7 +86,7 @@ char transfer(char s) {
         __delay_cycles( 10 );
     }
     P1OUT &= ~SCK;
-    return ret; */
+    return ret; 
 
 }
 
@@ -170,7 +169,7 @@ void checkADC() {
     // Bring cs high
     P2OUT |= BIT0;
 
-    for(chan=0;chan<7;chan++) {
+    for(chan=0;chan<1;chan++) {
 
       // bring cs low (active)
       P2OUT &= ~BIT0;
@@ -372,12 +371,13 @@ int  main(void) {
   BCSCTL1 = CALBC1_8MHZ;
   DCOCTL = CALDCO_8MHZ;
   
-  BCSCTL2  = SELM0 + SELM1 + DIVM0 + DIVS3; // MCLK = DCOCLK/1 ; SMCLK = DCOCLK/8 => UART B(SPI) (Master 1Mhz Clk)
+  //BCSCTL2  = SELM0 + SELM1 + DIVM0 + DIVS_3; // MCLK = DCOCLK/1 ; SMCLK = DCOCLK/8 => UART B(SPI) (Master 1Mhz Clk)
   BCSCTL3 |= LFXT1S_2;                      // Set clock source to VLO (low power osc for timer)
   
   
   P1REN &= 0; 
-  P1DIR |= BIT0 | BIT3 | BIT1;
+  P1DIR |= BIT0 | BIT3 | BIT1 | BIT5 | BIT7;
+  P1DIR &= ~BIT6;
   
   P1OUT &= 0;
   
@@ -398,8 +398,8 @@ int  main(void) {
 
   // prep SLAVE SPI (bit1 = MISO, bit2 = MOSI, BIT4 = SCLK)
   // prev MASTER SPI (bit 5 CLK,6 MISO, 7 MOSI)
-  P1SEL =  BIT1 + BIT2 + BIT4 + BIT5 + BIT6 + BIT7 ; 
-  P1SEL2 =  BIT1 + BIT2 + BIT4 + BIT5 + BIT6 + BIT7 ;
+  P1SEL =  BIT1 + BIT2 + BIT4 ;//+ BIT5 + BIT6 + BIT7 ; 
+  P1SEL2 =  BIT1 + BIT2 + BIT4;// + BIT5 + BIT6 + BIT7 ;
   
   P2DIR &= !BIT1;
   P2DIR |= BIT0;
@@ -408,7 +408,7 @@ int  main(void) {
   P2IES &= ~BIT1;
   
   UCA0CTL1 = UCSWRST;                       // **Put state machine in reset**
-  UCA0CTL0 |= UCCKPH + UCMSB  + UCSYNC;     // 3-pin, 8-bit SPI slave
+  UCA0CTL0 |= UCCKPH + UCMSB + UCSYNC;     // 3-pin, 8-bit SPI slave
   UCA0CTL1 &= ~UCSWRST;                     // **Initialize USCI state machine**
 
   while(IFG2 & UCA0RXIFG);                  // Wait ifg2 flag on rx  (no idea what it does)
@@ -416,10 +416,10 @@ int  main(void) {
   UCA0TXBUF = 0x00;                         // We do not want to ouput anything on the line
  
  
-  UCB0CTL1 = UCSWRST + UCSSEL_2 + UCSSEL_3;  // UCB To use SMCLK clock (1Mhz)
+ /* UCB0CTL1 = UCSWRST + UCSSEL_1 ;//UCSSEL_1;  // UCB To use SMCLK clock (1Mhz)
   UCB0CTL0 |= UCCKPL + UCMSB + UCSYNC + UCMST;
   UCB0CTL1 &= ~UCSWRST; 
-  UCB0TXBUF = 0x00; 
+  UCB0TXBUF = 0x00; */
 
   TA0R = 0;
   TA0CCR0 = 0;// 32767;                  // Count to this, then interrupt;  0 to stop counting
@@ -434,7 +434,6 @@ int  main(void) {
     if (!action) {
       __bis_SR_register(LPM3_bits + GIE);   // Enter LPM3, enable interrupts // we need ACLK for timeout.
     }
-
     if (action & PROCESS_BUFFER) {
         processBuffer();
     }
@@ -444,7 +443,6 @@ int  main(void) {
     if (action & SIGNAL_MASTER) {
         signalMaster();
     }
-
   };      
  
   return 0;
