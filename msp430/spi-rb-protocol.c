@@ -52,6 +52,11 @@ unsigned int action;
 #define SCK   BIT5
 
 char transfer(char s) {
+    
+    while (!(IFG2 & UCB0TXIFG));
+    UCB0TXBUF = s;
+    while (!(IFG2 & UCB0RXIFG));
+    return UCB0RXBUF;
   /*
     char ret=0;
     int i;
