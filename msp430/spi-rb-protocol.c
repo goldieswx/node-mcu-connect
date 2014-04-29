@@ -52,7 +52,7 @@ unsigned int action;
 #define SCK   BIT5
 
 char transfer(char s) {
-  
+  /*
     char ret=0;
     int i;
      
@@ -82,7 +82,7 @@ char transfer(char s) {
         __delay_cycles( 10 );
     }
     P1OUT &= ~SCK;
-    return ret;
+    return ret; */
 
 }
 
@@ -367,7 +367,7 @@ int  main(void) {
   BCSCTL1 = CALBC1_8MHZ;
   DCOCTL = CALDCO_8MHZ;
   
-  BCSCTL2  = SELM0 + DIVM0 + DIVS3; // MCLK = DCOCLK/1 ; SMCLK = DCOCLK/8
+  BCSCTL2  = SELM0 + SELM1 + DIVM0 + DIVS3; // MCLK = DCOCLK/1 ; SMCLK = DCOCLK/8
   
   P1REN &= 0; 
   P1DIR |= BIT0 | BIT3 | BIT1;
@@ -391,8 +391,8 @@ int  main(void) {
 
   // prep SLAVE SPI (bit1 = MISO, bit2 = MOSI, BIT4 = SCLK)
   // prev MASTER SPI (bit 5 CLK,6 MISO, 7 MOSI)
-  P1SEL =  BIT1 + BIT2 + BIT4; // + BIT5 + BIT6 + BIT7 ; 
-  P1SEL2 =  BIT1 + BIT2 + BIT4; //  + BIT5 + BIT6 + BIT7 ;
+  P1SEL =  BIT1 + BIT2 + BIT4 + BIT5 + BIT6 + BIT7 ; 
+  P1SEL2 =  BIT1 + BIT2 + BIT4 + BIT5 + BIT6 + BIT7 ;
   
   P2DIR &= !BIT1;
   P2DIR |= BIT0;
@@ -409,11 +409,11 @@ int  main(void) {
   UCA0TXBUF = 0x00;         // We do not want to ouput anything on the line
  
  
-  /*UCB0CTL1 = UCSWRST + UCSSEL_2; // or UCSSEL3  ?
+  UCB0CTL1 = UCSWRST + UCSSEL_2 + UCSSEL_3; 
   UCB0CTL0 |= UCCKPL + UCMSB + UCSYNC + UCMST;
   UCB0CTL1 &= ~UCSWRST; 
   UCB0TXBUF = 0x00; 
-*/
+
 
   BCSCTL3 |= LFXT1S_2;                      // Set clock source to VLO
   TA0R = 0;
