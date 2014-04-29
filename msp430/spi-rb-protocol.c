@@ -372,7 +372,9 @@ int  main(void) {
   BCSCTL1 = CALBC1_8MHZ;
   DCOCTL = CALDCO_8MHZ;
   
-  BCSCTL2  = SELM0 + SELM1 + DIVM0 + DIVS3; // MCLK = DCOCLK/1 ; SMCLK = DCOCLK/8
+  BCSCTL2  = SELM0 + SELM1 + DIVM0 + DIVS3; // MCLK = DCOCLK/1 ; SMCLK = DCOCLK/8 => UART B(SPI) (Master 1Mhz Clk)
+  BCSCTL3 |= LFXT1S_2;                      // Set clock source to VLO (low power osc for timer)
+  
   
   P1REN &= 0; 
   P1DIR |= BIT0 | BIT3 | BIT1;
@@ -409,22 +411,20 @@ int  main(void) {
   UCA0CTL0 |= UCCKPH + UCMSB  + UCSYNC;     // 3-pin, 8-bit SPI slave
   UCA0CTL1 &= ~UCSWRST;                     // **Initialize USCI state machine**
 
-  while(IFG2 & UCA0RXIFG);        // wait ifg2 flag on rx  (no idea what it does)
+  while(IFG2 & UCA0RXIFG);                  // Wait ifg2 flag on rx  (no idea what it does)
   IE2 |= UCA0RXIE;                          // Enable USCI0 RX interrupt
-  UCA0TXBUF = 0x00;         // We do not want to ouput anything on the line
+  UCA0TXBUF = 0x00;                         // We do not want to ouput anything on the line
  
  
-  UCB0CTL1 = UCSWRST + UCSSEL_2 + UCSSEL_3; 
+  UCB0CTL1 = UCSWRST + UCSSEL_2 + UCSSEL_3;  // UCB To use SMCLK clock (1Mhz)
   UCB0CTL0 |= UCCKPL + UCMSB + UCSYNC + UCMST;
   UCB0CTL1 &= ~UCSWRST; 
   UCB0TXBUF = 0x00; 
 
-
-  BCSCTL3 |= LFXT1S_2;                      // Set clock source to VLO
   TA0R = 0;
-  TA0CCR0 = 0;// 32767;                          // Count to this, then interrupt;  0 to stop counting
-  TA0CTL = TASSEL_1 | MC_1;                 // Clock source ACLK
-  TA0CCTL1 = CCIE ;                          // Timer A interrupt enable
+  TA0CCR0 = 0;// 32767;                  // Count to this, then interrupt;  0 to stop counting
+  TA0CTL = TASSEL_1 | MC_1;             // Clock source ACLK
+  TA0CCTL1 = CCIE ;                      // Timer A interrupt enable
 
   p = &bfr[0];
   boundary = &bfr[MI_HEADER_SIZE]; // waits for MI header by default
