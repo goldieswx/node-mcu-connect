@@ -32,37 +32,9 @@ unsigned int action=0;
 
 char transfer(char s) {
     
-  
-    char ret=0;
-    int i;
-     
-    for(i=0;i<8;i++) {
-        ret >>=1;
-        // Put bits on the line, most significant bit first.
-        if(s & 0x80) {
-              P1OUT |= MOSI;
-        } else {
-              P1OUT &= ~MOSI;
-        }
-        s <<= 1;
-
-        // Pulse the clock low and wait to send the bit.  According to
-         // the data sheet, data is transferred on the rising edge.
-        P1OUT &= ~SCK;
-        __delay_cycles( 5 );
-
-        // Send the clock back high and wait to set the next bit.  
-        if (P1IN & MISO) {
-          ret |= 0x01;
-        } else {
-          ret &= 0xFE;
-        }
-
-        P1OUT |= SCK;
-        __delay_cycles( 5 );
-    }
-    P1OUT &= ~SCK;
-    return ret; 
+    while (!(IFG2 & UCB0TXIFG));
+    UCB0TXBUF = s;
+    return UCB0RXBUF;
 
 }
 
