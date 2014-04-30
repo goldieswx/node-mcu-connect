@@ -128,6 +128,17 @@ void zeroMem(unsigned char * p) {
      *p++ = 0x00; 
 }
 
+
+void copyMem(unsigned char * dest, unsigned char * src, unsigned int len) {
+     //*p = 0x00;
+     if (len) {
+         while (len--) {
+             *dest++ = *src++;
+         }
+     }
+}
+
+
 void notifyCmd() {
 
      unsigned int * p = (unsigned int*) &bfr[2];
@@ -152,57 +163,33 @@ void storeResponse() {
 }
 
 void checkADC() {
-
-   action &= ~ADC_CHECK;
-
-   P1OUT |= BIT3;
-
-   unsigned char * inbfr = &lastresp[0];
-   char chan;
-   //lastrespLen += 14;
-
-    // Small preamble to ensure MCP3008 is in active state
-    // Bring cs low temporarily (active)
-    P2OUT &= ~BIT0;
-    __delay_cycles(10);
-
-    // Bring cs high
+    
+    action &= ~ADC_CHECK;
+    
     P2OUT |= BIT0;
+    __delay_cycles(100);
 
-    for(chan=0;chan<1;chan++) {
+    char c[16];
+    char * p = c;
+    *p = transfer(0);
+    int len = *p++ & 0b00001111;
+    
+    while (len--) {
+        *p++ = transfer(0);
+    }
+    
+    P2OUT &= BIT0;
 
-      // bring cs low (active)
-      P2OUT &= ~BIT0;
+    copyMem (lastresp,c,p);
+    action |= SIGNAL_MASTER;
 
-      char d[3];
-      d[0] = 0b00000001; // start bit    
-      d[1] = chan << 4;
-      d[2] = 0;
-      
-      // start spi transfer
-      // Ob00000001  // start bit
-      // 0b0ddd00xx chan
-      // 0bxxxxxxxx
-      int i;
-      for (i=0;i<3;i++) {
-          d[i] = transfer(d[i]);
-      }
+    P2IFG &= ~BIT1;    // clear P2 IFG    
+    P2IE |= BIT1;      // enable P2 Interrupt
 
-      // bring cs high
-      P2OUT |= BIT0;
-
-      *inbfr++ = d[1] & 0b00000011;
-      *inbfr++ = d[2];
-
-   }
-   // cs left high (power saving (shutdown) mode)  
-   //P1OUT &= ~BIT3;
-   action |= SIGNAL_MASTER; 
-
-} 
+}
 
 
-inline void processBuffer() {
+void processBuffer() {
 
     action &= ~PROCESS_BUFFER;
 
@@ -462,9 +449,6 @@ interrupt(PORT2_VECTOR) p2_isr(void) {
 
   if (P2IFG & BIT1) {
     action |= ADC_CHECK;
-    P2IES ^= BIT1; // toggle edge (falling/raising) detection
-    P2IE |= BIT1;
-    P2IFG &= ~BIT1;
     LPM3_EXIT;
   }
   return;
