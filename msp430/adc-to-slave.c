@@ -31,41 +31,37 @@ unsigned int action=0;
 #define CHECK_DAC 0x01
 
 char transfer(char s) {
-    
     while (!(IFG2 & UCB0TXIFG));
     UCB0TXBUF = s;
     return UCB0RXBUF;
-
 }
 
 void beginSampleDac() {
-    
-            action &= ~ BEGIN_SAMPLE_DAC;
-            ADC10CTL0 |= ENC + ADC10SC;          // Sampling and conversion start
-            // wait for interrupt.   
+    action &= ~BEGIN_SAMPLE_DAC;
+    ADC10CTL0 |= ENC + ADC10SC;          // Sampling and conversion start
+    // wait for interrupt.   
 }
 
 void checkDAC() {
 
-            action &= ~CHECK_DAC;
+    action &= ~CHECK_DAC;
 
-            readValue = ADC10MEM;                // Assigns the value held in ADC10MEM to the integer called ADC_value
-            if (readValue > 256) {  
-                P1OUT &= ~BIT0;
-            } else {
-                P1OUT |= BIT0;
-                P2OUT &= ~BIT3;
-            }
-            if (readValue > 768) {  
-                P1OUT |= BIT6;
-                P2OUT |= BIT3;
-            } else {
-                P1OUT &= ~BIT6;
-            }
-            
-             TA0CCR0 = 4000;    // Start counting as of now.
-             A0CCTL1 = CCIE ;   // Enable timer interrupt.
-         
+    readValue = ADC10MEM; // Assigns the value held in ADC10MEM to the integer called ADC_value
+    if (readValue > 256) {  
+        P1OUT &= ~BIT0;
+    } else {
+        P1OUT |= BIT0;
+        P2OUT &= ~BIT3;
+    }
+    if (readValue > 768) {  
+        P1OUT |= BIT6;
+        P2OUT |= BIT3;
+    } else {
+        P1OUT &= ~BIT6;
+    }
+    
+    TA0CCR0 = 4000;    // Start counting as of now.
+    A0CCTL1 = CCIE;   // Enable timer interrupt.
 }
 
 
@@ -107,8 +103,7 @@ int main(void)
 
         action = 0;
 
-        while(1)
-        {
+        while(1)    {
             if (!action) {
                 __bis_SR_register(LPM3_bits + GIE);
             }
@@ -122,7 +117,10 @@ int main(void)
 }
  
 interrupt(ADC10_VECTOR) ADC10_ISR (void) { 
-    LPM3_EXIT;
+   
+   action |= CHECK_DAC;
+   LPM3_EXIT;
+   
 }
  
 interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
