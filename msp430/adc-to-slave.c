@@ -62,6 +62,10 @@ void checkDAC() {
     
     TA0CCR0 = 4000;    // Start counting as of now.
     A0CCTL1 = CCIE;   // Enable timer interrupt.
+    
+    transfer (readValue << 8);
+    transfer (readValue & 0xFF);
+    
 }
 
 
