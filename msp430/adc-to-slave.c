@@ -23,6 +23,7 @@ unsigned int readValue=0;
 unsigned int action=0;
 
 unsigned char bfr [16];
+unsigned char * pbfr;
 unsigned char * bfrBoundary;
 
 
@@ -33,7 +34,7 @@ unsigned char * bfrBoundary;
 #define CS_NOTIFY_MASTER  BIT3   // External Interrupt 
 #define CS_INCOMING_PACKET  BIT4   // Master enable the line before sending
 
-#define PACKET_DAC 0b00010000
+#define PACKET_DAC 0b10010000
 
 #define BEGIN_SAMPLE_DAC 0x02
 #define CHECK_DAC 0x01
@@ -51,20 +52,28 @@ void beginSampleDac() {
 }
 
 void checkDAC() {
-
     action &= ~CHECK_DAC;
 
     int chan = 7;
     readValue = ADC10MEM; // Assigns the value held in ADC10MEM to the integer called ADC_value
+  
+    if (readValue > 128) {
 
-    int len = 3;
-    bfr[0] = PACKET_DAC | len;
-    bfr[1] = chan;    
-    bfr[2] = readValue >> 8;
-    bfr[3] = readValue & 0xFF;
-    bfrBoundary = &(bfr[3]);    
+      int len = 4;
+      bfr[0] = PACKET_DAC | len;
+      bfr[3] = 0x2;    
+      bfr[2] = readValue >> 8;
+      bfr[1] = readValue & 0xFF;
+      bfr[4] = 0xff; //readValue & 0xFF;
+      bfrBoundary = &(bfr[5]);    
 
-    P2OUT |= CS_NOTIFY_MASTER;
+      pbfr = bfr;
+      P2OUT |= CS_NOTIFY_MASTER;
+
+   } else {
+     TA0CCR0 = 100;    
+     TA0CCTL1 = CCIE ; 
+   }
 }
 
 
@@ -92,22 +101,24 @@ int main(void)
     P1SEL2 =   BIT5 + BIT6 + BIT7 ;
 
     UCB0CTL1 = UCSWRST;                       // **Put state machine in reset**
-    UCB0CTL0 |= UCCKPH + UCMSB + UCSYNC;     // 3-pin, 8-bit SPI slave
+    UCB0CTL0 |= UCCKPH + UCCKPL + UCMSB + UCSYNC;     // 3-pin, 8-bit SPI slave
     UCB0CTL1 &= ~UCSWRST;                     // **Initialize USCI state machine**
 
     while(IFG2 & UCB0RXIFG);                  // Wait ifg2 flag on rx  (no idea what it does)
     //IE2 |= UCB0RXIE;                          // Enable USCI0 RX interrupt
     //UCB0TXBUF = 0x32;                         // We do not want to ouput anything on the line
+    UCB0TXBUF = 0x00;
 
     BCSCTL3 |= LFXT1S_2; 
 
     TA0R = 0;
-    TA0CCR0 = 1000;// 32767;              // Count to this, then interrupt;  0 to stop counting
+    TA0CCR0 = 100; // 1000;// 32767;              // Count to this, then interrupt;  0 to stop counting
     TA0CTL = TASSEL_1 | MC_1;             // Clock source ACLK
     TA0CCTL1 = CCIE ;                     // Timer A interrupt enable
 
     action = 0;
     bfrBoundary = bfr;
+    pbfr = bfr;
 
     while(1)    {
         if (!action) {
@@ -117,7 +128,7 @@ int main(void)
             beginSampleDac();
         }
         if(action & CHECK_DAC) {
-            checkDac();
+            checkDAC();
         }
     }
 }
@@ -125,26 +136,30 @@ int main(void)
 interrupt(ADC10_VECTOR) ADC10_ISR (void) { 
    
    action |= CHECK_DAC;
-   LPM3_EXIT;
+   __bic_SR_register_on_exit(LPM3_bits + GIE);
    return;
 }
  
 interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
-  if (bfr != bfrBoundary) {
-    UCB0TXBUF = *bfr++;      
-  }
+
+//  if (pbfr != bfrBoundary) {
+    UCB0TXBUF = *pbfr++;      
+//  }
+
   
-  if (bfr == bfrBoundary) {
+  if (pbfr == bfrBoundary) {
         IE2 &= ~UCB0RXIE;              // Disable SPI interrupt     
         P2IFG &= CS_INCOMING_PACKET;   // clear master notification interrupt flag        
         P2OUT &= ~CS_NOTIFY_MASTER;    // Bring notify line low
-        TA0CCR0 = 4000;                // Start counting as of now.
-        A0CCTL1 = CCIE;                // Enable timer interrupt.
+        TA0CCR0 = 500;                // Start counting as of now.
+        TA0CCTL1 = CCIE;               // Enable timer interrupt.
+        pbfr = bfr;
+        bfrBoundary = bfr;
+        //IFG2 &= ~UCB0RXIFG;
   }
   
-  IFG2 &= ~UCB0RXBUF;   // clear current interrupt flag
-
+  IFG2 &= ~UCB0RXIFG;   // clear current interrupt flag
   return;
 }
 
@@ -153,11 +168,15 @@ interrupt(PORT2_VECTOR) P2_ISR(void) {
    if(P2IFG & CS_INCOMING_PACKET) {         // slave is ready to transmit, enable the SPI interrupt
        if (!(P2IES & CS_INCOMING_PACKET)) { // check raising edge
           if (P2OUT & CS_NOTIFY_MASTER) {   // did we notify master in the first place ?
-              UCB0TXBUF = *bfr++;           // prepare first byte
-              IE2 |= UCB0RXIE;              // enable spi interrupt
+              if (pbfr != bfrBoundary) {
+                //IFG2 &= ~UCB0RXIFG;
+                IE2 |= UCB0RXIE;              // enable spi interrupt
+                UCB0TXBUF = *pbfr;           // prepare first byte
+
+              }
           }
        } 
-   }
+    }
    
    return;
 }
@@ -170,7 +189,7 @@ interrupt(TIMER0_A1_VECTOR) ta1_isr(void) {
   TA0CCR0 = 0;       // stop counting
   
   action |= BEGIN_SAMPLE_DAC;
-  LPM3_EXIT;
+ __bic_SR_register_on_exit(LPM3_bits + GIE);
   
   return;
 } 

@@ -56,12 +56,15 @@ char transfer(char s) {
     //while (!(IFG2 & UCB0TXIFG));
     //UCB0TXBUF = s;
     //return UCB0RXBUF;
-  
-    char ret=0;
+    unsigned char ret=0;
     int i;
-     
+
     for(i=0;i<8;i++) {
-        ret <<=1;
+
+        P1OUT |= SCK;
+        __delay_cycles( 10 );
+
+        ret <<= 1;
         // Put bits on the line, most significant bit first.
         if(s & 0x80) {
               P1OUT |= MOSI;
@@ -82,10 +85,7 @@ char transfer(char s) {
           ret &= 0xFE;
         }
 
-        P1OUT |= SCK;
-        __delay_cycles( 10 );
     }
-    P1OUT &= ~SCK;
     return ret; 
 
 }
@@ -166,25 +166,37 @@ void checkADC() {
     
     action &= ~ADC_CHECK;
     
+    P1OUT ^= BIT0;
     P2OUT |= BIT0;
-    __delay_cycles(100);
+    __delay_cycles(5000);
 
-    char c[16];
-    char * p = c;
+    unsigned char c[16];
+    unsigned char * p = c;
     *p = transfer(0);
     int len = *p++ & 0b00001111;
+    int len2 = len;
     
+    __delay_cycles (2000);
+
     while (len--) {
         *p++ = transfer(0);
+        __delay_cycles (2000);
     }
     
-    P2OUT &= BIT0;
+    P2OUT &= ~BIT0;
 
-    copyMem (lastresp,c,p);
+    //copyMem (lastresp,c,len2);
+    lastresp[16] = c[0];
+    lastresp[17] = c[1];
+    lastresp[18] = c[2];
+    lastresp[19] = 0x07;
+    
+
     action |= SIGNAL_MASTER;
 
     P2IFG &= ~BIT1;    // clear P2 IFG    
     P2IE |= BIT1;      // enable P2 Interrupt
+
 
 }
 
@@ -390,7 +402,7 @@ int  main(void) {
   
   P2DIR &= !BIT1;
   P2DIR |= BIT0;
-  P2OUT &= 0;
+  P2OUT = 0;
   P2IE |= BIT1; //low to high for bit0
   P2IES &= ~BIT1;
   
@@ -418,9 +430,13 @@ int  main(void) {
   zeroMem(p);
 
   while(1) {
-    if (!action) {
+
+    P1OUT ^= BIT3;
+    if (action == 0) {
+
       __bis_SR_register(LPM3_bits + GIE);   // Enter LPM3, enable interrupts // we need ACLK for timeout.
     }
+
     if (action & PROCESS_BUFFER) {
         processBuffer();
     }
@@ -447,20 +463,26 @@ interrupt(TIMER0_A1_VECTOR) ta1_isr(void) {
 
 interrupt(PORT2_VECTOR) p2_isr(void) {
 
+
   if (P2IFG & BIT1) {
+    
     action |= ADC_CHECK;
-    LPM3_EXIT;
+    //LPM3_EXIT;
+    __bic_SR_register_on_exit(LPM3_bits + GIE);
+    //P1OUT |= BIT0;
   }
   return;
 } 
 
 interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
-  (*p++) = UCA0RXBUF;
-  UCA0TXBUF = (*p);
-  if (p == boundary) {
-    action |= PROCESS_BUFFER;
-    LPM3_EXIT;
+  if (IFG2 & UCA0RXIFG) {
+    (*p++) = UCA0RXBUF;
+    UCA0TXBUF = (*p);
+    if (p == boundary) {
+      action |= PROCESS_BUFFER;
+      __bic_SR_register_on_exit(LPM3_bits + GIE);
+    }
   }
   return;
  }
