@@ -152,8 +152,10 @@ interrupt(PORT2_VECTOR) P2_ISR(void) {
 
    if(P2IFG & CS_INCOMING_PACKET) {         // slave is ready to transmit, enable the SPI interrupt
        if (!(P2IES & CS_INCOMING_PACKET)) { // check raising edge
-          UCB0TXBUF = *bfr++;               // prepare first byte
-          IE2 |= UCB0RXIE;                  // enable spi interrupt
+          if (P2OUT & CS_NOTIFY_MASTER) {   // did we notify master in the first place ?
+              UCB0TXBUF = *bfr++;           // prepare first byte
+              IE2 |= UCB0RXIE;              // enable spi interrupt
+          }
        } 
    }
    
