@@ -57,9 +57,6 @@ void checkDAC() {
     int chan = 7;
     readValue = ADC10MEM; // Assigns the value held in ADC10MEM to the integer called ADC_value
 
-    TA0CCR0 = 4000;    // Start counting as of now.
-    A0CCTL1 = CCIE;   // Enable timer interrupt.
-
     int len = 3;
     bfr[0] = PACKET_DAC | len;
     bfr[1] = chan;    
@@ -138,8 +135,11 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
         UCB0TXBUF = *bfr++;      
   }
   if (bfr == bfrBoundary) {
-        IE2 &= ~UCB0RXIE;     
-        bfrBoundary = bfr;
+        IE2 &= ~UCB0RXIE;              // Disable SPI interrupt     
+        bfrBoundary = bfr;              
+        P2OUT &= ~CS_NOTIFY_MASTER;    // Bring notify line low
+        TA0CCR0 = 4000;                // Start counting as of now.
+        A0CCTL1 = CCIE;                // Enable timer interrupt.
   }
   IFG2 &= ~UCB0RXBUF;
 
