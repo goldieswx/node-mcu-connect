@@ -21,11 +21,14 @@
 #include <legacymsp430.h>
 
 unsigned int readValue=0;
-
+unsigned int action=0;
 
 #define MOSI  BIT7 
 #define MISO  BIT6
 #define SCK   BIT5
+
+#define BEGIN_SAMPLE_DAC 0x02
+#define CHECK_DAC 0x01
 
 char transfer(char s) {
     
@@ -63,6 +66,36 @@ char transfer(char s) {
 
 }
 
+void beginSampleDac() {
+    
+            action &= ~ BEGIN_SAMPLE_DAC;
+            ADC10CTL0 |= ENC + ADC10SC;          // Sampling and conversion start
+            // wait for interrupt.   
+}
+
+void checkDAC() {
+
+            action &= ~CHECK_DAC;
+
+            readValue = ADC10MEM;                // Assigns the value held in ADC10MEM to the integer called ADC_value
+            if (readValue > 256) {  
+                P1OUT &= ~BIT0;
+            } else {
+                P1OUT |= BIT0;
+                P2OUT &= ~BIT3;
+            }
+            if (readValue > 768) {  
+                P1OUT |= BIT6;
+                P2OUT |= BIT3;
+            } else {
+                P1OUT &= ~BIT6;
+            }
+            
+             TA0CCR0 = 4000;    // Start counting as of now.
+             A0CCTL1 = CCIE ;   // Enable timer interrupt.
+         
+}
+
 
 int main(void)
 {
@@ -81,45 +114,38 @@ int main(void)
         P2DIR = BIT3;
         P2OUT &= 0;
 
-  P1SEL =   BIT1 + BIT5 + BIT6 + BIT7 ; 
-  P1SEL2 =   BIT5 + BIT6 + BIT7 ;
+        P1SEL =   BIT1 + BIT5 + BIT6 + BIT7 ; 
+        P1SEL2 =   BIT5 + BIT6 + BIT7 ;
   
 
-  UCB0CTL1 = UCSWRST;                       // **Put state machine in reset**
-  UCB0CTL0 |= UCCKPH + UCMSB + UCSYNC;     // 3-pin, 8-bit SPI slave
-  UCB0CTL1 &= ~UCSWRST;                     // **Initialize USCI state machine**
+        UCB0CTL1 = UCSWRST;                       // **Put state machine in reset**
+        UCB0CTL0 |= UCCKPH + UCMSB + UCSYNC;     // 3-pin, 8-bit SPI slave
+        UCB0CTL1 &= ~UCSWRST;                     // **Initialize USCI state machine**
 
-  while(IFG2 & UCB0RXIFG);                  // Wait ifg2 flag on rx  (no idea what it does)
-  IE2 |= UCB0RXIE;                          // Enable USCI0 RX interrupt
-  UCB0TXBUF = 0x32;                         // We do not want to ouput anything on the line
+        while(IFG2 & UCB0RXIFG);                  // Wait ifg2 flag on rx  (no idea what it does)
+        IE2 |= UCB0RXIE;                          // Enable USCI0 RX interrupt
+        //UCB0TXBUF = 0x32;                         // We do not want to ouput anything on the line
  
- BCSCTL3 |= LFXT1S_2; 
+        BCSCTL3 |= LFXT1S_2; 
 
-  TA0R = 0;
-  TA0CCR0 = 1000;// 32767;                  // Count to this, then interrupt;  0 to stop counting
-  TA0CTL = TASSEL_1 | MC_1;             // Clock source ACLK
-  TA0CCTL1 = CCIE ;                      // Timer A interrupt enable
+        TA0R = 0;
+        TA0CCR0 = 1000;// 32767;                  // Count to this, then interrupt;  0 to stop counting
+        TA0CTL = TASSEL_1 | MC_1;             // Clock source ACLK
+        TA0CCTL1 = CCIE ;                      // Timer A interrupt enable
 
+        action = 0;
 
         while(1)
         {
-            ADC10CTL0 |= ENC + ADC10SC;          // Sampling and conversion start
-            __bis_SR_register(CPUOFF + GIE);    // Low Power Mode 0 with interrupts enabled
-            readValue = ADC10MEM;                // Assigns the value held in ADC10MEM to the integer called ADC_value
- 
-            if (readValue > 256) {  
-                P1OUT &= ~BIT0;
-            } else {
-                P1OUT |= BIT0;
-                P2OUT &= ~BIT3;
+            if (!action) {
+                __bis_SR_register(LPM3_bits + GIE);
             }
-            if (readValue > 768) {  
-                P1OUT |= BIT6;
-                P2OUT |= BIT3;
-            } else {
-                P1OUT &= ~BIT6;
+            if(action & BEGIN_SAMPLE_DAC) {
+                beginSampleDac();
             }
-
+            if(action & CHECK_DAC) {
+                checkDac();
+            }
         }
 }
  
@@ -131,14 +157,16 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
   UCB0TXBUF = 0x17;
   return;
- }
+}
 
 interrupt(TIMER0_A1_VECTOR) ta1_isr(void) {
 
   TA0CCTL1 = ~CCIFG; // Clear TIMERA Interrupt   
   TA0R = 0;          // Reset counter to 0.
-  TA0CCR0 = 1000;      // Stop counting as of now
-  TA0CCTL1 = CCIE ;   // Enable timer interrupt.
-
+  TA0CCR0 = 0;       // stop counting
+  
+  action |= BEGIN_SAMPLE_DAC;
+  LPM3_EXIT;
+  
   return;
 } 
