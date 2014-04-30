@@ -39,9 +39,9 @@ unsigned char * bfrBoundary;
 #define CHECK_DAC 0x01
 
 char transfer(char s) {
-    /*while (!(IFG2 & UCB0TXIFG));
+    while (!(IFG2 & UCB0TXIFG));
     UCB0TXBUF = s;
-    return UCB0RXBUF;*/
+    return UCB0RXBUF;
 }
 
 void beginSampleDac() {
@@ -131,17 +131,19 @@ interrupt(ADC10_VECTOR) ADC10_ISR (void) {
  
 interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
-  if(P2IN & CS_INCOMING_PACKET) {
-        UCB0TXBUF = *bfr++;      
+  if (bfr != bfrBoundary) {
+    UCB0TXBUF = *bfr++;      
   }
+  
   if (bfr == bfrBoundary) {
         IE2 &= ~UCB0RXIE;              // Disable SPI interrupt     
-        bfrBoundary = bfr;              
+        P2IFG &= CS_INCOMING_PACKET;   // clear master notification interrupt flag        
         P2OUT &= ~CS_NOTIFY_MASTER;    // Bring notify line low
         TA0CCR0 = 4000;                // Start counting as of now.
         A0CCTL1 = CCIE;                // Enable timer interrupt.
   }
-  IFG2 &= ~UCB0RXBUF;
+  
+  IFG2 &= ~UCB0RXBUF;   // clear current interrupt flag
 
   return;
 }
@@ -150,9 +152,9 @@ interrupt(PORT2_VECTOR) P2_ISR(void) {
 
    if(P2IFG & CS_INCOMING_PACKET) {         // slave is ready to transmit, enable the SPI interrupt
        if (!(P2IES & CS_INCOMING_PACKET)) { // check raising edge
+          UCB0TXBUF = *bfr++;               // prepare first byte
           IE2 |= UCB0RXIE;                  // enable spi interrupt
        } 
-       P2IFG &= CS_INCOMING_PACKET;         // clear interrupt flag
    }
    
    return;
