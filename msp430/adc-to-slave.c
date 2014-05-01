@@ -57,7 +57,7 @@ void checkDAC() {
     int chan = 7;
     readValue = ADC10MEM; // Assigns the value held in ADC10MEM to the integer called ADC_value
   
-    if (readValue > 128) {
+    if (readValue > 500) {
 
       int len = 4;
       bfr[0] = PACKET_DAC | len;
@@ -71,7 +71,7 @@ void checkDAC() {
       P2OUT |= CS_NOTIFY_MASTER;
 
    } else {
-     TA0CCR0 = 100;    
+     TA0CCR0 = 5000;    
      TA0CCTL1 = CCIE ; 
    }
 }
@@ -101,7 +101,7 @@ int main(void)
     P1SEL2 =   BIT5 + BIT6 + BIT7 ;
 
     UCB0CTL1 = UCSWRST;                       // **Put state machine in reset**
-    UCB0CTL0 |= UCCKPH + UCCKPL + UCMSB + UCSYNC;     // 3-pin, 8-bit SPI slave
+    UCB0CTL0 |= UCCKPH  + UCCKPL + UCMSB + UCSYNC;     // 3-pin, 8-bit SPI slave
     UCB0CTL1 &= ~UCSWRST;                     // **Initialize USCI state machine**
 
     while(IFG2 & UCB0RXIFG);                  // Wait ifg2 flag on rx  (no idea what it does)
@@ -112,7 +112,7 @@ int main(void)
     BCSCTL3 |= LFXT1S_2; 
 
     TA0R = 0;
-    TA0CCR0 = 100; // 1000;// 32767;              // Count to this, then interrupt;  0 to stop counting
+    TA0CCR0 = 5000; // 1000;// 32767;              // Count to this, then interrupt;  0 to stop counting
     TA0CTL = TASSEL_1 | MC_1;             // Clock source ACLK
     TA0CCTL1 = CCIE ;                     // Timer A interrupt enable
 
@@ -144,7 +144,7 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
 
 //  if (pbfr != bfrBoundary) {
-    UCB0TXBUF = *pbfr++;      
+   UCB0TXBUF = *pbfr++;      
 //  }
 
   
@@ -152,7 +152,7 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
         IE2 &= ~UCB0RXIE;              // Disable SPI interrupt     
         P2IFG &= CS_INCOMING_PACKET;   // clear master notification interrupt flag        
         P2OUT &= ~CS_NOTIFY_MASTER;    // Bring notify line low
-        TA0CCR0 = 500;                // Start counting as of now.
+        TA0CCR0 = 5000;                // Start counting as of now.
         TA0CCTL1 = CCIE;               // Enable timer interrupt.
         pbfr = bfr;
         bfrBoundary = bfr;

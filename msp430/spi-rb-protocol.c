@@ -51,6 +51,10 @@ unsigned int action;
 #define MISO  BIT6
 #define SCK   BIT5
 
+
+#define CS_NOTIFY_MASTER  BIT3   // External Interrupt 
+#define CS_INCOMING_PACKET  BIT4   // Master enable the line before sending
+
 char transfer(char s) {
     
     //while (!(IFG2 & UCB0TXIFG));
@@ -62,7 +66,7 @@ char transfer(char s) {
     for(i=0;i<8;i++) {
 
         P1OUT |= SCK;
-        __delay_cycles( 10 );
+        __delay_cycles( 20 );
 
         ret <<= 1;
         // Put bits on the line, most significant bit first.
@@ -76,7 +80,7 @@ char transfer(char s) {
         // Pulse the clock low and wait to send the bit.  According to
          // the data sheet, data is transferred on the rising edge.
         P1OUT &= ~SCK;
-        __delay_cycles( 10 );
+        __delay_cycles( 20 );
 
         // Send the clock back high and wait to set the next bit.  
         if (P1IN & MISO) {
@@ -167,7 +171,7 @@ void checkADC() {
     action &= ~ADC_CHECK;
     
     P1OUT ^= BIT0;
-    P2OUT |= BIT0;
+    P2OUT |= CS_INCOMING_PACKET;
     __delay_cycles(5000);
 
     unsigned char c[16];
@@ -183,7 +187,7 @@ void checkADC() {
         __delay_cycles (2000);
     }
     
-    P2OUT &= ~BIT0;
+    P2OUT &= ~CS_INCOMING_PACKET;
 
     //copyMem (lastresp,c,len2);
     lastresp[16] = c[0];
@@ -194,8 +198,9 @@ void checkADC() {
 
     action |= SIGNAL_MASTER;
 
-    P2IFG &= ~BIT1;    // clear P2 IFG    
-    P2IE |= BIT1;      // enable P2 Interrupt
+    P2IFG &= ~CS_NOTIFY_MASTER;    // clear P2 IFG    
+    P2IE |= CS_NOTIFY_MASTER;      // enable P2 Interrupt
+
 
 
 }
@@ -400,11 +405,11 @@ int  main(void) {
   P1SEL =  BIT1 + BIT2 + BIT4 ;//+ BIT5 + BIT6 + BIT7 ; 
   P1SEL2 =  BIT1 + BIT2 + BIT4;// + BIT5 + BIT6 + BIT7 ;
   
-  P2DIR &= !BIT1;
-  P2DIR |= BIT0;
+  P2DIR &= !CS_NOTIFY_MASTER ;
+  P2DIR |= CS_INCOMING_PACKET;
   P2OUT = 0;
-  P2IE |= BIT1; //low to high for bit0
-  P2IES &= ~BIT1;
+  P2IE |=  CS_NOTIFY_MASTER ; //low to high for bit0
+  P2IES &= ~CS_NOTIFY_MASTER ;
   
   UCA0CTL1 = UCSWRST;                       // **Put state machine in reset**
   UCA0CTL0 |= UCCKPH + UCMSB + UCSYNC;     // 3-pin, 8-bit SPI slave
@@ -429,11 +434,12 @@ int  main(void) {
   boundary = &bfr[MI_HEADER_SIZE]; // waits for MI header by default
   zeroMem(p);
 
+  //__enable_interrupt();
+
   while(1) {
 
     P1OUT ^= BIT3;
     if (action == 0) {
-
       __bis_SR_register(LPM3_bits + GIE);   // Enter LPM3, enable interrupts // we need ACLK for timeout.
     }
 
@@ -464,7 +470,7 @@ interrupt(TIMER0_A1_VECTOR) ta1_isr(void) {
 interrupt(PORT2_VECTOR) p2_isr(void) {
 
 
-  if (P2IFG & BIT1) {
+  if (P2IFG & CS_NOTIFY_MASTER) {
     
     action |= ADC_CHECK;
     //LPM3_EXIT;
