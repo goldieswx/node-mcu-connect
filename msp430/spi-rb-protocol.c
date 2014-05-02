@@ -115,7 +115,7 @@ void execCmd(int i) {
      *r++ = 0x49;
      lastrespLen+=4;
      
-     P1OUT  |=  *q++; //BIT0 | BIT3;
+     P1OUT  |=  *q++; 
      P1OUT  &=  *q++;
      
      return;
@@ -123,14 +123,12 @@ void execCmd(int i) {
 
 
 void zeroMem(unsigned char * p) {
-     //*p = 0x00;
      while (p != boundary) { *p++ = 0x00; }
      *p++ = 0x00; 
 }
 
 
 void copyMem(unsigned char * dest, unsigned char * src, unsigned int len) {
-     //*p = 0x00;
      if (len) {
          while (len--) {
              *dest++ = *src++;
@@ -164,38 +162,37 @@ void storeResponse() {
 
 void checkADC() {
     
-    __enable_interrupt();
+    P2IFG |= CS_NOTIFY_MASTER;    // Just preacaution, we will soon enable interrupts, make sure we don't allow reenty.
+    __enable_interrupt();         // Our process is low priority, only listenning to master spi is the priority.
     
-    action &= ~ADC_CHECK;
+    action &= ~ADC_CHECK;         // Clear current action flag.
     
-    P1OUT ^= BIT0;  // debug
-    P2OUT |= CS_INCOMING_PACKET; // warn adc extension that we are about to start an spi transfer
-    
-    __delay_cycles(5000);           // give some time to the extension to react
+    P1OUT ^= BIT0;  // debug        // ADC Extension (ADCE) is a module ocnnected thru USCI-B and two GPIO pins
+    P2OUT |= CS_INCOMING_PACKET;    // Warn ADCE that we are about to start an spi transfer.
+    __delay_cycles(5000);           // Give some time to ADCE to react
 
     unsigned char c[16];
     unsigned char * p = c;
-    *p = transfer(0);
+    
+    *p = transfer(0);               // Get Packet length from ADCE
+    
     int len = *p++ & 0b00001111;
     int len2 = len;
     
-    __delay_cycles (2000);
-
     while (len--) {
+        __delay_cycles (2000);           
         *p++ = transfer(0);
-        __delay_cycles (2000);
     }
-    
+
+    __delay_cycles (2000);
     P2OUT &= ~CS_INCOMING_PACKET;
 
-    //copyMem (lastresp,c,len2);
-    lastresp[16] = c[0];
+    lastresp[16] = c[0];            // Temporarily set the response somewhere (FIX)
     lastresp[17] = c[1];
     lastresp[18] = c[2];
     lastresp[19] = 0x07;
-    
 
-    action |= SIGNAL_MASTER;
+    action |= SIGNAL_MASTER;        // Inform master we have some data to transmit.
 
     __disable_interrupt();
 
@@ -234,8 +231,6 @@ void processBuffer() {
                  //boundary = boundary unchanged 
                  state = currCmd;
               }
-
-
           } else {
              // manage error
              zeroMem(p);
@@ -432,8 +427,6 @@ int  main(void) {
   p = &bfr[0];
   boundary = &bfr[MI_HEADER_SIZE]; // waits for MI header by default
   zeroMem(p);
-
-  //__enable_interrupt();
 
   while(1) {
 
