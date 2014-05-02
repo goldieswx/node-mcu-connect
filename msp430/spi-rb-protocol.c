@@ -362,27 +362,16 @@ void processBuffer() {
 
 }
 
-
-int  main(void) {
-  WDTCTL = WDTPW + WDTHOLD;   // Stop watchdog timer
-
-  BCSCTL1 = CALBC1_8MHZ;
-  DCOCTL = CALDCO_8MHZ;
-  
-  //BCSCTL2  = SELM0 + SELM1 + DIVM0 + DIVS_3; // MCLK = DCOCLK/1 ; SMCLK = DCOCLK/8 => UART B(SPI) (Master 1Mhz Clk)
-  BCSCTL3 |= LFXT1S_2;                      // Set clock source to VLO (low power osc for timer)
-  
-  
-  P1REN &= 0; 
-  P1DIR |= BIT0 | BIT3 | BIT1 | BIT5 | BIT7;
-  P1DIR &= ~BIT6;
-  
-  P1OUT &= 0;
-  
-  state = 0;
-  action = 0;
-
-  unsigned long int cycles;
+int initUARTs() {
+ 
+  // UART A (main comm chanell with MASTER)
+  //     (bit1 = MISO, bit2 = MOSI, BIT4 = SCLK)
+ 
+  P1DIR |= BIT1;
+  P1SEL |=  BIT1 + BIT2 + BIT4;
+  P1SEL2 |=  BIT1 + BIT2 + BIT4;
+ 
+   unsigned long int cycles;
   // find 20 (100us) low cycles (so there's good chance transmission is finished).
   while (1) {
     cycles = 0;
@@ -391,20 +380,8 @@ int  main(void) {
        cycles++;
     }
     if (cycles >= 2) break;
-  }
-//    P1OUT &= ~BIT3;
-
-  // prep SLAVE SPI (bit1 = MISO, bit2 = MOSI, BIT4 = SCLK)
-  // prev MASTER SPI (bit 5 CLK,6 MISO, 7 MOSI)
-  P1SEL =  BIT1 + BIT2 + BIT4 ;//+ BIT5 + BIT6 + BIT7 ; 
-  P1SEL2 =  BIT1 + BIT2 + BIT4;// + BIT5 + BIT6 + BIT7 ;
-  
-  P2DIR &= !CS_NOTIFY_MASTER ;
-  P2DIR |= CS_INCOMING_PACKET;
-  P2OUT = 0;
-  P2IE |=  CS_NOTIFY_MASTER ; //low to high for bit0
-  P2IES &= ~CS_NOTIFY_MASTER ;
-  
+  } 
+    
   UCA0CTL1 = UCSWRST;                       // **Put state machine in reset**
   UCA0CTL0 |= UCCKPH + UCMSB + UCSYNC;     // 3-pin, 8-bit SPI slave
   UCA0CTL1 &= ~UCSWRST;                     // **Initialize USCI state machine**
@@ -412,17 +389,57 @@ int  main(void) {
   while(IFG2 & UCA0RXIFG);                  // Wait ifg2 flag on rx  (no idea what it does)
   IE2 |= UCA0RXIE;                          // Enable USCI0 RX interrupt
   UCA0TXBUF = 0x00;                         // We do not want to ouput anything on the line
- 
- 
- /* UCB0CTL1 = UCSWRST + UCSSEL_1 ;//UCSSEL_1;  // UCB To use SMCLK clock (1Mhz)
-  UCB0CTL0 |= UCCKPL + UCMSB + UCSYNC + UCMST;
-  UCB0CTL1 &= ~UCSWRST; 
-  UCB0TXBUF = 0x00; */
+  
+  // UARTB 
+  // Comm channel with extentions
+  
+  P1DIR |= BIT5 | BIT7;
+  P1DIR &= ~BIT6;
+}
 
+int initADCE() {
+    
+  P2DIR &= !CS_NOTIFY_MASTER ;
+  P2DIR |= CS_INCOMING_PACKET;
+  P2IE |=  CS_NOTIFY_MASTER ; 
+  P2IES &= ~CS_NOTIFY_MASTER ;    
+
+}
+
+int initTimers() {
+
+  // Timer A0
+    
   TA0R = 0;
   TA0CCR0 = 0;// 32767;                  // Count to this, then interrupt;  0 to stop counting
   TA0CTL = TASSEL_1 | MC_1;             // Clock source ACLK
   TA0CCTL1 = CCIE ;                      // Timer A interrupt enable
+
+}
+
+
+int  main(void) {
+
+
+  WDTCTL = WDTPW + WDTHOLD;   // Stop watchdog timer
+
+  BCSCTL1 = CALBC1_8MHZ;
+  DCOCTL = CALDCO_8MHZ;
+  
+  BCSCTL3 |= LFXT1S_2;                      // Set clock source to VLO (low power osc for timer)
+
+  P1REN &= 0; 
+  P1OUT &= 0;
+  P2OUT &= 0;
+  
+  P1DIR |= BIT0 | BIT3;  // debug;
+
+  state = 0;
+  action = 0;
+
+  initUARTs();
+  initADCE();
+  initTimers();
 
   p = &bfr[0];
   boundary = &bfr[MI_HEADER_SIZE]; // waits for MI header by default
