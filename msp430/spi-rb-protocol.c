@@ -430,19 +430,22 @@ int  main(void) {
 
   while(1) {
 
-    P1OUT ^= BIT3;
     if (action == 0) {
       __bis_SR_register(LPM3_bits + GIE);   // Enter LPM3, enable interrupts // we need ACLK for timeout.
     }
-
+    __enable_interrupt(); __delay_cycles(10); __disable_interrupt(); // process pending interrupts
+        
     if (action & PROCESS_BUFFER) {
-        processBuffer();
+        processBuffer(); 
+        continue;
     }
     if (action & ADC_CHECK) { 
         checkADC();
+        continue;
     }
     if (action & SIGNAL_MASTER) {
         signalMaster();
+        continue;
     }
   };      
  
