@@ -124,11 +124,15 @@ int main(void)
         if (!action) {
             __bis_SR_register(LPM3_bits + GIE);
         }
+        __enable_interrupt(); __delay_cycles(10); __disable_interrupt(); // process pending interrupts
+        
         if(action & BEGIN_SAMPLE_DAC) {
             beginSampleDac();
+            continue;
         }
         if(action & CHECK_DAC) {
             checkDAC();
+            continue;
         }
     }
 }
@@ -136,6 +140,7 @@ int main(void)
 interrupt(ADC10_VECTOR) ADC10_ISR (void) { 
    
    action |= CHECK_DAC;
+  __bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM   
    return;
 }
  
@@ -183,6 +188,6 @@ interrupt(TIMER0_A1_VECTOR) ta1_isr(void) {
   TA0CCR0 = 0;       // stop counting
   
   action |= BEGIN_SAMPLE_DAC;
-
+  __bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM
   return;
 } 
