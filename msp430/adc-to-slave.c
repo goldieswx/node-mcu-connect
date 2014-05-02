@@ -136,31 +136,26 @@ int main(void)
 interrupt(ADC10_VECTOR) ADC10_ISR (void) { 
    
    action |= CHECK_DAC;
-   __bic_SR_register_on_exit(LPM3_bits + GIE);
    return;
 }
  
 interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
-
-//  if (pbfr != bfrBoundary) {
    UCB0TXBUF = *pbfr++;      
-//  }
 
-  
-  if (pbfr == bfrBoundary) {
-        IE2 &= ~UCB0RXIE;              // Disable SPI interrupt     
-        P2IFG &= CS_INCOMING_PACKET;   // clear master notification interrupt flag        
-        P2OUT &= ~CS_NOTIFY_MASTER;    // Bring notify line low
-        TA0CCR0 = 5000;                // Start counting as of now.
-        TA0CCTL1 = CCIE;               // Enable timer interrupt.
-        pbfr = bfr;
-        bfrBoundary = bfr;
-        //IFG2 &= ~UCB0RXIFG;
-  }
+      if (pbfr == bfrBoundary) {
+            IE2 &= ~UCB0RXIE;              // Disable SPI interrupt     
+            P2IFG &= CS_INCOMING_PACKET;   // clear master notification interrupt flag        
+            P2OUT &= ~CS_NOTIFY_MASTER;    // Bring notify line low
+            TA0CCR0 = 5000;                // Start counting as of now.
+            TA0CCTL1 = CCIE;               // Enable timer interrupt.
+            pbfr = bfr;
+            bfrBoundary = bfr;
+      }
   
   IFG2 &= ~UCB0RXIFG;   // clear current interrupt flag
   return;
+  
 }
 
 interrupt(PORT2_VECTOR) P2_ISR(void) {
@@ -172,7 +167,6 @@ interrupt(PORT2_VECTOR) P2_ISR(void) {
                 //IFG2 &= ~UCB0RXIFG;
                 IE2 |= UCB0RXIE;              // enable spi interrupt
                 UCB0TXBUF = *pbfr;           // prepare first byte
-
               }
           }
        } 
@@ -189,7 +183,6 @@ interrupt(TIMER0_A1_VECTOR) ta1_isr(void) {
   TA0CCR0 = 0;       // stop counting
   
   action |= BEGIN_SAMPLE_DAC;
- __bic_SR_register_on_exit(LPM3_bits + GIE);
-  
+
   return;
 } 
