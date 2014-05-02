@@ -464,7 +464,9 @@ interrupt(PORT2_VECTOR) p2_isr(void) {
   if (P2IFG & CS_NOTIFY_MASTER) {
     action |= ADC_CHECK;
   }
+  __bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM  
   return;
+  
 } 
 
 interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
@@ -476,5 +478,6 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
       action |= PROCESS_BUFFER;
     }
   }
+  __bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM
   return;
  }
