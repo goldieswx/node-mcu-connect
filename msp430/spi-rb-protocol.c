@@ -55,110 +55,127 @@ unsigned int action;
 #define CS_NOTIFY_MASTER  BIT3   // External Interrupt 
 #define CS_INCOMING_PACKET  BIT4   // Master enable the line before sending
 
-char transfer(char s) {
+
+
+char transfer(char);
+void inline signalMaster ();
+void execCmd(int);
+void zeroMem(unsigned char *);
+void copyMem(unsigned char *, unsigned char *, unsigned int);
+void notifyCmd();
+void storeResponse();
+void checkADC(); 
+void processBuffer();
+
+void initMCOM();
+void initADCE();
+void initTimers();
+
+
+int  main(void) {
+
+  WDTCTL = WDTPW + WDTHOLD;   // Stop watchdog timer
+  BCSCTL1 = CALBC1_8MHZ;
+  DCOCTL = CALDCO_8MHZ;
+  BCSCTL3 |= LFXT1S_2;                      // Set clock source to VLO (low power osc for timer)
+
+  P1REN &= 0; 
+  P1OUT &= 0;
+  P2OUT &= 0;
+  
+  P1DIR |= BIT0 | BIT3;  // debug;
+
+  state = 0;
+  action = 0;
+
+  initMCOM();
+  initADCE();
+  initTimers();
+
+  p = &bfr[0];
+  boundary = &bfr[MI_HEADER_SIZE]; // waits for MI header by default
+  zeroMem(p);
+
+  while(1) {
+    if (action == 0) {
+      __bis_SR_register(LPM3_bits + GIE);   // Enter LPM3, enable interrupts // we need ACLK for timeout.
+    }
+    __enable_interrupt(); __delay_cycles(10); __disable_interrupt(); // process pending interrupts
+        
+    if (action & PROCESS_BUFFER) {
+        processBuffer(); 
+        continue;
+    }
+    if (action & ADC_CHECK) { 
+        checkADC();
+        continue;
+    }
+    if (action & SIGNAL_MASTER) {
+        signalMaster();
+        continue;
+    }
+  };      
+ 
+  return 0;
+}
+
+
+interrupt(TIMER0_A1_VECTOR) ta1_isr(void) {
+
+  TA0CCTL1 = ~CCIFG; // Clear TIMERA Interrupt   
+  TA0R = 0;          // Reset counter to 0.
+  TA0CCR0 = 0;      // Stop counting as of now
+  TA0CCTL1 = CCIE ;   // Enable timer interrupt.
+
+  return;
+} 
+
+interrupt(PORT2_VECTOR) p2_isr(void) {
+
+  if (P2IFG & CS_NOTIFY_MASTER) {
+    action |= ADC_CHECK;
+    __bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM      
+  }
+
+  return;
+  
+} 
+
+interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
+
+  if (IFG2 & UCA0RXIFG) {
+    (*p++) = UCA0RXBUF;
+    UCA0TXBUF = (*p);
+    if (p == boundary) {
+      action |= PROCESS_BUFFER;
+      __bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM      
+    }
+  }
+
+  return;
+}
+
+
+/**
+ *  ADCE Related 
+ */
+
+void initADCE() {
     
-    //while (!(IFG2 & UCB0TXIFG));
-    //UCB0TXBUF = s;
-    //return UCB0RXBUF;
-    unsigned char ret=0;
-    int i;
+  P2DIR &= !CS_NOTIFY_MASTER ;
+  P2DIR |= CS_INCOMING_PACKET;
+  P2IE |=  CS_NOTIFY_MASTER ; 
+  P2IES &= ~CS_NOTIFY_MASTER ;    
 
-    for(i=0;i<8;i++) {
 
-        P1OUT |= SCK;
-        __delay_cycles( 20 );
-
-        ret <<= 1;
-        // Put bits on the line, most significant bit first.
-        if(s & 0x80) {
-              P1OUT |= MOSI;
-        } else {
-              P1OUT &= ~MOSI;
-        }
-        s <<= 1;
-
-        // Pulse the clock low and wait to send the bit.  According to
-         // the data sheet, data is transferred on the rising edge.
-        P1OUT &= ~SCK;
-        __delay_cycles( 20 );
-
-        // Send the clock back high and wait to set the next bit.  
-        if (P1IN & MISO) {
-          ret |= 0x01;
-        } else {
-          ret &= 0xFE;
-        }
-
-    }
-    return ret; 
+  // UARTB 
+  // Comm channel with extentions
+  
+  P1DIR |= BIT5 | BIT7;
+  P1DIR &= ~BIT6;
 
 }
 
-void inline signalMaster () {
-
-   action &= ~SIGNAL_MASTER;
-   IFG2 &= ~UCA0TXIFG;
-   UCA0TXBUF = 0xFF;
-}
-
-
-void execCmd(int i) {
-
-     unsigned char bfrStart[] = {0,4,20,32,64};
-
-     unsigned char * r = &lastresp[lastrespLen];
-     unsigned char * q = &bfr[bfrStart[i]];
-     
-     *r++ = 0xAB;
-     *r++ = 0xCD;
-     *r++ = 0xEC;
-     *r++ = 0x49;
-     lastrespLen+=4;
-     
-     P1OUT  |=  *q++; 
-     P1OUT  &=  *q++;
-     
-     return;
-}
-
-
-void zeroMem(unsigned char * p) {
-     while (p != boundary) { *p++ = 0x00; }
-     *p++ = 0x00; 
-}
-
-
-void copyMem(unsigned char * dest, unsigned char * src, unsigned int len) {
-     if (len) {
-         while (len--) {
-             *dest++ = *src++;
-         }
-     }
-}
-
-
-void notifyCmd() {
-
-     unsigned int * p = (unsigned int*) &bfr[2];
-     unsigned int mask;
-
-     if (1) { // if we have something to tell insert our id in the mask
-         mask = 1 << id;
-         *p = mask; 
-     }
-}
-
-void storeResponse() {
-
-    zeroMem(bfr);
-    //bfr[16] = 0xab;
-    int i;
-    for (i=0;i<20;i++) {
-      bfr[i+1] = lastresp[i];
-    }
-
-
-}
 
 void checkADC() {
     
@@ -201,6 +218,90 @@ void checkADC() {
 
 }
 
+/**
+ * MCOM Related
+ */
+
+
+void initMCOM() {
+ 
+  // UART A (main comm chanell with MASTER)
+  //     (bit1 = MISO, bit2 = MOSI, BIT4 = SCLK)
+ 
+  P1DIR |= BIT1;
+  P1SEL |=  BIT1 | BIT2 | BIT4;
+  P1SEL2 |=  BIT1 | BIT2 | BIT4;
+ 
+   unsigned long int cycles;
+  // find 20 (100us) low cycles (so there's good chance transmission is finished).
+  while (1) {
+    cycles = 0;
+    while (P1IN & BIT4); // wait for low level clock
+    while ((!(P1IN & BIT4)) && (cycles < 20)) { // wait for 160 cycles of low level clock
+       cycles++;
+    }
+    if (cycles >= 2) break;
+  } 
+    
+  UCA0CTL1 = UCSWRST;                       // **Put state machine in reset**
+  UCA0CTL0 |= UCCKPH + UCMSB + UCSYNC;     // 3-pin, 8-bit SPI slave
+  UCA0CTL1 &= ~UCSWRST;                     // **Initialize USCI state machine**
+
+  while(IFG2 & UCA0RXIFG);                  // Wait ifg2 flag on rx  (no idea what it does)
+  IE2 |= UCA0RXIE;                          // Enable USCI0 RX interrupt
+  UCA0TXBUF = 0x00;                         // We do not want to ouput anything on the line
+
+}
+
+
+void inline signalMaster () {
+
+   action &= ~SIGNAL_MASTER;
+   IFG2 &= ~UCA0TXIFG;
+   UCA0TXBUF = 0xFF;
+}
+
+
+void execCmd(int i) {
+
+     unsigned char bfrStart[] = {0,4,20,32,64};
+
+     unsigned char * r = &lastresp[lastrespLen];
+     unsigned char * q = &bfr[bfrStart[i]];
+     
+     *r++ = 0xAB;
+     *r++ = 0xCD;
+     *r++ = 0xEC;
+     *r++ = 0x49;
+     lastrespLen+=4;
+     
+     P1OUT  |=  *q++; 
+     P1OUT  &=  *q++;
+     
+     return;
+}
+
+
+void notifyCmd() {
+
+     unsigned int * p = (unsigned int*) &bfr[2];
+     unsigned int mask;
+
+     if (1) { // if we have something to tell insert our id in the mask
+         mask = 1 << id;
+         *p = mask; 
+     }
+}
+
+void storeResponse() {
+
+    zeroMem(bfr);
+    //bfr[16] = 0xab;
+    int i;
+    for (i=0;i<20;i++) {
+      bfr[i+1] = lastresp[i];
+    }
+}
 
 void processBuffer() {
 
@@ -362,51 +463,12 @@ void processBuffer() {
 
 }
 
-int initUARTs() {
- 
-  // UART A (main comm chanell with MASTER)
-  //     (bit1 = MISO, bit2 = MOSI, BIT4 = SCLK)
- 
-  P1DIR |= BIT1;
-  P1SEL |=  BIT1 + BIT2 + BIT4;
-  P1SEL2 |=  BIT1 + BIT2 + BIT4;
- 
-   unsigned long int cycles;
-  // find 20 (100us) low cycles (so there's good chance transmission is finished).
-  while (1) {
-    cycles = 0;
-    while (P1IN & BIT4); // wait for low level clock
-    while ((!(P1IN & BIT4)) && (cycles < 20)) { // wait for 160 cycles of low level clock
-       cycles++;
-    }
-    if (cycles >= 2) break;
-  } 
-    
-  UCA0CTL1 = UCSWRST;                       // **Put state machine in reset**
-  UCA0CTL0 |= UCCKPH + UCMSB + UCSYNC;     // 3-pin, 8-bit SPI slave
-  UCA0CTL1 &= ~UCSWRST;                     // **Initialize USCI state machine**
 
-  while(IFG2 & UCA0RXIFG);                  // Wait ifg2 flag on rx  (no idea what it does)
-  IE2 |= UCA0RXIE;                          // Enable USCI0 RX interrupt
-  UCA0TXBUF = 0x00;                         // We do not want to ouput anything on the line
-  
-  // UARTB 
-  // Comm channel with extentions
-  
-  P1DIR |= BIT5 | BIT7;
-  P1DIR &= ~BIT6;
-}
+/**
+ *  Timers
+ */
 
-int initADCE() {
-    
-  P2DIR &= !CS_NOTIFY_MASTER ;
-  P2DIR |= CS_INCOMING_PACKET;
-  P2IE |=  CS_NOTIFY_MASTER ; 
-  P2IES &= ~CS_NOTIFY_MASTER ;    
-
-}
-
-int initTimers() {
+void initTimers() {
 
   // Timer A0
     
@@ -418,86 +480,59 @@ int initTimers() {
 }
 
 
-int  main(void) {
+
+/**
+ * Common stuff
+ */ 
 
 
-  WDTCTL = WDTPW + WDTHOLD;   // Stop watchdog timer
+char transfer(char s) {
 
-  BCSCTL1 = CALBC1_8MHZ;
-  DCOCTL = CALDCO_8MHZ;
-  
-  BCSCTL3 |= LFXT1S_2;                      // Set clock source to VLO (low power osc for timer)
+    unsigned char ret=0;
+    int i;
 
-  P1REN &= 0; 
-  P1OUT &= 0;
-  P2OUT &= 0;
-  
-  P1DIR |= BIT0 | BIT3;  // debug;
+    for(i=0;i<8;i++) {
 
-  state = 0;
-  action = 0;
+        P1OUT |= SCK;
+        __delay_cycles( 20 );
 
-  initUARTs();
-  initADCE();
-  initTimers();
+        ret <<= 1;
+        // Put bits on the line, most significant bit first.
+        if(s & 0x80) {
+              P1OUT |= MOSI;
+        } else {
+              P1OUT &= ~MOSI;
+        }
+        s <<= 1;
 
-  p = &bfr[0];
-  boundary = &bfr[MI_HEADER_SIZE]; // waits for MI header by default
-  zeroMem(p);
+        // Pulse the clock low and wait to send the bit.  According to
+         // the data sheet, data is transferred on the rising edge.
+        P1OUT &= ~SCK;
+        __delay_cycles( 20 );
 
-  while(1) {
+        // Send the clock back high and wait to set the next bit.  
+        if (P1IN & MISO) {
+          ret |= 0x01;
+        } else {
+          ret &= 0xFE;
+        }
 
-    if (action == 0) {
-      __bis_SR_register(LPM3_bits + GIE);   // Enter LPM3, enable interrupts // we need ACLK for timeout.
     }
-    __enable_interrupt(); __delay_cycles(10); __disable_interrupt(); // process pending interrupts
-        
-    if (action & PROCESS_BUFFER) {
-        processBuffer(); 
-        continue;
-    }
-    if (action & ADC_CHECK) { 
-        checkADC();
-        continue;
-    }
-    if (action & SIGNAL_MASTER) {
-        signalMaster();
-        continue;
-    }
-  };      
- 
-  return 0;
+    return ret; 
+
 }
 
-interrupt(TIMER0_A1_VECTOR) ta1_isr(void) {
+void zeroMem(unsigned char * p) {
+     while (p != boundary) { *p++ = 0x00; }
+     *p++ = 0x00; 
+}
 
-  TA0CCTL1 = ~CCIFG; // Clear TIMERA Interrupt   
-  TA0R = 0;          // Reset counter to 0.
-  TA0CCR0 = 0;      // Stop counting as of now
-  TA0CCTL1 = CCIE ;   // Enable timer interrupt.
 
-  return;
-} 
+void copyMem(unsigned char * dest, unsigned char * src, unsigned int len) {
+     if (len) {
+         while (len--) {
+             *dest++ = *src++;
+         }
+     }
+}
 
-interrupt(PORT2_VECTOR) p2_isr(void) {
-
-  if (P2IFG & CS_NOTIFY_MASTER) {
-    action |= ADC_CHECK;
-  }
-  __bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM  
-  return;
-  
-} 
-
-interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
-
-  if (IFG2 & UCA0RXIFG) {
-    (*p++) = UCA0RXBUF;
-    UCA0TXBUF = (*p);
-    if (p == boundary) {
-      action |= PROCESS_BUFFER;
-    }
-  }
-  __bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM
-  return;
- }
