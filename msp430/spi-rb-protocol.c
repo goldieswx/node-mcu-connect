@@ -109,19 +109,15 @@ void execCmd(int i) {
      unsigned char * r = &lastresp[lastrespLen];
      unsigned char * q = &bfr[bfrStart[i]];
      
-         *r++ = 0xAB;
-         *r++ = 0xCD;
-         *r++ = 0xEC;
-         *r++ = 0x49;
-         lastrespLen+=4;
+     *r++ = 0xAB;
+     *r++ = 0xCD;
+     *r++ = 0xEC;
+     *r++ = 0x49;
+     lastrespLen+=4;
      
-       P1OUT  |=  *q++; //BIT0 | BIT3;
-       P1OUT  &=  *q++;
+     P1OUT  |=  *q++; //BIT0 | BIT3;
+     P1OUT  &=  *q++;
      
-        TA0R = 0;
-        TA0CCR0 = 32767;// 32767;                          // Count to this, then interrupt
- 
-
      return;
 }
 
@@ -168,11 +164,14 @@ void storeResponse() {
 
 void checkADC() {
     
+    __enable_interrupt();
+    
     action &= ~ADC_CHECK;
     
-    P1OUT ^= BIT0;
-    P2OUT |= CS_INCOMING_PACKET;
-    __delay_cycles(5000);
+    P1OUT ^= BIT0;  // debug
+    P2OUT |= CS_INCOMING_PACKET; // warn adc extension that we are about to start an spi transfer
+    
+    __delay_cycles(5000);           // give some time to the extension to react
 
     unsigned char c[16];
     unsigned char * p = c;
@@ -198,10 +197,10 @@ void checkADC() {
 
     action |= SIGNAL_MASTER;
 
+    __disable_interrupt();
+
     P2IFG &= ~CS_NOTIFY_MASTER;    // clear P2 IFG    
     P2IE |= CS_NOTIFY_MASTER;      // enable P2 Interrupt
-
-
 
 }
 
@@ -469,13 +468,8 @@ interrupt(TIMER0_A1_VECTOR) ta1_isr(void) {
 
 interrupt(PORT2_VECTOR) p2_isr(void) {
 
-
   if (P2IFG & CS_NOTIFY_MASTER) {
-    
     action |= ADC_CHECK;
-    //LPM3_EXIT;
-    __bic_SR_register_on_exit(LPM3_bits + GIE);
-    //P1OUT |= BIT0;
   }
   return;
 } 
@@ -487,7 +481,6 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
     UCA0TXBUF = (*p);
     if (p == boundary) {
       action |= PROCESS_BUFFER;
-      __bic_SR_register_on_exit(LPM3_bits + GIE);
     }
   }
   return;
