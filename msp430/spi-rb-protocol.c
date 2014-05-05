@@ -97,10 +97,11 @@ int  main(void) {
   zeroMem(p);
 
   while(1) {
+    __enable_interrupt();
     if (action == 0) {
       __bis_SR_register(LPM3_bits + GIE);   // Enter LPM3, enable interrupts // we need ACLK for timeout.
     }
-    __enable_interrupt(); __delay_cycles(10); __disable_interrupt(); // process pending interrupts
+    __disable_interrupt(); // process pending interrupts
         
     if (action & PROCESS_BUFFER) {
         processBuffer(); 
@@ -122,10 +123,9 @@ int  main(void) {
 
 interrupt(TIMER0_A1_VECTOR) ta1_isr(void) {
 
-  TA0CCTL1 = ~CCIFG; // Clear TIMERA Interrupt   
-  TA0R = 0;          // Reset counter to 0.
-  TA0CCR0 = 0;      // Stop counting as of now
-  TA0CCTL1 = CCIE ;   // Enable timer interrupt.
+
+  TA0CTL = TACLR;  // stop & clear timer
+  TA0CCTL1 &= 0;   // also disable timer interrupt & clear flag
 
   return;
 } 
@@ -133,6 +133,7 @@ interrupt(TIMER0_A1_VECTOR) ta1_isr(void) {
 interrupt(PORT2_VECTOR) p2_isr(void) {
 
   if (P2IFG & CS_NOTIFY_MASTER) {
+    P2IE &= ~CS_NOTIFY_MASTER;
     action |= ADC_CHECK;
     __bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM      
   }
@@ -179,6 +180,9 @@ void initADCE() {
 
 void checkADC() {
     
+  //  P1OUT |= BIT3;
+
+    P2IE &= ~CS_NOTIFY_MASTER;
     P2IFG |= CS_NOTIFY_MASTER;    // Just preacaution, we will soon enable interrupts, make sure we don't allow reenty.
     __enable_interrupt();         // Our process is low priority, only listenning to master spi is the priority.
     
@@ -195,14 +199,14 @@ void checkADC() {
     
     int len = *p++ & 0b00001111;
     int len2 = len;
+
+    __delay_cycles (2000);               
     
     while (len--) {
-        __delay_cycles (2000);           
         *p++ = transfer(0);
+       __delay_cycles (2000);               
     }
 
-    __delay_cycles (2000);
-    P2OUT &= ~CS_INCOMING_PACKET;
 
     lastresp[16] = c[0];            // Temporarily set the response somewhere (FIX)
     lastresp[17] = c[1];
@@ -213,8 +217,6 @@ void checkADC() {
 
     __disable_interrupt();
 
-    P2IFG &= ~CS_NOTIFY_MASTER;    // clear P2 IFG    
-    P2IE |= CS_NOTIFY_MASTER;      // enable P2 Interrupt
 
 }
 
@@ -228,7 +230,7 @@ void initMCOM() {
   // UART A (main comm chanell with MASTER)
   //     (bit1 = MISO, bit2 = MOSI, BIT4 = SCLK)
  
-  P1DIR |= BIT1;
+ // P1DIR |= BIT1;
   P1SEL |=  BIT1 | BIT2 | BIT4;
   P1SEL2 |=  BIT1 | BIT2 | BIT4;
  
@@ -256,9 +258,12 @@ void initMCOM() {
 
 void inline signalMaster () {
 
-   action &= ~SIGNAL_MASTER;
-   IFG2 &= ~UCA0TXIFG;
-   UCA0TXBUF = 0xFF;
+   if (state == SNCC_CMD) {
+     action &= ~SIGNAL_MASTER;
+     IFG2 &= ~UCA0TXIFG;
+     UCA0TXBUF = 0xFF;
+   }
+
 }
 
 
@@ -275,8 +280,8 @@ void execCmd(int i) {
      *r++ = 0x49;
      lastrespLen+=4;
      
-     P1OUT  |=  *q++; 
-     P1OUT  &=  *q++;
+     //P1OUT  |=  *q++; 
+     //P1OUT  &=  *q++;
      
      return;
 }
@@ -296,11 +301,28 @@ void notifyCmd() {
 void storeResponse() {
 
     zeroMem(bfr);
-    //bfr[16] = 0xab;
+    bfr[16] = 0xab;
     int i;
     for (i=0;i<20;i++) {
       bfr[i+1] = lastresp[i];
     }
+}
+
+void onMasterSignalled () {
+
+
+     P1OUT ^= BIT3;
+
+     P2IFG &= ~CS_NOTIFY_MASTER;    // clear P2 IFG    
+     P2IE |= CS_NOTIFY_MASTER;      // enable P2 Interrupt */    
+     __delay_cycles(2000);
+
+     P2OUT &= ~CS_INCOMING_PACKET;
+     __delay_cycles(2000);
+
+
+
+
 }
 
 void processBuffer() {
@@ -433,6 +455,7 @@ void processBuffer() {
              state = SNCC_CMD;
           }
       }
+      bfr[32] = 0x77;
       return;
     }
 
@@ -447,6 +470,8 @@ void processBuffer() {
                  zeroMem(p);
                  state = 0;
                  boundary = &(bfr[MI_HEADER_SIZE]);
+                 onMasterSignalled();
+
               }
           } else {
              // manage error

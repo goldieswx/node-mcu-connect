@@ -46,9 +46,12 @@ char transfer(char s) {
 }
 
 void beginSampleDac() {
-    action &= ~BEGIN_SAMPLE_DAC;
-    ADC10CTL0 |= ENC + ADC10SC;          // Sampling and conversion start
-    // wait for interrupt.   
+
+    if (0==(P2IN & CS_INCOMING_PACKET)) {
+      action &= ~BEGIN_SAMPLE_DAC;
+      ADC10CTL0 |= ENC + ADC10SC;          // Sampling and conversion start
+      // wait for interrupt.   
+    }
 }
 
 void checkDAC() {
@@ -67,12 +70,14 @@ void checkDAC() {
       bfr[4] = 0xff; //readValue & 0xFF;
       bfrBoundary = &(bfr[5]);    
 
+      
       pbfr = bfr;
       P2OUT |= CS_NOTIFY_MASTER;
 
    } else {
-     TA0CCR0 = 5000;    
-     TA0CCTL1 = CCIE ; 
+     
+        TA0CTL = TASSEL_1 | MC_1; 
+        TA0CCTL1 = CCIE;
    }
 }
 
@@ -91,7 +96,7 @@ int main(void)
     P1DIR = BIT0;
     P1OUT &= 0;
 
-    P2DIR = CS_NOTIFY_MASTER;
+    P2DIR = CS_NOTIFY_MASTER | BIT5;
     P2DIR &= ~CS_INCOMING_PACKET;
     P2OUT &= 0;
     P2IE  = CS_INCOMING_PACKET;
@@ -112,8 +117,8 @@ int main(void)
     BCSCTL3 |= LFXT1S_2; 
 
     TA0R = 0;
-    TA0CCR0 = 5000; // 1000;// 32767;              // Count to this, then interrupt;  0 to stop counting
-    TA0CTL = TASSEL_1 | MC_1;             // Clock source ACLK
+    TA0CCR0 = 100; // 1000;// 32767;              // Count to this, then interrupt;  0 to stop counting
+    TA0CTL = TASSEL_1 | MC_1 ;             // Clock source ACLK
     TA0CCTL1 = CCIE ;                     // Timer A interrupt enable
 
     action = 0;
@@ -150,12 +155,17 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
       if (pbfr == bfrBoundary) {
             IE2 &= ~UCB0RXIE;              // Disable SPI interrupt     
-            P2IFG &= CS_INCOMING_PACKET;   // clear master notification interrupt flag        
+            P2IFG &= ~CS_INCOMING_PACKET;   // clear master notification interrupt flag        
             P2OUT &= ~CS_NOTIFY_MASTER;    // Bring notify line low
-            TA0CCR0 = 5000;                // Start counting as of now.
-            TA0CCTL1 = CCIE;               // Enable timer interrupt.
+           
+            TA0CTL = TASSEL_1 | MC_1;  // enable timer.
+            TA0CCTL1 = CCIE;
+
+            __bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM
+
             pbfr = bfr;
             bfrBoundary = bfr;
+
       }
   
   IFG2 &= ~UCB0RXIFG;   // clear current interrupt flag
@@ -183,10 +193,9 @@ interrupt(PORT2_VECTOR) P2_ISR(void) {
 
 interrupt(TIMER0_A1_VECTOR) ta1_isr(void) {
 
-  TA0CCTL1 = ~CCIFG; // Clear TIMERA Interrupt   
-  TA0R = 0;          // Reset counter to 0.
-  TA0CCR0 = 0;       // stop counting
-  
+  TA0CTL = TACLR;  // stop & clear timer
+  TA0CCTL1 &= 0;   // also disable timer interrupt & clear flag
+
   action |= BEGIN_SAMPLE_DAC;
   __bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM
   return;
