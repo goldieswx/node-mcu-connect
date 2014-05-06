@@ -83,6 +83,7 @@ int  main(void) {
   P1REN &= 0; 
   P1OUT &= 0;
   P2OUT &= 0;
+
   
   P1DIR |= BIT0 | BIT3;  // debug;
 
@@ -99,11 +100,13 @@ int  main(void) {
   zeroMem(p);
 
   while(1) {
-    __enable_interrupt();
+   
+     __enable_interrupt();
     if (action == 0) {
       __bis_SR_register(LPM3_bits + GIE);   // Enter LPM3, enable interrupts // we need ACLK for timeout.
     }
     __disable_interrupt(); // process pending interrupts
+     
         
     if (action & PROCESS_BUFFER) {
         processBuffer(); 
@@ -134,10 +137,13 @@ interrupt(TIMER0_A1_VECTOR) ta1_isr(void) {
 
 interrupt(PORT2_VECTOR) p2_isr(void) {
 
+  //__enable_interrupt();
   if (P2IFG & CS_NOTIFY_MASTER) {
     P2IE &= ~CS_NOTIFY_MASTER;
     action |= ADC_CHECK;
-    __bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM      
+    __bic_SR_register_on_exit(LPM3_bits /*+ GIE*/); // exit LPM     
+
+
   }
 
   return;
@@ -146,14 +152,14 @@ interrupt(PORT2_VECTOR) p2_isr(void) {
 
 interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
-  if (IFG2 & UCA0RXIFG) {
+  //if (IFG2 & UCA0RXIFG) {
     (*p++) = UCA0RXBUF;
     UCA0TXBUF = (*p);
     if (p == boundary) {
       action |= PROCESS_BUFFER;
-      __bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM      
+      __bic_SR_register_on_exit(LPM3_bits /*+ GIE*/); // exit LPM      
     }
-  }
+  //}
 
   return;
 }
@@ -170,6 +176,7 @@ void initADCE() {
   P2IE |=  CS_NOTIFY_MASTER ; 
   P2IES &= ~CS_NOTIFY_MASTER ;    
 
+  P2REN |=  CS_INCOMING_PACKET;
 
   // UARTB 
   // Comm channel with extentions
@@ -179,15 +186,15 @@ void initADCE() {
 
 }
 
-void delayCyclesProcessBuffer(nTimes,nCycles) {
+void delayCyclesProcessBuffer(unsigned int nTimes) {
 
     // delay cycles but not too much while allowing the  buffer processing.
     // interrupts should be enabled otherwise this a few meaning.
-    int i;
-    for (i=0;i<nTimes;i++) {
-        __delay_cycles(nCycles);           
+    while (nTimes--) {
+        __delay_cycles(250);           
         if (action & PROCESS_BUFFER) {
             processBuffer();
+            __enable_interrupt(); 
         }
     }
     return;
@@ -208,7 +215,7 @@ void checkADC() {
     P1OUT ^= BIT0;  // debug        // ADC Extension (ADCE) is a module ocnnected thru USCI-B and two GPIO pins
     P2OUT |= CS_INCOMING_PACKET;    // Warn ADCE that we are about to start an spi transfer.
     
-    delayCyclesProcessBuffer(250,20); // Give some time to ADCE to react
+    delayCyclesProcessBuffer(20); // Give some time to ADCE to react
 
     unsigned char c[16];
     unsigned char * p = c;
@@ -218,11 +225,11 @@ void checkADC() {
     int len = *p++ & 0b00001111;
     int len2 = len;
 
-    delayCyclesProcessBuffer(250,8);
+    delayCyclesProcessBuffer(8);
 
     while (len--) {
         *p++ = transfer(0);
-        delayCyclesProcessBuffer(250,8);
+        delayCyclesProcessBuffer(8);
     }
 
 
@@ -333,6 +340,9 @@ void onMasterSignalled () {
 
 
      P1OUT ^= BIT3;
+     // master has been signalled a bit before.
+     // however we don't want the ext module to flood us with a new request
+     // therefore we have waited to be in SNCC mode to service this.
 
      P2IFG &= ~CS_NOTIFY_MASTER;    // clear P2 IFG    
      P2IE |= CS_NOTIFY_MASTER;      // enable P2 Interrupt */    
@@ -343,12 +353,15 @@ void onMasterSignalled () {
 
 void processBuffer() {
 
+    __disable_interrupt();      
+
     action &= ~PROCESS_BUFFER;
 
     p = bfr;
     int bfrlen = boundary - p; 
     int nextLength;
     int i;
+
 
     // check MI header 
     if (state == 0) {
@@ -362,6 +375,7 @@ void processBuffer() {
                  zeroMem(p);
                  boundary = bfr + nextLength; 
                  state = currCmd;
+                 bfr[3] = 0x80;
                  // boundary set (to presumably 64 bytes)
               }
 
@@ -369,14 +383,22 @@ void processBuffer() {
                  zeroMem(p);
                  //boundary = boundary unchanged 
                  state = currCmd;
+                 bfr[3] = 0x81;
+
+                 if (P2IFG & CS_NOTIFY_MASTER) {
+                     onMasterSignalled();
+                 }
                  if (silentAction & SIGNAL_MASTER) {
                      silentAction &= ~SIGNAL_MASTER;
                      action |= SIGNAL_MASTER;
+                     bfr[3] = 0x82;
                  }
               }
           } else {
              // manage error
              zeroMem(p);
+             bfr[3] = 0x83;
+
              boundary = &(bfr[MI_HEADER_SIZE]);
              state = 0;
           }
@@ -389,6 +411,7 @@ void processBuffer() {
       lastrespLen = 0;     
       if (bfr[0] != MI_PREAMBLE) { 
         zeroMem(p);
+        bfr[3] = 0x84;
         return; 
       }
       
@@ -413,6 +436,7 @@ void processBuffer() {
         *p = ~respChecksum;
         p=bfr;
         state = MI_ANSWER;
+        bfr[3] = 0x85;
         return;
      }
       
@@ -421,6 +445,8 @@ void processBuffer() {
 
      state = MI_ANSWER;
      zeroMem(p);
+     bfr[3] = 0x86;
+
      return;
     }
 
@@ -431,6 +457,8 @@ void processBuffer() {
        p = bfr;
        boundary = &bfr[MI_HEADER_SIZE];
        zeroMem(p);
+       bfr[3] = 0x87;
+
        return;
     }
 
@@ -444,12 +472,16 @@ void processBuffer() {
                  zeroMem(p);
                  notifyCmd();           
                  state = currCmd;
+                 bfr[3] = 0x88;
+
               }
           } else {
              // manage error
              zeroMem(p);
              boundary = &(bfr[MI_HEADER_SIZE]);
              state = SNCC_CMD;
+             bfr[3] = 0x89;
+
           }
       }
       return;
@@ -465,6 +497,8 @@ void processBuffer() {
                  if (id == bfr[i]) {
                     storeResponse (i);
                     boundary = &(bfr[64]);
+                    bfr[3] = 0x8A;
+
                  }
              }
              state = MI_UPBFR;
@@ -473,9 +507,10 @@ void processBuffer() {
              zeroMem(p);
              boundary = &(bfr[MI_HEADER_SIZE]);
              state = SNCC_CMD;
+             bfr[3] = 0x8B;
+
           }
       }
-      bfr[32] = 0x77;
       return;
     }
 
@@ -490,7 +525,8 @@ void processBuffer() {
                  zeroMem(p);
                  state = 0;
                  boundary = &(bfr[MI_HEADER_SIZE]);
-                 onMasterSignalled();
+                 bfr[3] = 0x8C;
+
 
               }
           } else {
@@ -498,11 +534,14 @@ void processBuffer() {
              zeroMem(p);
              boundary = &(bfr[MI_HEADER_SIZE]);
              state = SNCC_CMD;
+             bfr[3] = 0x8D;
+
           }
       }
       return;
     }
 
+   bfr[3] = 0x8E;
     boundary = &(bfr[MI_HEADER_SIZE]);
     return;
 

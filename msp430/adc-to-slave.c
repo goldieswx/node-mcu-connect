@@ -102,6 +102,7 @@ int main(void)
     P2OUT &= 0;
     P2IE  = CS_INCOMING_PACKET;
     P2IES &= 0;
+    P2REN |= CS_NOTIFY_MASTER;
 
     P1SEL =   BIT1 + BIT5 + BIT6 + BIT7 ; 
     P1SEL2 =   BIT5 + BIT6 + BIT7 ;
