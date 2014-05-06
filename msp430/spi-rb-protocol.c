@@ -31,6 +31,7 @@ unsigned  char * p, * boundary;
 
 unsigned int state;
 unsigned int action;
+unsigned int silentAction;
 
 #define MI_HEADER_SIZE 4
 #define MI_PREAMBLE 0b10101100
@@ -87,6 +88,7 @@ int  main(void) {
 
   state = 0;
   action = 0;
+  silentAction = 0;
 
   initMCOM();
   initADCE();
@@ -258,10 +260,13 @@ void initMCOM() {
 
 void inline signalMaster () {
 
+   action &= ~SIGNAL_MASTER;
+
    if (state == SNCC_CMD) {
-     action &= ~SIGNAL_MASTER;
      IFG2 &= ~UCA0TXIFG;
      UCA0TXBUF = 0xFF;
+   } else {
+     silentAction |= SIGNAL_MASTER;
    }
 
 }
@@ -315,13 +320,8 @@ void onMasterSignalled () {
 
      P2IFG &= ~CS_NOTIFY_MASTER;    // clear P2 IFG    
      P2IE |= CS_NOTIFY_MASTER;      // enable P2 Interrupt */    
-     __delay_cycles(2000);
 
      P2OUT &= ~CS_INCOMING_PACKET;
-     __delay_cycles(2000);
-
-
-
 
 }
 
@@ -353,6 +353,10 @@ void processBuffer() {
                  zeroMem(p);
                  //boundary = boundary unchanged 
                  state = currCmd;
+                 if (silentAction & SIGNAL_MASTER) {
+                     action |= SIGNAL_MASTER;
+
+                 }
               }
           } else {
              // manage error

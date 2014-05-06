@@ -47,7 +47,8 @@ char transfer(char s) {
 
 void beginSampleDac() {
 
-    if (0==(P2IN & CS_INCOMING_PACKET)) {
+    if (0==(P2IN & CS_INCOMING_PACKET))  {
+      __delay_cycles(10);
       action &= ~BEGIN_SAMPLE_DAC;
       ADC10CTL0 |= ENC + ADC10SC;          // Sampling and conversion start
       // wait for interrupt.   
@@ -117,7 +118,7 @@ int main(void)
     BCSCTL3 |= LFXT1S_2; 
 
     TA0R = 0;
-    TA0CCR0 = 100; // 1000;// 32767;              // Count to this, then interrupt;  0 to stop counting
+    TA0CCR0 = 500; // 1000;// 32767;              // Count to this, then interrupt;  0 to stop counting
     TA0CTL = TASSEL_1 | MC_1 ;             // Clock source ACLK
     TA0CCTL1 = CCIE ;                     // Timer A interrupt enable
 
@@ -145,6 +146,7 @@ int main(void)
 interrupt(ADC10_VECTOR) ADC10_ISR (void) { 
    
    action |= CHECK_DAC;
+   ADC10CTL0 &= ~ADC10IFG;
   __bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM   
    return;
 }
