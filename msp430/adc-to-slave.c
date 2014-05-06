@@ -118,7 +118,7 @@ int main(void)
     BCSCTL3 |= LFXT1S_2; 
 
     TA0R = 0;
-    TA0CCR0 = 500; // 1000;// 32767;              // Count to this, then interrupt;  0 to stop counting
+    TA0CCR0 = 100; // 1000;// 32767;              // Count to this, then interrupt;  0 to stop counting
     TA0CTL = TASSEL_1 | MC_1 ;             // Clock source ACLK
     TA0CCTL1 = CCIE ;                     // Timer A interrupt enable
 

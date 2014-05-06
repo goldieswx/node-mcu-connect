@@ -354,8 +354,8 @@ void processBuffer() {
                  //boundary = boundary unchanged 
                  state = currCmd;
                  if (silentAction & SIGNAL_MASTER) {
+                     silentAction &= ~SIGNAL_MASTER;
                      action |= SIGNAL_MASTER;
-
                  }
               }
           } else {
