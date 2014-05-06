@@ -179,6 +179,21 @@ void initADCE() {
 
 }
 
+void delayCyclesProcessBuffer(nTimes,nCycles) {
+
+    // delay cycles but not too much while allowing the  buffer processing.
+    // interrupts should be enabled otherwise this a few meaning.
+    int i;
+    for (i=0;i<nTimes;i++) {
+        __delay_cycles(nCycles);           
+        if (action & PROCESS_BUFFER) {
+            processBuffer();
+        }
+    }
+    return;
+
+}
+
 
 void checkADC() {
     
@@ -192,7 +207,8 @@ void checkADC() {
     
     P1OUT ^= BIT0;  // debug        // ADC Extension (ADCE) is a module ocnnected thru USCI-B and two GPIO pins
     P2OUT |= CS_INCOMING_PACKET;    // Warn ADCE that we are about to start an spi transfer.
-    __delay_cycles(5000);           // Give some time to ADCE to react
+    
+    delayCyclesProcessBuffer(250,20); // Give some time to ADCE to react
 
     unsigned char c[16];
     unsigned char * p = c;
@@ -202,11 +218,11 @@ void checkADC() {
     int len = *p++ & 0b00001111;
     int len2 = len;
 
-    __delay_cycles (2000);               
-    
+    delayCyclesProcessBuffer(250,8);
+
     while (len--) {
         *p++ = transfer(0);
-       __delay_cycles (2000);               
+        delayCyclesProcessBuffer(250,8);
     }
 
 
