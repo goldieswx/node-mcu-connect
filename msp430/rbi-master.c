@@ -68,9 +68,7 @@ int main(int argc, char **argv)
 int i = 0;
   
 
-while (1) 
-{
-
+void comm_cmd_header () {
 
    // SEND MI_CMD HEADER
    // Rest of the cmd follows.
@@ -82,9 +80,10 @@ while (1)
    printBuffer(d,4);
    bcm2835_spi_transfern (d,4);
    printBuffer(d,4);
-  
-   usleep(100);
 
+}
+
+void comm_cmd_buffer () {
 
    // SEND CMDs to devices (0x01, 0x02, 0x03)
    d[0] = MI_PREAMBLE; 
@@ -101,14 +100,20 @@ while (1)
    d[33] = 0x01;
 
    bcm2835_spi_transfern (d,64);
-   usleep(500);
+
+}
+
+void comm_cmd_resp_buffer () {
 
    // get responses.
    bcm2835_spi_transfern (d,64);
    printBuffer(d,64);
 
-   // sets in SNCC
-   usleep (500);
+}
+
+void comm_sncc_header() {
+
+ // sets in SNCC
    printf("Staring SNCC\n");
 
    d[0] = MI_PREAMBLE;
@@ -119,18 +124,11 @@ while (1)
    bcm2835_spi_transfern (d,4);
    printBuffer(d,4); 
 
-   usleep(250);
+}
 
+void comm_sncc_id_mask_header() {
 
-   // wait slave message
-   while (!bcm2835_gpio_lev(latch))
-   {
-     usleep(750);
-   }
-   
-   usleep(1000);
-
-   // check which slave sent the message
+   // ask node to prepare buffer whether they sent the message
    printf("MI_CHECK\n");
 
    d[0] = MI_PREAMBLE;
@@ -141,23 +139,29 @@ while (1)
    bcm2835_spi_transfern (d,4);
    printBuffer(d,4); 
 
-   usleep(1000);
+}
 
+void comm_sncc_id_mask_sendids_header() {
 
-
-   printf("SEND IDS\n");
+  // when first time master call this nodes, after the header
+  // nodes should set their id in the binary mask.
+  // also used in MOSI to signal which node are going to respond
+  // in the next upid buffer  
+  printf("SEND IDS\n");
 
    d[0] = MI_PREAMBLE;
    d[1] = 0; 
    d[2] = 2;
    d[3] = 0;   
-
- 
    printBuffer(d,4); 
    bcm2835_spi_transfern (d,4);
    printBuffer(d,4); 
 
-   usleep(1000);
+
+}
+
+
+void comm_sncc_sendids_buffer() {
 
    printf("MI_UPBFR\n");
 
@@ -169,10 +173,44 @@ while (1)
    bcm2835_spi_transfern (d,64);
    printBuffer(d,64); 
 
-   usleep(1000);
+
 }
 
-   bcm2835_spi_end();
+  while (1) 
+  {
+     comm_cmd_header(); // 4B transfer
+     usleep(100);
 
-   return 0;
+     comm_cmd_buffer (); // 64B transfer
+     usleep(500);
+
+     comm_cmd_resp_buffer (); // 64B transfer
+     usleep (500);
+
+     comm_sncc_header(); // 4B transfer
+     usleep(250);
+
+      // wait slave message if any
+      while (!bcm2835_gpio_lev(latch))
+      {
+         usleep(750);
+      }
+      
+      usleep(1000);
+
+     comm_sncc_id_mask_header(); // 4B transfer
+     usleep(1000);
+
+     // while all is not treated // 
+       comm_sncc_id_mask_sendids_header (); // 4B
+       usleep(1000);
+
+       comm_sncc_sendids_buffer(); // 64B transfer
+       usleep(1000);
+     //  while ///
+  }
+
+bcm2835_spi_end();
+
+return 0;
 }
