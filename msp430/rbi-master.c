@@ -32,6 +32,16 @@
 #define MI_UPBFRAM   21233
 #define MI_AM        3409
 
+#define APPEND       1
+#define NO_APPEND    0
+
+
+#define MAKEINT(a,b)  (((a) << 8) | (b))   // if little endian
+#define HIBYTE(a)     ((a) >> 8)
+#define LOBYTE(a)     ((a) | 0xFF)
+
+
+
 int printBuffer (char * b,int size) {
 
   int i;
@@ -41,8 +51,6 @@ int printBuffer (char * b,int size) {
   printf("\n");
 
 }
-
-
 
 void comm_cmd_header (message* q,int qLen) {
 
@@ -65,9 +73,17 @@ void comm_cmd_header (message* q,int qLen) {
 
 }
 
-void process_checksum (req*,reqLen) {
+void process_checksum (char * req, int reqLen,int bAppend) {
 
     // proceess chksum on reqlen, append (2B) chksum after reqLen, return checksum;
+    unsigned short chk = 0;
+    while (reqLen--) {
+       chk ^= *req++;
+    }
+    if (bAppend) {
+       *((unsigned short *)req) = chk; 
+    }
+
 }
 
 void comm_cmd_buffer (message * q,int qLen) {
@@ -94,7 +110,7 @@ void comm_cmd_buffer (message * q,int qLen) {
         j += 16;
         if (q[i].status == ST_TRANSFER) {
            int reqLen = q[i].requestLen;
-           q[i].expectedChkRequest = process_checksum(q[i].request,reqLen);
+           q[i].expectedChkRequest = process_checksum(q[i].request,reqLen,APPEND);
            q[i].lastOp = MI_PREAMBLE;
            
            // prepare spi send buffer
@@ -130,7 +146,7 @@ void comm_cmd_resp_buffer (message * q,int * qLen) {
   for(i=0;i<*qLen;i++){
     if (q[i].status == ST_TRANSFER) {
         j+=16;
-        memcpy(q[i].response,d[j],16);
+        memcpy(d[j],q[i].response,16);
 
         int chkRequestToCompare = MAKEINT(q[i].response[13],q[i].response[14]); // request checksum repeated
         if (chkRequestToCompare != q[i].expectedChkRequest) {
@@ -140,15 +156,15 @@ void comm_cmd_resp_buffer (message * q,int * qLen) {
         }
         q[i].receivedChkResponse = MAKEINT(q[i].request[14],q[i].request[15]);  // response checksum 
    
-        int chqResponseToCompare = process_checksum_noappend(d[i].response,12);
+        int chqResponseToCompare = process_checksum(d[i].response,12,NO_APPEND);
         if (q[i].receivedChkResponse != chqResponseToCompare) {
           q[i].transferError++;
           //log error (q[i],transfererror), response checksum failed check
           return;
         }
-        // lok oj pckt exchanged successfully. log (q[i]);
+        // log ok pckt exchanged successfully. log (q[i]);
         q[i].status = ST_RECEIVED;
-        memcpy(q,outQueue[outQueueLen++],sizeof(message));
+        memcpy(outQueue[outQueueLen++],sizeof(message),q,sizeof(message));
     }
   } 
  
@@ -166,12 +182,11 @@ void process_queue_post_transfer(message * inQueues, message ** inQueue, int* in
          destQueue += 4*sizeof(message);
      }
 
-
      int destLen = 0;
 
      for (i=0;i<inlen;i++) {
         if (q[i].status == ST_TRANSFER) {
-             memcpy(inQueue,destQueue[destLen++],sizeof(message));
+             memcpy(destQueue[destLen++],inQueue,sizeof(message));
         }
      }
 
