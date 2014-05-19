@@ -48,8 +48,6 @@ void comm_cmd_header (message* q,int qLen) {
 
    // SEND MI_CMD HEADER
    // Rest of the cmd follows
-  
-
    d[0] = MI_PREAMBLE;
    d[1] = 64; 
    *(unsigned short *) (&d[2]) = MI_CMD; 
@@ -61,7 +59,7 @@ void comm_cmd_header (message* q,int qLen) {
         }
    }
  
-    //printBuffer(d,4);
+   //printBuffer(d,4);
    bcm2835_spi_transfern (d,4);
    //printBuffer(d,4);
 
@@ -150,12 +148,36 @@ void comm_cmd_resp_buffer (message * q,int * qLen) {
         }
         // lok oj pckt exchanged successfully. log (q[i]);
         q[i].status = ST_RECEIVED;
+        memcpy(q,outQueue[outQueueLen++],sizeof(message));
     }
   } 
+ 
+}
 
-   process_queue_post_transfer(q,qlen);
-   //printBuffer(d,64);
-  
+void process_queue_post_transfer(message * inQueues, message ** inQueue, int* inLen) {
+
+     message * srcQueue = *inQueue;
+     int srcLen = *inLen;
+     int i;
+
+     // swap dest queue
+     message * destQueue = inQueues;
+     if (*inQueue != inQueues) {
+         destQueue += 4*sizeof(message);
+     }
+
+
+     int destLen = 0;
+
+     for (i=0;i<inlen;i++) {
+        if (q[i].status == ST_TRANSFER) {
+             memcpy(inQueue,destQueue[destLen++],sizeof(message));
+        }
+     }
+
+     *inQueue = destQueue;
+     *inLen = destLen;
+
 }
 
 void comm_sncc_header() {
@@ -240,8 +262,7 @@ typedef struct message {
     int  destination;
 } _message;
 
-message[4]  inQueue;
-int   inLen;
+
 
 int main(int argc, char **argv)
 {
@@ -257,7 +278,9 @@ int main(int argc, char **argv)
 //    bcm2835_gpio_afen(latch);
 //    bcm2835_gpio_aren(latch);   	
 
-    char d[64];
+  
+    char d[64]; 
+    
 
     bcm2835_spi_begin();
     bcm2835_spi_setBitOrder(BCM2835_SPI_BIT_ORDER_MSBFIRST);      // The default
@@ -266,13 +289,21 @@ int main(int argc, char **argv)
     bcm2835_spi_chipSelect(BCM2835_SPI_CS0);                      // The default
     bcm2835_spi_setChipSelectPolarity(BCM2835_SPI_CS0, LOW); 
 
-int i = 0;
+    int i = 0;
   
+ 
+    message[2][4]  inQueues;
+    message[100]   outQueue;
+    int            outQueueLen = 0; 
+
+    message * inQueue = inQueue[0];
+    int   numQueues = 2;
+    int   inLen=0;
 
   while (1) 
   {
 
-     if (inLen) {
+     if (inLen && (outQueueLen < sizeof(outQueue)-4)) {
        comm_cmd_header(&inQueue,&inLen); // 4B transfer
        usleep(100);
 
@@ -281,6 +312,8 @@ int i = 0;
 
        comm_cmd_resp_buffer (&inQueue,&inlen); // 64B transfer
        usleep (500);
+ 
+       process_queue_post_transfer(inQueues,&inQueue,&inLen); // remove all transferred from queue. 
      }
 
      comm_sncc_header(); // 4B transfer
