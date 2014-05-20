@@ -35,11 +35,21 @@
 #define APPEND       1
 #define NO_APPEND    0
 
-
 #define MAKEINT(a,b)  (((a) << 8) | (b))   // if little endian
 #define HIBYTE(a)     ((a) >> 8)
 #define LOBYTE(a)     ((a) | 0xFF)
 
+typedef struct message {
+    char [16] request;
+    char [16] response;
+    int  expectedChkRequest;
+    int  reveicedChkResponse;
+    int  requestLen;
+    int  responseLen;
+    int  transferred; // len of transferred
+    int  status;
+    int  destination;
+} _message;
 
 
 int printBuffer (char * b,int size) {
@@ -237,10 +247,8 @@ void comm_sncc_id_mask_sendids_header() {
    d[1] = 0; 
    d[2] = 2;
    d[3] = 0;   
-   printBuffer(d,4); 
-   bcm2835_spi_transfern (d,4);
-   printBuffer(d,4); 
 
+   bcm2835_spi_transfern (d,4);
 
 }
 
@@ -253,49 +261,18 @@ void comm_sncc_sendids_buffer() {
    d[1] = 0; 
    *(unsigned short *) (&d[2]) = MI_UPBFR; 
   
-   printBuffer(d,4); 
    bcm2835_spi_transfern (d,64);
-   printBuffer(d,64); 
-
-
 }
 
-void queue_msg (destination,message) {
-
-}
-
-
-typedef struct message {
-    char [16] request;
-    char [16] response;
-    int  expectedChkRequest;
-    int  reveicedChkResponse;
-    int  requestLen;
-    int  responseLen;
-    int  transferred; // len of transferred
-    int  status;
-    int  destination;
-} _message;
 
 
 
 int main(int argc, char **argv)
 {
-  
-   char buf[3];
-
-   inLen = 0;
-
     if (!bcm2835_init())
   	return 1;
-    int channel = 0;
-    bcm2835_gpio_fsel(latch, BCM2835_GPIO_FSEL_INPT); 
-//    bcm2835_gpio_afen(latch);
-//    bcm2835_gpio_aren(latch);   	
 
-  
-    char d[64]; 
-    
+    bcm2835_gpio_fsel(latch, BCM2835_GPIO_FSEL_INPT); 
 
     bcm2835_spi_begin();
     bcm2835_spi_setBitOrder(BCM2835_SPI_BIT_ORDER_MSBFIRST);      // The default
@@ -304,14 +281,12 @@ int main(int argc, char **argv)
     bcm2835_spi_chipSelect(BCM2835_SPI_CS0);                      // The default
     bcm2835_spi_setChipSelectPolarity(BCM2835_SPI_CS0, LOW); 
 
-    int i = 0;
-  
- 
+    char d[64]; 
     message[2][4]  inQueues;
     message[100]   outQueue;
-    int            outQueueLen = 0; 
+    int   outQueueLen = 0; 
 
-    message * inQueue = inQueue[0];
+    message * inQueue = inQueues[0];
     int   numQueues = 2;
     int   inLen=0;
 
