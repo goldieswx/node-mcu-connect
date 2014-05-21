@@ -84,8 +84,10 @@ int  main(void) {
   P1OUT &= 0;
   P2OUT &= 0;
 
+  P2SEL2 &= 0;
+  P2SEL &= 0;
   
-  P1DIR |= BIT0 | BIT3;  // debug;
+  P2DIR |= BIT6 | BIT7;  // debug;
 
   state = 0;
   action = 0;
@@ -184,6 +186,10 @@ void initADCE() {
   P1DIR |= BIT5 | BIT7;
   P1DIR &= ~BIT6;
 
+  //power the extension
+  P1DIR |= BIT3;
+  P1OUT |= BIT3;
+
 }
 
 void delayCyclesProcessBuffer(unsigned int nTimes) {
@@ -204,7 +210,6 @@ void delayCyclesProcessBuffer(unsigned int nTimes) {
 
 void checkADC() {
     
-  //  P1OUT |= BIT3;
 
     P2IE &= ~CS_NOTIFY_MASTER;
     P2IFG |= CS_NOTIFY_MASTER;    // Just preacaution, we will soon enable interrupts, make sure we don't allow reenty.
@@ -212,7 +217,7 @@ void checkADC() {
     
     action &= ~ADC_CHECK;         // Clear current action flag.
     
-    P1OUT ^= BIT0;  // debug        // ADC Extension (ADCE) is a module ocnnected thru USCI-B and two GPIO pins
+    P2OUT ^= BIT7;  // debug        // ADC Extension (ADCE) is a module ocnnected thru USCI-B and two GPIO pins
     P2OUT |= CS_INCOMING_PACKET;    // Warn ADCE that we are about to start an spi transfer.
     
     delayCyclesProcessBuffer(20); // Give some time to ADCE to react
@@ -308,8 +313,8 @@ void execCmd(int i) {
      *r++ = 0x49;
      lastrespLen+=4;
      
-     //P1OUT  |=  *q++; 
-     //P1OUT  &=  *q++;
+     //P1OUT  &=  *q++; 
+     //P1OUT  |=  *q++;
      
      return;
 }
@@ -339,7 +344,6 @@ void storeResponse() {
 void onMasterSignalled () {
 
 
-     P1OUT ^= BIT3;
      // master has been signalled a bit before.
      // however we don't want the ext module to flood us with a new request
      // therefore we have waited to be in SNCC mode to service this.

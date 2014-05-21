@@ -58,6 +58,7 @@ void beginSampleDac() {
 void checkDAC() {
     action &= ~CHECK_DAC;
 
+    static int lastValue;
     int chan = 7;
     readValue = ADC10MEM; // Assigns the value held in ADC10MEM to the integer called ADC_value
   
@@ -71,15 +72,19 @@ void checkDAC() {
       bfr[4] = 0xff; //readValue & 0xFF;
       bfrBoundary = &(bfr[5]);    
 
-      
-      pbfr = bfr;
-      P2OUT |= CS_NOTIFY_MASTER;
-
-   } else {
-     
-        TA0CTL = TASSEL_1 | MC_1; 
-        TA0CCTL1 = CCIE;
+      if ((readValue > (lastValue+15)) || (readValue < (lastValue-15)))
+      {
+        pbfr = bfr;
+        P2OUT |= CS_NOTIFY_MASTER;
+        lastValue = readValue;
+        return;
+      }
    }
+    
+   TA0CTL = TASSEL_1 | MC_1; 
+   TA0CCTL1 = CCIE;
+
+   return;
 }
 
 
@@ -90,8 +95,8 @@ int main(void)
     BCSCTL2 &= ~(DIVS_3);            // SMCLK/DCO @ 1MHz
     P1SEL |= BIT1;                   // ADC input pin P1.2
 
-    ADC10CTL1 = INCH_1 + ADC10DIV_3 ;         // Channel 3, ADC10CLK/3
-    ADC10CTL0 = SREF_0 + ADC10SHT_3 + ADC10ON + ADC10IE;  // Vcc,Vss as ref. Sample and hold 64 cycles
+    ADC10CTL1 = INCH_1 + ADC10DIV_0 ;         // Channel 3, ADC10CLK/3
+    ADC10CTL0 = SREF_0 + ADC10SHT_0 + ADC10ON + ADC10IE;  // Vcc,Vss as ref. Sample and hold 64 cycles
     ADC10AE0 |= BIT1;    
 
     P1DIR = BIT0;
@@ -119,7 +124,7 @@ int main(void)
     BCSCTL3 |= LFXT1S_2; 
 
     TA0R = 0;
-    TA0CCR0 = 100; // 1000;// 32767;              // Count to this, then interrupt;  0 to stop counting
+    TA0CCR0 = 300; // 1000;// 32767;              // Count to this, then interrupt;  0 to stop counting
     TA0CTL = TASSEL_1 | MC_1 ;             // Clock source ACLK
     TA0CCTL1 = CCIE ;                     // Timer A interrupt enable
 

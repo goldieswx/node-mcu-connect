@@ -32,25 +32,31 @@
 #define MI_UPBFRAM   21233
 #define MI_AM        3409
 
-#define APPEND       1
+#define CS_APPEND       1
 #define NO_APPEND    0
 
 #define MAKEINT(a,b)  (((a) << 8) | (b))   // if little endian
 #define HIBYTE(a)     ((a) >> 8)
 #define LOBYTE(a)     ((a) | 0xFF)
 
-typedef struct message {
-    char [16] request;
-    char [16] response;
+#define ST_TRANSFER 0x01
+#define ST_RECEIVED 0X02
+
+typedef struct _message {
+    char request [16] ;
+    char response [16] ;
     int  expectedChkRequest;
-    int  reveicedChkResponse;
+    int  receivedChkResponse;
     int  requestLen;
     int  responseLen;
     int  transferred; // len of transferred
     int  status;
+    int  lastOp;
+    int  transferError;
     int  destination;
-} _message;
+} message;
 
+ char d[64]; 
 
 int printBuffer (char * b,int size) {
 
@@ -60,6 +66,14 @@ int printBuffer (char * b,int size) {
   }
   printf("\n");
 
+}
+
+
+void _memcpy( void* dest, void *src, int len) {
+
+  while (len--) {
+       *(char*)dest++ = *(char*)src++;
+  }
 }
 
 void comm_cmd_header (message* q,int qLen) {
@@ -83,7 +97,7 @@ void comm_cmd_header (message* q,int qLen) {
 
 }
 
-void process_checksum (char * req, int reqLen,int bAppend) {
+int process_checksum (char * req, int reqLen,int bAppend) {
 
     // proceess chksum on reqlen, append (2B) chksum after reqLen, return checksum;
     unsigned short chk = 0;
@@ -94,6 +108,7 @@ void process_checksum (char * req, int reqLen,int bAppend) {
        *((unsigned short *)req) = chk; 
     }
 
+    return chk;
 }
 
 void comm_cmd_buffer (message * q,int qLen) {
@@ -120,12 +135,13 @@ void comm_cmd_buffer (message * q,int qLen) {
         j += 16;
         if (q[i].status == ST_TRANSFER) {
            int reqLen = q[i].requestLen;
-           q[i].expectedChkRequest = process_checksum(q[i].request,reqLen,APPEND);
+           q[i].expectedChkRequest = process_checksum(q[i].request,reqLen,CS_APPEND);
            q[i].lastOp = MI_PREAMBLE;
            
            // prepare spi send buffer
            d[i+1] = q[i].destination;
-           memcpy(d[j],q[i].request,16); 
+           _memcpy(&d[j],&q[i].request,16); 
+
         }
    }
 
@@ -133,21 +149,8 @@ void comm_cmd_buffer (message * q,int qLen) {
 
 }
 
-void process_queue_post_transfer(message * q,int * qLen) {
-   
-    int i,n=*qLen;
-    int canSwap = 0;
-    for(i=0;i<qLen;i++) {
-        if (q[i].status != ST_RECEIVED) {
-            //copy to next queue.
-            //swap queues.
-        }
 
-    }
-
-}
-
-void comm_cmd_resp_buffer (message * q,int * qLen) {
+void comm_cmd_resp_buffer (message * q,int * qLen,message * outQueue,int outQueueLen) {
 
    // get responses.
    bcm2835_spi_transfern (d,64);
@@ -156,7 +159,7 @@ void comm_cmd_resp_buffer (message * q,int * qLen) {
   for(i=0;i<*qLen;i++){
     if (q[i].status == ST_TRANSFER) {
         j+=16;
-        memcpy(d[j],q[i].response,16);
+        _memcpy(&(d[j]),&(q[i]).response,16);
 
         int chkRequestToCompare = MAKEINT(q[i].response[13],q[i].response[14]); // request checksum repeated
         if (chkRequestToCompare != q[i].expectedChkRequest) {
@@ -166,7 +169,7 @@ void comm_cmd_resp_buffer (message * q,int * qLen) {
         }
         q[i].receivedChkResponse = MAKEINT(q[i].request[14],q[i].request[15]);  // response checksum 
    
-        int chqResponseToCompare = process_checksum(d[i].response,12,NO_APPEND);
+        int chqResponseToCompare = process_checksum(q[i].response,12,NO_APPEND);
         if (q[i].receivedChkResponse != chqResponseToCompare) {
           q[i].transferError++;
           //log error (q[i],transfererror), response checksum failed check
@@ -174,7 +177,7 @@ void comm_cmd_resp_buffer (message * q,int * qLen) {
         }
         // log ok pckt exchanged successfully. log (q[i]);
         q[i].status = ST_RECEIVED;
-        memcpy(outQueue[outQueueLen++],sizeof(message),q,sizeof(message));
+        _memcpy(&outQueue[outQueueLen++],&(q[i]),sizeof(message));
     }
   } 
  
@@ -194,9 +197,9 @@ void process_queue_post_transfer(message * inQueues, message ** inQueue, int* in
 
      int destLen = 0;
 
-     for (i=0;i<inlen;i++) {
-        if (q[i].status == ST_TRANSFER) {
-             memcpy(destQueue[destLen++],inQueue,sizeof(message));
+     for (i=0;i<srcLen;i++) {
+        if (srcQueue[i].status == ST_TRANSFER) {
+             _memcpy(&destQueue[destLen++],&srcQueue[i],sizeof(message));
         }
      }
 
@@ -281,9 +284,9 @@ int main(int argc, char **argv)
     bcm2835_spi_chipSelect(BCM2835_SPI_CS0);                      // The default
     bcm2835_spi_setChipSelectPolarity(BCM2835_SPI_CS0, LOW); 
 
-    char d[64]; 
-    message[2][4]  inQueues;
-    message[100]   outQueue;
+   
+    message  inQueues[2][4];
+    message   outQueue[100];
     int   outQueueLen = 0; 
 
     message * inQueue = inQueues[0];
@@ -294,19 +297,19 @@ int main(int argc, char **argv)
   {
 
      if (inLen && (outQueueLen < sizeof(outQueue)-4)) {
-       comm_cmd_header(&inQueue,&inLen); // 4B transfer
+       comm_cmd_header(inQueue,inLen); // 4B transfer
        usleep(100);
 
-       comm_cmd_buffer (&inQueue,&inlen); // 64B transfer
+       comm_cmd_buffer (inQueue,inLen); // 64B transfer
        usleep(500);
 
-       comm_cmd_resp_buffer (&inQueue,&inlen); // 64B transfer
+       comm_cmd_resp_buffer (inQueue,&inLen,outQueue,outQueueLen); // 64B transfer
        usleep (500);
  
-       process_queue_post_transfer(inQueues,&inQueue,&inLen); // remove all transferred from queue. 
+       process_queue_post_transfer(&(inQueues[0][0]),&inQueue,&inLen); // remove all transferred from queue. 
      }
 
-     comm_sncc_header(); // 4B transfer
+  /*   comm_sncc_header(); // 4B transfer
      usleep(250);
 
     // wait slave message if any
@@ -325,7 +328,7 @@ int main(int argc, char **argv)
     usleep(1000);
 
     comm_sncc_sendids_buffer(); // 64B transfer
-    usleep(1000);
+    usleep(1000); */
     //  while ///
   }
 
