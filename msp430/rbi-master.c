@@ -191,7 +191,7 @@ void process_queue_post_transfer(message * inQueues, message ** inQueue, int* in
 
      // swap dest queue
      message * destQueue = inQueues;
-     if (*inQueue != inQueues) {
+     if (srcQueue == inQueues) {
          destQueue += 4*sizeof(message);
      }
 
@@ -308,7 +308,6 @@ int main(int argc, char **argv)
  
        process_queue_post_transfer(&(inQueues[0][0]),&inQueue,&inLen); // remove all transferred from queue. 
      }
-
   /*   comm_sncc_header(); // 4B transfer
      usleep(250);
 
