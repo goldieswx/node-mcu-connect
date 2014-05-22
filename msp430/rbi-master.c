@@ -91,7 +91,7 @@ void comm_cmd_header (message* q,int qLen) {
         }
    }
  
-   //printBuffer(d,4);
+   printBuffer(d,4);
    bcm2835_spi_transfern (d,4);
    //printBuffer(d,4);
 
@@ -145,6 +145,11 @@ void comm_cmd_buffer (message * q,int qLen) {
         }
    }
 
+   printBuffer(d,16);
+   printBuffer(d+16,16);
+   printBuffer(d+32,16);
+   printBuffer(d+48,16);
+
    bcm2835_spi_transfern (d,64);
 
 }
@@ -153,6 +158,10 @@ void comm_cmd_buffer (message * q,int qLen) {
 void comm_cmd_resp_buffer (message * q,int * qLen,message * outQueue,int outQueueLen) {
 
    // get responses.
+   printBuffer(d,16);
+   printBuffer(d+16,16);
+   printBuffer(d+32,16);
+   printBuffer(d+48,16);  
    bcm2835_spi_transfern (d,64);
 
   int i,j=0;
@@ -165,6 +174,7 @@ void comm_cmd_resp_buffer (message * q,int * qLen,message * outQueue,int outQueu
         if (chkRequestToCompare != q[i].expectedChkRequest) {
           q[i].transferError++;
           //log error (q[i],transfererror), request checksum failed recheck on reply
+          printf("log error (q[i],transfererror), request checksum failed recheck on reply\n");
           return;
         }
         q[i].receivedChkResponse = MAKEINT(q[i].request[14],q[i].request[15]);  // response checksum 
@@ -172,6 +182,7 @@ void comm_cmd_resp_buffer (message * q,int * qLen,message * outQueue,int outQueu
         int chqResponseToCompare = process_checksum(q[i].response,12,NO_APPEND);
         if (q[i].receivedChkResponse != chqResponseToCompare) {
           q[i].transferError++;
+          printf("log error (q[i],transfererror), response checksum failed check\n");
           //log error (q[i],transfererror), response checksum failed check
           return;
         }
@@ -192,7 +203,7 @@ void process_queue_post_transfer(message * inQueues, message ** inQueue, int* in
      // swap dest queue
      message * destQueue = inQueues;
      if (srcQueue == inQueues) {
-         destQueue += 4*sizeof(message);
+         destQueue += 4;
      }
 
      int destLen = 0;
@@ -268,6 +279,31 @@ void comm_sncc_sendids_buffer() {
 }
 
 
+void debugQueue(message * q) {
+
+    printf("request : ");
+    printBuffer(q->request,16);
+    printf("response : ");
+    printBuffer(q->response,16);
+    printf("expectedChkRequest : 0x%x \n",q->expectedChkRequest);
+    printf("receivedChkResponse : 0x%x \n",q->receivedChkResponse);
+    printf("requestLen : 0x%x \n",q->requestLen);
+    printf("responseLen : 0x%x \n",q->responseLen);
+    printf("transferred : 0x%x \n",q->transferred);
+    printf("status : 0x%x \n",q->status);
+    printf("lastOp : %d \n",q->lastOp);
+    printf("transferError : 0x%x \n",q->transferError);
+    printf("destination : 0x%x \n",q->destination);
+
+}
+
+void debugQueues(message * q,int len) {
+
+    while (len--) {
+       debugQueue(q++);
+    }
+
+}
 
 
 int main(int argc, char **argv)
@@ -293,21 +329,54 @@ int main(int argc, char **argv)
     int   numQueues = 2;
     int   inLen=0;
 
-  while (1) 
-  {
+   /////
+    inLen++;
+    inQueue[0].request[0] = 0x12;
+    inQueue[0].request[1] = 0x23;
+    inQueue[0].request[2] = 0x34;
+
+    inQueue[0].response[0] = 0xF7;
+    inQueue[0].expectedChkRequest = 0xFF;
+    inQueue[0].receivedChkResponse = 0xF7;
+    inQueue[0].requestLen = 3;
+    inQueue[0].responseLen = 0;
+    inQueue[0].transferred = 0; // len of transferred
+    inQueue[0].status = ST_TRANSFER;
+    inQueue[0].lastOp = 0;
+    inQueue[0].transferError = 0;
+    inQueue[0].destination = 0x02;
+
+
+   while (1) 
+   {
 
      if (inLen && (outQueueLen < sizeof(outQueue)-4)) {
        comm_cmd_header(inQueue,inLen); // 4B transfer
+      debugQueues(inQueue,inLen);
+
        usleep(100);
 
        comm_cmd_buffer (inQueue,inLen); // 64B transfer
+      debugQueues(inQueue,inLen);
+
        usleep(500);
 
        comm_cmd_resp_buffer (inQueue,&inLen,outQueue,outQueueLen); // 64B transfer
+      debugQueues(inQueue,inLen);
+
        usleep (500);
- 
-       process_queue_post_transfer(&(inQueues[0][0]),&inQueue,&inLen); // remove all transferred from queue. 
-     }
+
+      printf("bfr1 ptr inQueue: 0x%x  len:%d\n",inQueue,inLen);
+      process_queue_post_transfer(&(inQueues[0][0]),&inQueue,&inLen); // remove all transferred from queue. 
+
+      printf("bfr2 ptr inQueue: 0x%x len:%d\n",inQueue,inLen);
+
+      debugQueues(inQueue,inLen);
+      break;
+   }
+    
+
+    
   /*   comm_sncc_header(); // 4B transfer
      usleep(250);
 
