@@ -82,12 +82,14 @@ int  main(void) {
 
   P1REN &= 0; 
   P1OUT &= 0;
+  P2REN &= 0;
   P2OUT &= 0;
 
   P2SEL2 &= 0;
   P2SEL &= 0;
   
-  P2DIR |= BIT6 | BIT7;  // debug;
+  P2DIR |= BIT6 + BIT7;  // debug;
+
 
   state = 0;
   action = 0;
@@ -110,7 +112,7 @@ int  main(void) {
     __disable_interrupt(); // process pending interrupts
      
         
-    if (action & PROCESS_BUFFER) {
+  if (action & PROCESS_BUFFER) {
         processBuffer(); 
         continue;
     }
@@ -173,7 +175,7 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
 void initADCE() {
     
-  P2DIR &= !CS_NOTIFY_MASTER ;
+  P2DIR &= ~CS_NOTIFY_MASTER ;
   P2DIR |= CS_INCOMING_PACKET;
   P2IE |=  CS_NOTIFY_MASTER ; 
   P2IES &= ~CS_NOTIFY_MASTER ;    
@@ -217,7 +219,7 @@ void checkADC() {
     
     action &= ~ADC_CHECK;         // Clear current action flag.
     
-    P2OUT ^= BIT7;  // debug        // ADC Extension (ADCE) is a module ocnnected thru USCI-B and two GPIO pins
+ //   P2OUT ^= BIT7;  // debug        // ADC Extension (ADCE) is a module ocnnected thru USCI-B and two GPIO pins
     P2OUT |= CS_INCOMING_PACKET;    // Warn ADCE that we are about to start an spi transfer.
     
     delayCyclesProcessBuffer(20); // Give some time to ADCE to react
@@ -302,10 +304,14 @@ void inline signalMaster () {
 
 void execCmd(int i) {
 
-     unsigned char bfrStart[] = {0,4,20,32,64};
+     unsigned char bfrStart[] = {0,16,32,48};
 
      unsigned char * r = &lastresp[lastrespLen];
      unsigned char * q = &bfr[bfrStart[i]];
+
+      P2OUT  &=  *q++; 
+      P2OUT  |=  *q++;
+
      
      *r++ = 0xAB;
      *r++ = 0xCD;
@@ -313,8 +319,6 @@ void execCmd(int i) {
      *r++ = 0x49;
      lastrespLen+=4;
      
-     //P1OUT  &=  *q++; 
-     //P1OUT  |=  *q++;
      
      return;
 }
@@ -415,7 +419,6 @@ void processBuffer() {
       lastrespLen = 0;     
       if (bfr[0] != MI_PREAMBLE) { 
         zeroMem(p);
-        bfr[3] = 0x84;
         return; 
       }
       
@@ -430,17 +433,29 @@ void processBuffer() {
 
       // store responses in bfr (last slot if we had several execCmds)
       if (j<=3) {
-        zeroMem(p);
-        unsigned char respChecksum = 0;
-        p = &bfr[4+(j-1)*16];
-        for (i=0;i<lastrespLen;i++) {
-           *p = lastresp[i];
+        unsigned int respChecksum = 0;
+        unsigned int reqChecksum = 0;
+        p = &bfr[j*16];
+        for (i=0;i<16;i++) {
+           if (i<14) { // do not count checksum
+            reqChecksum += *p;
+           }
+           if (i<lastrespLen) {
+             *p = lastresp[i];
+           } else {
+             *p = 0x00;
+           }
            respChecksum += *p++;
         }
-        *p = ~respChecksum;
+        
+        // put response checksum at byte 12
+        p = &bfr[(j)*16];
+        *((unsigned int*)(p+12)) = ~respChecksum;
+        // put request checksum at byte 14
+        *((unsigned int*)(p+14)) = ~reqChecksum;
+        /// 
         p=bfr;
         state = MI_ANSWER;
-        bfr[3] = 0x85;
         return;
      }
       

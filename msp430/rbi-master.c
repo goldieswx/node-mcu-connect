@@ -19,6 +19,15 @@
 #include <bcm2835.h>
 #include "stdio.h"
 
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#include <stdlib.h> 
+#include <string.h>
+
+
 #define latch  RPI_GPIO_P1_22
 
 #define MI_HEADER_SIZE 4
@@ -35,12 +44,26 @@
 #define CS_APPEND       1
 #define NO_APPEND    0
 
-#define MAKEINT(a,b)  (((a) << 8) | (b))   // if little endian
+#define MAKEINT(a,b)  ((b & 0xFF) << 8) | (a & 0xFF)  // if little endian
 #define HIBYTE(a)     ((a) >> 8)
 #define LOBYTE(a)     ((a) | 0xFF)
 
 #define ST_TRANSFER 0x01
 #define ST_RECEIVED 0X02
+
+#define BIT0  0x01
+#define BIT1  0x02
+#define BIT2  0x04
+#define BIT3  0x08
+#define BIT4  0x10
+#define BIT5  0x20
+#define BIT6  0x40
+#define BIT7  0x80
+
+#define BUFLEN 512
+#define PORT 9930
+
+
 
 typedef struct _message {
     char request [16] ;
@@ -54,6 +77,7 @@ typedef struct _message {
     int  lastOp;
     int  transferError;
     int  destination;
+    int  slotSent; // slot in 64b buffer (1,2 or3)
 } message;
 
  char d[64]; 
@@ -66,6 +90,13 @@ int printBuffer (char * b,int size) {
   }
   printf("\n");
 
+}
+
+void zeroMem(void * p,int len) {
+     
+     while (len--) {
+        *(unsigned char*)p++ = 0x00;
+     }
 }
 
 
@@ -101,11 +132,13 @@ int process_checksum (char * req, int reqLen,int bAppend) {
 
     // proceess chksum on reqlen, append (2B) chksum after reqLen, return checksum;
     unsigned short chk = 0;
+    unsigned short * appendPtr = (unsigned short *)(req+14);
     while (reqLen--) {
-       chk ^= *req++;
+       chk += *req++;
     }
+    chk = ~chk;
     if (bAppend) {
-       *((unsigned short *)req) = chk; 
+       *appendPtr = chk; 
     }
 
     return chk;
@@ -132,7 +165,7 @@ void comm_cmd_buffer (message * q,int qLen) {
    int i;
    int j = 0;
    for(i=0;i<qLen;i++){
-        j += 16;
+        j ++;
         if (q[i].status == ST_TRANSFER) {
            int reqLen = q[i].requestLen;
            q[i].expectedChkRequest = process_checksum(q[i].request,reqLen,CS_APPEND);
@@ -140,8 +173,8 @@ void comm_cmd_buffer (message * q,int qLen) {
            
            // prepare spi send buffer
            d[i+1] = q[i].destination;
-           _memcpy(&d[j],&q[i].request,16); 
-
+           _memcpy(&d[j*16],&q[i].request,16); 
+           q[i].slotSent = j;
         }
    }
 
@@ -163,21 +196,25 @@ void comm_cmd_resp_buffer (message * q,int * qLen,message * outQueue,int outQueu
    printBuffer(d+32,16);
    printBuffer(d+48,16);  
    bcm2835_spi_transfern (d,64);
+   printBuffer(d,16);
+   printBuffer(d+16,16);
+   printBuffer(d+32,16);
+   printBuffer(d+48,16);  
 
-  int i,j=0;
+
+  int i;
   for(i=0;i<*qLen;i++){
     if (q[i].status == ST_TRANSFER) {
-        j+=16;
-        _memcpy(&(d[j]),&(q[i]).response,16);
+        _memcpy(&(q[i].response),d+((q[i].slotSent)*16),16);
 
-        int chkRequestToCompare = MAKEINT(q[i].response[13],q[i].response[14]); // request checksum repeated
+        int chkRequestToCompare = MAKEINT(q[i].response[14],q[i].response[15]); // request checksum repeated
         if (chkRequestToCompare != q[i].expectedChkRequest) {
           q[i].transferError++;
           //log error (q[i],transfererror), request checksum failed recheck on reply
           printf("log error (q[i],transfererror), request checksum failed recheck on reply\n");
           return;
         }
-        q[i].receivedChkResponse = MAKEINT(q[i].request[14],q[i].request[15]);  // response checksum 
+        q[i].receivedChkResponse = MAKEINT(q[i].response[12],q[i].response[13]);  // response checksum 
    
         int chqResponseToCompare = process_checksum(q[i].response,12,NO_APPEND);
         if (q[i].receivedChkResponse != chqResponseToCompare) {
@@ -294,6 +331,7 @@ void debugQueue(message * q) {
     printf("lastOp : %d \n",q->lastOp);
     printf("transferError : 0x%x \n",q->transferError);
     printf("destination : 0x%x \n",q->destination);
+    printf("slotSent : %d\n",q->slotSent);
 
 }
 
@@ -330,25 +368,30 @@ int main(int argc, char **argv)
     int   inLen=0;
 
    /////
-    inLen++;
-    inQueue[0].request[0] = 0x12;
-    inQueue[0].request[1] = 0x23;
-    inQueue[0].request[2] = 0x34;
-
-    inQueue[0].response[0] = 0xF7;
-    inQueue[0].expectedChkRequest = 0xFF;
-    inQueue[0].receivedChkResponse = 0xF7;
-    inQueue[0].requestLen = 3;
-    inQueue[0].responseLen = 0;
-    inQueue[0].transferred = 0; // len of transferred
-    inQueue[0].status = ST_TRANSFER;
-    inQueue[0].lastOp = 0;
-    inQueue[0].transferError = 0;
-    inQueue[0].destination = 0x02;
-
-
+    
+   int flipFlop = BIT6;
+  
    while (1) 
    {
+
+      inLen++;
+      zeroMem(&inQueue[0],sizeof(message));
+      inQueue[0].request[0] = ~(BIT6+BIT7);
+      inQueue[0].request[1] = flipFlop;
+      inQueue[0].request[2] = 0x34;
+      flipFlop ^= (BIT6+BIT7);
+
+      inQueue[0].response[0] = 0xF7;
+      inQueue[0].expectedChkRequest = 0xFF;
+      inQueue[0].receivedChkResponse = 0xF7;
+      inQueue[0].requestLen = 3;
+      inQueue[0].responseLen = 0;
+      inQueue[0].transferred = 0; // len of transferred
+      inQueue[0].status = ST_TRANSFER;
+      inQueue[0].lastOp = 0;
+      inQueue[0].transferError = 0;
+      inQueue[0].destination = 0x02;
+      usleep(1000);
 
      if (inLen && (outQueueLen < sizeof(outQueue)-4)) {
        comm_cmd_header(inQueue,inLen); // 4B transfer
@@ -372,7 +415,7 @@ int main(int argc, char **argv)
       printf("bfr2 ptr inQueue: 0x%x len:%d\n",inQueue,inLen);
 
       debugQueues(inQueue,inLen);
-      break;
+    //  break;
    }
     
 
@@ -403,4 +446,45 @@ int main(int argc, char **argv)
 bcm2835_spi_end();
 
 return 0;
+}
+
+ 
+void err(char *str)
+{
+    perror(str);
+    exit(1);
+}
+ 
+int lstn(void)
+{
+    struct sockaddr_in my_addr, cli_addr;
+    int sockfd, i; 
+    socklen_t slen=sizeof(cli_addr);
+    char buf[BUFLEN];
+ 
+    if ((sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP))==-1)
+      err("socket");
+    else
+      printf("Server : Socket() successful\n");
+ 
+    bzero(&my_addr, sizeof(my_addr));
+    my_addr.sin_family = AF_INET;
+    my_addr.sin_port = htons(PORT);
+    my_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+     
+    if (bind(sockfd, (struct sockaddr* ) &my_addr, sizeof(my_addr))==-1)
+      err("bind");
+    else
+      printf("Server : bind() successful\n");
+ 
+    while(1)
+    {
+        if (recvfrom(sockfd, buf, BUFLEN, 0, (struct sockaddr*)&cli_addr, &slen)==-1)
+            err("recvfrom()");
+        printf("Received packet from %s:%d\nData: %s\n\n",
+               inet_ntoa(cli_addr.sin_addr), ntohs(cli_addr.sin_port), buf);
+    }
+ 
+    close(sockfd);
+    return 0;
 }
