@@ -33,10 +33,11 @@ unsigned int state;
 unsigned int action;
 unsigned int silentAction;
 
-#define MI_HEADER_SIZE 4
+#define MI_HEADER_SIZE 16
 #define MI_PREAMBLE 0b10101100
 #define MI_CMD 8714
 #define MI_ANSWER 9934
+#define MI_CMD_BUFFER 14587
 
 #define SNCC_CMD     12453  // Mi issues an explicit SNCC 
 #define MI_CHECK     12554  // (A) Slave(s) brought up MISO, who is(are) it(they)
@@ -53,6 +54,12 @@ unsigned int silentAction;
 #define MISO  BIT6
 #define SCK   BIT5
 
+#define ERR_SUCCESS               0x00
+#define ERR_BUFF_SIZE_INVALID     0x01
+#define ERR_PREAMBLE              0x02
+#define ERR_CMD_NOT_ALLOWED       0x04
+#define ERR_HEAD_CHECKSUM_FAILED  0x08  
+#define ERR_UNEXPECTED_STATE      0x10
 
 #define CS_NOTIFY_MASTER  BIT3   // External Interrupt 
 #define CS_INCOMING_PACKET  BIT4   // Master enable the line before sending
@@ -68,6 +75,8 @@ void notifyCmd();
 void storeResponse();
 void checkADC(); 
 void processBuffer();
+void processBuffer2();
+
 
 void initMCOM();
 void initADCE();
@@ -100,8 +109,6 @@ int  main(void) {
   initADCE();
   initTimers();
 
-  p = &bfr[0];
-  boundary = &bfr[MI_HEADER_SIZE]; // waits for MI header by default
   zeroMem(p);
 
   while(1) {
@@ -114,7 +121,7 @@ int  main(void) {
      
         
   if (action & PROCESS_BUFFER) {
-        processBuffer(); 
+        processBuffer2(); 
         continue;
     }
     if (action & ADC_CHECK) { 
@@ -209,7 +216,7 @@ void delayCyclesProcessBuffer(unsigned int nTimes) {
     while (nTimes--) {
         __delay_cycles(250);           
         if (action & PROCESS_BUFFER) {
-            processBuffer();
+            processBuffer2();
             __enable_interrupt(); 
         }
     }
@@ -297,6 +304,10 @@ void initMCOM() {
   while(IFG2 & UCA0RXIFG);                  // Wait ifg2 flag on rx  (no idea what it does)
   IE2 |= UCA0RXIE;                          // Enable USCI0 RX interrupt
   UCA0TXBUF = 0x00;                         // We do not want to ouput anything on the line
+
+  p = &bfr[0];
+  boundary = &bfr[16]; // waits for MI header by default
+
 
 }
 
@@ -408,13 +419,6 @@ void resetComm_ () {
       //initMCOM();
 }
 
-#define ERR_SUCCESS               0x00
-#define ERR_BUFF_SIZE_INVALID     0x01
-#define ERR_PREAMBLE              0x02
-#define ERR_CMD_NOT_ALLOWED       0x04
-#define ERR_HEAD_CHECKSUM_FAILED  0x08  
-#define ERR_UNEXPECTED_STATE      0x10
-
 void testBufferSize(unsigned char* p,int len,int* err) {
 
     switch(len) {
@@ -428,7 +432,7 @@ void testBufferSize(unsigned char* p,int len,int* err) {
 }
 void testPreamble(unsigned char* p,int len,int* err) {
 
-  if ((*p == MI_PREAMBLE) && (*p+1) == MI_PREAMBLE) { 
+  if ((bfr[0] == MI_PREAMBLE) && (bfr[1] == MI_PREAMBLE)) { 
     return; 
   } 
   *err |= ERR_PREAMBLE;
@@ -437,13 +441,14 @@ void testPreamble(unsigned char* p,int len,int* err) {
 
 void testCmd(unsigned char* p,int len,int* err) {
    
-  unsigned int cmd = *((unsigned int*)p+2);
-  switch (cmd) {
-      case: MI_CMD
-      case: MI_CMD_BUFFER
-      case: MI_ANSWER
+  unsigned short * cmd = (unsigned short*) (bfr+2);
+  switch (*cmd) {
+      case MI_CMD:
+      case MI_CMD_BUFFER:
+      case MI_ANSWER:
         return;
   };
+
   *err |= ERR_CMD_NOT_ALLOWED;
 
 }
@@ -451,45 +456,66 @@ void testCmd(unsigned char* p,int len,int* err) {
 void testHeadChecksum(unsigned char* p,int len,int* err) {
   
   int headLen = 14;
-  int headCheckSum = 0;
+  unsigned int headCheckSum = 0;
   while (headLen--) {
       headCheckSum += *p++;
   }
-  if (((unsigned int *)*p) == headCheckSum) {
+  if (*(unsigned int *)(p) != ~headCheckSum) {
     *err |= ERR_HEAD_CHECKSUM_FAILED;
   }
 
 }
 void testExpectedStates(unsigned char* p,int len,int* err) {
   
-  unsigned int cmd = *((unsigned int*)p+2);
-  unsigned int expectedStates[4] = {0,0,0,0}, e = expectedStates;
+  unsigned int cmd = *((unsigned int*)(&bfr[2]));
+  unsigned int expectedStates[4] = {0,0,0,0};
+  unsigned int *e = expectedStates;
 
   switch (state) {
       case 0:
         *e++ = MI_CMD; break;
       case MI_CMD:
         *e++ = MI_CMD_BUFFER; break;
+      case MI_CMD_BUFFER:
+        *e++ = MI_ANSWER; break;
       case MI_ANSWER:
         *e++ = MI_CMD; break;
   }
 
   e = expectedStates;
   while (*e) {
-      if (*e == cmd) { return; }
+      if (*e == cmd) { state = cmd; return; }
       e++;
   }
 
   *err |= ERR_UNEXPECTED_STATE;
+}
+
+void resetBoundaries() {
+
+  unsigned int nextSize = 16;
+
+   switch (state) {
+        /*case 0:
+          nextSize = 16; break;
+        case MI_ANSWER:
+          nextSize = 16; break;*/
+        case MI_CMD:
+          nextSize = 64; break;
+        case MI_CMD_BUFFER:
+          nextSize = 64; break;
+    }
+    
+    boundary = &(bfr[nextSize]);
+    p = bfr;
 
 }
 
-void resetStatesAndBoundaries() {
-
-  
+void onCommError() {
 }
 
-
+void onProcessedBuffer() {
+}
 
 void processBuffer2 () {
 
@@ -500,29 +526,35 @@ void processBuffer2 () {
     int bfrLen = boundary - p;       // get buffer length
     int i,err = 0;
 
-    onCommStarted();
+    //onCommStarted();
 
     // check if input buffer is sanitized and free from receive errors.
 
-    testBufferSize(p,bfrlen,&err);  // check buffer size is one of the allowed sizes
-    testPreamble(p,bfrlen,&err);    // check preamble is present
-    testCmd(p,bfrlen,&err);         // check cmd is one of the allowed
-    testHeadChecksum(p,bfrlen,&err);  // check head checksum
-    testExpectedStates(p,bfrlen,state,&err); //check states is one of the expected states, switch to new state.
+    testBufferSize(p,bfrLen,&err);      // check buffer size is one of the allowed sizes
+    testPreamble(p,bfrLen,&err);        // check preamble is present
+    testCmd(p,bfrLen,&err);             // check cmd is one of the allowed
+    testHeadChecksum(p,bfrLen,&err);    // check head checksum
+    testExpectedStates(p,bfrLen,&err);  // check states is one of the expected states, switch to new state.
 
     if (err) {
       onCommError(err);
-    }
+      state = 0;
+      resetBoundaries();
 
+      return;
+    }
+   
+    int j;
     switch (state) {
           case MI_CMD: 
-                 zeroMem(p);
-                 break;
+             zeroMem(p);
+             break;
+
           case MI_CMD_BUFFER:
-                  
-            char j = 0xff;
+            j = 0xff;
+            lastrespLen = 0;
             for (i=1;i<=3;i++) {
-              if (bfr[i] == id) {
+              if (bfr[3+i] == id) {
                  execCmd(i); // sets lastresp & lastresplen.
                  j = i;
               }
@@ -545,20 +577,16 @@ void processBuffer2 () {
               // put request checksum at byte 14
               *((unsigned int*)(p+14)) = ~reqChecksum;
             }
+            break;
           case MI_ANSWER:
-            boundary = &bfr[MI_HEADER_SIZE];
             zeroMem(p);
             onCommFinished();
     }
 
-    resetStatesAndBoundaries(&p,&boundary);
+    resetBoundaries();
 
     onProcessedBuffer(); // bufferProcessed Successfully
 }
-
-
-
-
 
 
 void processBuffer() {

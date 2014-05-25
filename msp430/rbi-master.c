@@ -40,6 +40,7 @@
 #define MI_UPBFR     22342
 #define MI_UPBFRAM   21233
 #define MI_AM        3409
+#define MI_CMD_BUFFER 14587
 
 #define CS_APPEND       1
 #define NO_APPEND    0
@@ -111,9 +112,12 @@ void comm_cmd_header (message* q,int qLen) {
 
    // SEND MI_CMD HEADER
    // Rest of the cmd follows
+   zeroMem(d,64);
    d[0] = MI_PREAMBLE;
-   d[1] = 64; 
+   d[1] = MI_PREAMBLE; 
    *(unsigned short *) (&d[2]) = MI_CMD; 
+
+   process_checksum(d,14,CS_APPEND);
 
    int i;
    for(i=0;i<qLen;i++){
@@ -122,9 +126,9 @@ void comm_cmd_header (message* q,int qLen) {
         }
    }
  
-   printBuffer(d,4);
-   bcm2835_spi_transfern (d,4);
-   //printBuffer(d,4);
+   printBuffer(d,16);
+   bcm2835_spi_transfern (d,16);
+   printBuffer(d,16);
 
 }
 
@@ -149,6 +153,9 @@ void comm_cmd_buffer (message * q,int qLen) {
    // SEND CMDs to devices (0x01, 0x02, 0x03)
    // no MISO is expected, so just don't care if we get bits in there.
    d[0] = MI_PREAMBLE; 
+   d[1] = MI_PREAMBLE; 
+   *(unsigned short *) (&d[2]) = MI_CMD_BUFFER; 
+
 /*
    d[1] = 0x01;
    d[2] = 0x02;
@@ -172,11 +179,13 @@ void comm_cmd_buffer (message * q,int qLen) {
            q[i].lastOp = MI_PREAMBLE;
            
            // prepare spi send buffer
-           d[i+1] = q[i].destination;
+           d[i+4] = q[i].destination;
            _memcpy(&d[j*16],&q[i].request,16); 
            q[i].slotSent = j;
         }
    }
+
+   process_checksum(d,14,CS_APPEND);
 
    printBuffer(d,16);
    printBuffer(d+16,16);
@@ -189,6 +198,14 @@ void comm_cmd_buffer (message * q,int qLen) {
 
 
 void comm_cmd_resp_buffer (message * q,int * qLen,message * outQueue,int outQueueLen) {
+
+   zeroMem(d,64);
+   d[0] = MI_PREAMBLE;
+   d[1] = MI_PREAMBLE; 
+   *(unsigned short *) (&d[2]) = MI_ANSWER; 
+
+   process_checksum(d,14,CS_APPEND);
+
 
    // get responses.
    printBuffer(d,16);
@@ -396,20 +413,20 @@ int main(int argc, char **argv)
       usleep(1000);
 
      if (inLen && (outQueueLen < sizeof(outQueue)-4)) {
-       comm_cmd_header(inQueue,inLen); // 4B transfer
+      comm_cmd_header(inQueue,inLen); // 4B transfer
       debugQueues(inQueue,inLen);
 
-       usleep(100);
+      usleep(100);
 
-       comm_cmd_buffer (inQueue,inLen); // 64B transfer
+      comm_cmd_buffer(inQueue,inLen); // 64B transfer
       debugQueues(inQueue,inLen);
 
-       usleep(500);
+      usleep(500);
 
-       comm_cmd_resp_buffer (inQueue,&inLen,outQueue,outQueueLen); // 64B transfer
+      comm_cmd_resp_buffer(inQueue,&inLen,outQueue,outQueueLen); // 64B transfer
       debugQueues(inQueue,inLen);
 
-       usleep (500);
+      usleep(500);
 
       printf("bfr1 ptr inQueue: 0x%x  len:%d\n",inQueue,inLen);
       process_queue_post_transfer(&(inQueues[0][0]),&inQueue,&inLen); // remove all transferred from queue. 
@@ -417,7 +434,9 @@ int main(int argc, char **argv)
       printf("bfr2 ptr inQueue: 0x%x len:%d\n",inQueue,inLen);
 
       debugQueues(inQueue,inLen);
-    //  break;
+
+
+      
    }
     
 
