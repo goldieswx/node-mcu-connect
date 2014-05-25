@@ -47,6 +47,7 @@ unsigned int silentAction;
 #define PROCESS_BUFFER 0X01
 #define ADC_CHECK      0x02
 #define SIGNAL_MASTER  0X04
+#define RESET_COMM     0x08
 
 #define MOSI  BIT7 
 #define MISO  BIT6
@@ -71,7 +72,7 @@ void processBuffer();
 void initMCOM();
 void initADCE();
 void initTimers();
-
+void resetComm_();
 
 int  main(void) {
 
@@ -124,6 +125,10 @@ int  main(void) {
         signalMaster();
         continue;
     }
+    if (action & RESET_COMM) {
+        resetComm_();
+        continue;
+    }
   };      
  
   return 0;
@@ -135,6 +140,9 @@ interrupt(TIMER0_A1_VECTOR) ta1_isr(void) {
 
   TA0CTL = TACLR;  // stop & clear timer
   TA0CCTL1 &= 0;   // also disable timer interrupt & clear flag
+
+  action |= RESET_COMM;
+  __bic_SR_register_on_exit(LPM3_bits /*+ GIE*/); // exit LPM     
 
   return;
 } 
@@ -230,7 +238,6 @@ void checkADC() {
     *p = transfer(0);               // Get Packet length from ADCE
     
     int len = *p++ & 0b00001111;
-    int len2 = len;
 
     delayCyclesProcessBuffer(8);
 
@@ -262,22 +269,28 @@ void initMCOM() {
   // UART A (main comm chanell with MASTER)
   //     (bit1 = MISO, bit2 = MOSI, BIT4 = SCLK)
  
- // P1DIR |= BIT1;
-  P1SEL |=  BIT1 | BIT2 | BIT4;
-  P1SEL2 |=  BIT1 | BIT2 | BIT4;
+  P1DIR |= BIT1;
+  P1DIR &= ~(BIT2 | BIT4);
+  P1SEL &=  ~(BIT1 | BIT2 | BIT4);
+  P1SEL2 &=  ~(BIT1 | BIT2 | BIT4);
+
  
    unsigned long int cycles;
   // find 20 (100us) low cycles (so there's good chance transmission is finished).
   while (1) {
     cycles = 0;
     while (P1IN & BIT4); // wait for low level clock
-    while ((!(P1IN & BIT4)) && (cycles < 20)) { // wait for 160 cycles of low level clock
+    while ((!(P1IN & BIT4)) && (cycles < 200)) { // wait for 160 cycles of low level clock
        cycles++;
     }
     if (cycles >= 2) break;
   } 
+
+  P1SEL |=  BIT1 | BIT2 | BIT4;
+  P1SEL2 |=  BIT1 | BIT2 | BIT4;
     
   UCA0CTL1 = UCSWRST;                       // **Put state machine in reset**
+  __delay_cycles(10);
   UCA0CTL0 |= UCCKPH + UCMSB + UCSYNC;     // 3-pin, 8-bit SPI slave
   UCA0CTL1 &= ~UCSWRST;                     // **Initialize USCI state machine**
 
@@ -359,6 +372,195 @@ void onMasterSignalled () {
 
 }
 
+/*
+ * Start a watchdog timer
+ */
+void onCommStarted() {
+
+     TA0CTL = TASSEL_1 | MC_1;             // Clock source ACLK
+     TA0CCTL1 = CCIE ;                      // Timer A interrupt enable
+
+}
+
+/*
+ * Clear watchdog timer
+ */
+void onCommFinished() {
+
+  TA0CTL = TACLR;  // stop & clear timer
+  TA0CCTL1 &= 0;   // also disable timer interrupt & clear flag
+
+}
+
+/*
+ *  ResetComm
+ */
+void resetComm_ () {
+
+      __disable_interrupt(); 
+      
+      P2OUT &= ~(BIT6+BIT7);
+      action &= ~RESET_COMM;
+      state = 0;
+      p = bfr;
+      boundary = &bfr[MI_HEADER_SIZE];
+
+      //initMCOM();
+}
+
+#define ERR_SUCCESS               0x00
+#define ERR_BUFF_SIZE_INVALID     0x01
+#define ERR_PREAMBLE              0x02
+#define ERR_CMD_NOT_ALLOWED       0x04
+#define ERR_HEAD_CHECKSUM_FAILED  0x08  
+#define ERR_UNEXPECTED_STATE      0x10
+
+void testBufferSize(unsigned char* p,int len,int* err) {
+
+    switch(len) {
+      case 16:
+      case 64:
+          break;
+      default:
+        *err |= ERR_BUFF_SIZE_INVALID;
+    };
+
+}
+void testPreamble(unsigned char* p,int len,int* err) {
+
+  if ((*p == MI_PREAMBLE) && (*p+1) == MI_PREAMBLE) { 
+    return; 
+  } 
+  *err |= ERR_PREAMBLE;
+
+}
+
+void testCmd(unsigned char* p,int len,int* err) {
+   
+  unsigned int cmd = *((unsigned int*)p+2);
+  switch (cmd) {
+      case: MI_CMD
+      case: MI_CMD_BUFFER
+      case: MI_ANSWER
+        return;
+  };
+  *err |= ERR_CMD_NOT_ALLOWED;
+
+}
+
+void testHeadChecksum(unsigned char* p,int len,int* err) {
+  
+  int headLen = 14;
+  int headCheckSum = 0;
+  while (headLen--) {
+      headCheckSum += *p++;
+  }
+  if (((unsigned int *)*p) == headCheckSum) {
+    *err |= ERR_HEAD_CHECKSUM_FAILED;
+  }
+
+}
+void testExpectedStates(unsigned char* p,int len,int* err) {
+  
+  unsigned int cmd = *((unsigned int*)p+2);
+  unsigned int expectedStates[4] = {0,0,0,0}, e = expectedStates;
+
+  switch (state) {
+      case 0:
+        *e++ = MI_CMD; break;
+      case MI_CMD:
+        *e++ = MI_CMD_BUFFER; break;
+      case MI_ANSWER:
+        *e++ = MI_CMD; break;
+  }
+
+  e = expectedStates;
+  while (*e) {
+      if (*e == cmd) { return; }
+      e++;
+  }
+
+  *err |= ERR_UNEXPECTED_STATE;
+
+}
+
+void resetStatesAndBoundaries() {
+
+  
+}
+
+
+
+void processBuffer2 () {
+
+    __disable_interrupt();      
+
+    action &= ~PROCESS_BUFFER;
+    p = bfr;                         // reset p to buffer start
+    int bfrLen = boundary - p;       // get buffer length
+    int i,err = 0;
+
+    onCommStarted();
+
+    // check if input buffer is sanitized and free from receive errors.
+
+    testBufferSize(p,bfrlen,&err);  // check buffer size is one of the allowed sizes
+    testPreamble(p,bfrlen,&err);    // check preamble is present
+    testCmd(p,bfrlen,&err);         // check cmd is one of the allowed
+    testHeadChecksum(p,bfrlen,&err);  // check head checksum
+    testExpectedStates(p,bfrlen,state,&err); //check states is one of the expected states, switch to new state.
+
+    if (err) {
+      onCommError(err);
+    }
+
+    switch (state) {
+          case MI_CMD: 
+                 zeroMem(p);
+                 break;
+          case MI_CMD_BUFFER:
+                  
+            char j = 0xff;
+            for (i=1;i<=3;i++) {
+              if (bfr[i] == id) {
+                 execCmd(i); // sets lastresp & lastresplen.
+                 j = i;
+              }
+            }   
+            if (j<=3) {
+              unsigned int respChecksum = 0, reqChecksum = 0;
+              p = &bfr[j*16];
+              for (i=0;i<16;i++) {
+                 if (i<14) { /* do not count checksum */  reqChecksum += *p; }
+                 if (i<lastrespLen) {
+                   *p = lastresp[i];
+                 } else {
+                   *p = 0x00;
+                 }
+                 respChecksum += *p++;
+              }
+              // put response checksum at byte 12
+              p = &bfr[(j)*16];
+              *((unsigned int*)(p+12)) = ~respChecksum;
+              // put request checksum at byte 14
+              *((unsigned int*)(p+14)) = ~reqChecksum;
+            }
+          case MI_ANSWER:
+            boundary = &bfr[MI_HEADER_SIZE];
+            zeroMem(p);
+            onCommFinished();
+    }
+
+    resetStatesAndBoundaries(&p,&boundary);
+
+    onProcessedBuffer(); // bufferProcessed Successfully
+}
+
+
+
+
+
+
 void processBuffer() {
 
     __disable_interrupt();      
@@ -370,6 +572,7 @@ void processBuffer() {
     int nextLength;
     int i;
 
+    onCommStarted();
 
     // check MI header 
     if (state == 0) {
@@ -377,37 +580,32 @@ void processBuffer() {
           int currCmd = *((int*)(&bfr[2]));
 
           if (bfr[0] == MI_PREAMBLE) {
-             
+           
               if (currCmd == MI_CMD) {
                  nextLength = bfr[1];
                  zeroMem(p);
                  boundary = bfr + nextLength; 
                  state = currCmd;
-                 bfr[3] = 0x80;
                  // boundary set (to presumably 64 bytes)
               }
-
               if (currCmd == SNCC_CMD) {
                  zeroMem(p);
                  //boundary = boundary unchanged 
                  state = currCmd;
-                 bfr[3] = 0x81;
-
-                 if (P2IFG & CS_NOTIFY_MASTER) {
+                  if (P2IFG & CS_NOTIFY_MASTER) {
                      onMasterSignalled();
                  }
                  if (silentAction & SIGNAL_MASTER) {
                      silentAction &= ~SIGNAL_MASTER;
                      action |= SIGNAL_MASTER;
-                     bfr[3] = 0x82;
                  }
               }
           } else {
              // manage error
              zeroMem(p);
-             bfr[3] = 0x83;
-
+ 
              boundary = &(bfr[MI_HEADER_SIZE]);
+             onCommFinished();
              state = 0;
           }
       }
@@ -464,7 +662,6 @@ void processBuffer() {
 
      state = MI_ANSWER;
      zeroMem(p);
-     bfr[3] = 0x86;
 
      return;
     }
@@ -476,8 +673,7 @@ void processBuffer() {
        p = bfr;
        boundary = &bfr[MI_HEADER_SIZE];
        zeroMem(p);
-       bfr[3] = 0x87;
-
+       onCommFinished();
        return;
     }
 
@@ -491,7 +687,6 @@ void processBuffer() {
                  zeroMem(p);
                  notifyCmd();           
                  state = currCmd;
-                 bfr[3] = 0x88;
 
               }
           } else {
@@ -499,7 +694,6 @@ void processBuffer() {
              zeroMem(p);
              boundary = &(bfr[MI_HEADER_SIZE]);
              state = SNCC_CMD;
-             bfr[3] = 0x89;
 
           }
       }
@@ -516,8 +710,6 @@ void processBuffer() {
                  if (id == bfr[i]) {
                     storeResponse (i);
                     boundary = &(bfr[64]);
-                    bfr[3] = 0x8A;
-
                  }
              }
              state = MI_UPBFR;
@@ -526,7 +718,6 @@ void processBuffer() {
              zeroMem(p);
              boundary = &(bfr[MI_HEADER_SIZE]);
              state = SNCC_CMD;
-             bfr[3] = 0x8B;
 
           }
       }
@@ -544,8 +735,7 @@ void processBuffer() {
                  zeroMem(p);
                  state = 0;
                  boundary = &(bfr[MI_HEADER_SIZE]);
-                 bfr[3] = 0x8C;
-
+                 onCommFinished();
 
               }
           } else {
@@ -553,14 +743,12 @@ void processBuffer() {
              zeroMem(p);
              boundary = &(bfr[MI_HEADER_SIZE]);
              state = SNCC_CMD;
-             bfr[3] = 0x8D;
 
           }
       }
       return;
     }
 
-   bfr[3] = 0x8E;
     boundary = &(bfr[MI_HEADER_SIZE]);
     return;
 
@@ -576,9 +764,12 @@ void initTimers() {
   // Timer A0
     
   TA0R = 0;
-  TA0CCR0 = 0;// 32767;                  // Count to this, then interrupt;  0 to stop counting
-  TA0CTL = TASSEL_1 | MC_1;             // Clock source ACLK
-  TA0CCTL1 = CCIE ;                      // Timer A interrupt enable
+  TA0CCR0 = 10000;                  // Count to this, then interrupt;  0 to stop counting
+  //TA0CTL = TASSEL_1 | MC_1;             // Clock source ACLK
+  //TA0CCTL1 = CCIE ;                      // Timer A interrupt enable
+
+  TA0CTL = TACLR;  // stop & clear timer
+  TA0CCTL1 &= 0;   // also disable timer interrupt & clear flag
 
 }
 

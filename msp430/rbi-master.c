@@ -369,11 +369,12 @@ int main(int argc, char **argv)
 
    /////
     
-   int flipFlop = BIT6;
+   int flipFlop = BIT7;
   
    while (1) 
    {
 
+      if (!inLen) {
       inLen++;
       zeroMem(&inQueue[0],sizeof(message));
       inQueue[0].request[0] = ~(BIT6+BIT7);
@@ -391,6 +392,7 @@ int main(int argc, char **argv)
       inQueue[0].lastOp = 0;
       inQueue[0].transferError = 0;
       inQueue[0].destination = 0x02;
+    }
       usleep(1000);
 
      if (inLen && (outQueueLen < sizeof(outQueue)-4)) {
