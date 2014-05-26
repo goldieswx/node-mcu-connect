@@ -17,56 +17,75 @@
 */
 
 
-Master POV
+After much tinkering, mush simplified & flexible & lower latency & more efficient (25%overhead) protocol
 
 
-Active Mode.
-
-  MI (4B)  P,L,C,C (switches of SNCC) (0.125ms)
-	
-    dT (short) (0.5ms (low 0.1ms))  (slave prepares to receive bfr)
-
-  MIBFR (64B typ) ID,ID,ID,Bfr,Bfr,Bfr,CS. (2ms)
-
-    dT (long)  (1ms (low 0.25ms))  (slave execute cmd and store resp in bfr)
+[n]
  
-  MIRESP (64B == MIBFRsZ) 0,0,0,RESP(CS),RESP(CS),RESP(CS) (2ms)
+32b   MOSI  [PRE PRE CMD CMD] [DEST DEST | x           x]           [data 20b]  [ x  x CHK CHK] 
+slave process bfr b, receives bfr a sends bfr a
+32b   MISO  [PRE PRE CMD CMD] [FROM FROM | SIGNALMASK* SIGNALMASK*] [data 20b]  [ x  x CHKdata CHKdata]
 
-       
-  Either
-  	- MI (4B)  P,L,C,C
-        - MIRESEND (4B) P,0,C,C (cmd = mi_resend)
-        - SNCC (4B) P,0,C,C (cmd=SNCC)
-          
+continuous
 
-SNCC Mode (Slave Notification Control Code) // A slave wants to send data to master.
+[n+1]
 
-  -> SNCC (4B) P,0,C,C (cmd=SNCC) (0.125ms)
+32b   MOSI  [PRE PRE CMD CMD] [DEST DEST | x           x]           [data 20b]  [ x  x CHK CHK]
+slave process bfr a, receives bfr b sends bfr b
+32b   MISO  [PRE PRE CMD CMD] [FROM FROM | SIGNALMASK* SIGNALMASK*] [data 20b]  [ x  x CHKdata CHKdata]
 
-  -> Master goes to sleep (check MISO every < 1ms / poll or rbi interrupt)
-
-    Either  
-     -> Slave brings MISO UP continuously (1ms+)
-     -> Master wants go get out of SNCC mode
+continuous
 
 
-  -> MICHECK (P0CC cmd = mi_check) (0.125ms)
+32b   MOSI  [PRE PRE CMD CMD] [DEST DEST | ACK MASK    ACK MASK]           [data 20b]  [ x  x CHK CHK]
+slave process bfr a, receives bfr b sends bfr b
+32b   MISO  [PRE PRE CMD CMD] [FROM FROM | SIGNALMASK* SIGNALMASK*] [data 20b]  [ x  x CHKdata CHKdata]
 
-  -> dT (short) (0.5ms)
 
-  -> MIUPID (4B) 0000(IN MOSI) vs IDMASK (OUT MOSI). 
+Slave implementation
+
+int(){
+    *p++ = REG;
+    cpuoff    
+}
+
+main()
   
-  -> dT (short) (0.5ms)
-
-    Either
-      -> MIUPBFR (22,44,or 64B) 0,0,0,RESP(CS),RESP(CS),RESP(CS) (2ms) (gets response 	
-
-and leave SNCC)
-      -> MIUPBFRAM (same as MIUPBFR) but sets active mode just after. 
-        After 10ms of master inactivity in Active mode, SNCC is implied.
-      -> AM (P0CC cmd = mi_AM) just sets active mode.
+ EI()
+	 while () {
+ 		CPUOFF
+	 }	
+	 (PB() or OTH ACT())
+ DI()
+	
 
 
-/////////  
 
-UPON SLAVE RESET, wait until a implicit SNCC happens.  
+MASTER
+{ unsigned word preamble,
+  unsigned word cmd,
+  unsigned word destination,
+  unsigned word cmdId,
+  unsigned char data[20],
+  unsigned word reserved,
+  unsigned word chkSum
+}
+
+SLAVE
+{ unsigned word preamble,
+  unsigned word cmdId,
+  unsigned word from,
+  unsigned word signalMask,
+  unsigned char data[20],
+  unsigned word reserved,
+  unsigned word chkSum
+}
+
+CMD avail.
+
+	DATA  MISO sends data to x, receives data from y and reads signalmask
+        SNCC  (also used as SYNC), sends data to none, receives data from none, reads signalmask 
+	   
+	if mcu is busy with a PB, then it just ignore the incoming buffer, will send 0s and master will retry
+	
+	   
