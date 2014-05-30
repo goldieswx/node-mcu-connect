@@ -60,4 +60,82 @@ SLAVE
 }
 
 
-	   
+PROTO
+
+
+inBFR;
+outBFR;
+busyFlag;
+nodeId;
+signal;
+
+main(){
+
+	busyflag = 0;
+	inBfr = 0;
+	outBfr = 0;
+	nodeid = 0x02;
+	signal = 0;
+}
+
+
+while (1) {
+
+	_ei()
+		sleep+IE
+	_di()
+
+	if (action = pb) {
+	  PB();
+	  cont;
+	}
+}
+
+
+
+PB() {
+    _ei();
+
+    _di();
+	action &= ~PB
+    _ei();
+}
+
+
+isbusy(){
+
+	return action && PB;
+}
+
+sendMsgToMaster() {
+	fillin(outBfr)
+	signal = 1
+}
+
+signalmaster(){
+	TX = 0xac;
+}
+
+
+INT() {
+
+ if(sync) {
+	
+	*inBfr++ = RX;	
+
+	BFR-END-Boundary =>     If (we had started checksumming) and CS matches, Action = PB;
+				If we have something to signal, signalmaster.
+	HEAD-END-Boundary =>    CHKHEAD(); // check head and premble
+			  =>    IF Signal => Add signal in bfr.
+	DEST-END-Boundary =>
+			  =>    If sncc found and if targets our id => send out data 20b
+			  =>    If !busy, If cmd  found and if it targets our id => start checksummming data.
+	DATA-END-Boundary =>    if we had started checksumming send out checksum data.
+
+
+ } else {
+   sync()
+ }
+
+
+}
