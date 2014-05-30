@@ -24,7 +24,7 @@
 // global declarations
 
 int action;
-#define currentNodeId             8  // id of this node
+#define currentNodeId             2  // id of this node
 
 #define PROCESS_BUFFER 0x01
 
@@ -41,7 +41,7 @@ int action;
 #define MISO  BIT6
 #define SCK   BIT5
 
-typedef struct McomPacket {
+typedef struct McomInPacket {
   unsigned word preamble,
   unsigned word cmd,
   unsigned char destinationCmd,
@@ -51,13 +51,25 @@ typedef struct McomPacket {
   unsigned char data[20],
   unsigned word snccCheckSum,
   unsigned word chkSum
-} _McomPacket;
+} _McomInPacket;
+
+typedef struct McomOutPacket {
+  unsigned word preamble,
+  unsigned word cmd,
+  unsigned char signalMask2,
+  unsigned char signalMask1,
+  unsigned char __reserved_1,
+  unsigned char __reserved_2,
+  unsigned char data[20],
+  unsigned word snccCheckSum,
+  unsigned word chkSum
+} _McomOutPacket;
 
 
-#define packetLen (sizeof(mcomPacket))
+#define packetLen (sizeof(McomInPacket))
 
-McomPacket 	 inPacket;
-McomPacket   outPacket;
+McomInPacket 	 inPacket;
+McomOutPacket   outPacket;
 
 unsigned char * pInPacket;
 unsigned char * pOutPacket;
@@ -235,24 +247,22 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
            break;
          case pckBndDataEnd:
              // exchange chksums
-             preserveInBuffer = 0;
              pOutPacket = &(outPacket.chkSum);
              pOutPacket--;
 
              if ((inPacket.destinationSncc == currentNodeId)  // it's our turn (sncc)
-                 && (outPacket.signalMask1))                 //  we signalled master
-             {
+                 && (outPacket.signalMask1)) {               //  we signalled master
                 outPacket.snccCheckSum = outBufferCheckSum;
              } else {
                 outPacket.snccCheckSum = 0;
              } 
-
-             if (inPacket.destinationCmd == currentNodeId) // also send cmd chk (lowest Byte) if needed
-             { 
+             if ((!preserveInBuffer) && (inPacket.destinationCmd == currentNodeId)) 
+             {   // also send cmd chk if it's its turn and if we are not busy 
                 outPacket.chkSum = checkSum;
              } else {
                 outPacket.chkSum = 0;
              }
+             preserveInBuffer = 0;
 	    }
       checkSum += (*pInPacket);
       if (preserveInBuffer) { (*pInPacket) = savepInPacket; }
