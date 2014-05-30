@@ -233,22 +233,22 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 	    (*pckCurTransferCursor++) = UCA0RXBUF;
 	    UCA0TXBUF = (*pckCurTransferCursor);
 
-	    if (pckCurTransferCursor == pckBndTransferCursor) {
-	      action |= PROCESS_BUFFER;
-	      __bic_SR_register_on_exit(LPM3_bits); // exit LPM, keep global interrupts state      
-	    } else
-	    if (pckCurTransferCursor == pckBndHeaderEnd) {
+	    switch (pckCurTransferCursor)
+	      case pckBndTransferCursor:
+		      action |= PROCESS_BUFFER;
+		      __bic_SR_register_on_exit(LPM3_bits); // exit LPM, keep global interrupts state      
+		      break;
+	      case pckBndHeaderEnd:
 	    	//check is SNCC CMD
 	    	pckCurTransferCursor  = ptrToData;
 	    	pckBndTransferCursor  = ptrToData;
-	    } else
-	    if (pckCurTransferCursor == Signal) {
+	    	break;
+              case _signal:
 	    	apply nextSignal to bfr; clear nextsignal
-	    } else
-	    
-	    if (pckCurTransferCursor == Ack) {
+	    	break;
+	      case _ack:
 	    	apply ack to bfr clear ack
-	    
+	    	break;
 	    }
 	} else {
 		UCA0TXBUF = 0x00;
