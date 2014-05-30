@@ -32,8 +32,8 @@ Node Busy
 32b [S-x]  MISO  0   0   0   0     0    0             0             0       0            0   0       0   0
 
 N->M (old sncc mode style, slave cmd can be micmd or sncc)
-32b [M]    MOSI  [PRE  PRE CMD CMD] [DEST_CMD DEST_SNCC | x             x]     [data 20b]  [ x  x     CHK CHK] 
-32b [S-x]  MISO  [PRE* PRE* 0  0   [node id  mask   node id in mask]     0             0   0       0   0
+32b [M]    MOSI  [PRE  PRE CMD CMD] [DEST_CMD DEST_SNCC | x             x]     [data 20b]  [ SNCC_CHK  SNCC_CHK     CHK CHK] 
+32b [S-x]  MISO  [PRE* PRE* 0  0   [node id  mask   node id in mask]     0             0   0       0          0     SNCC_CHK]
 
 
 

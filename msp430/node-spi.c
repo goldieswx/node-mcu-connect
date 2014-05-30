@@ -44,10 +44,12 @@ int action;
 typedef struct McomPacket {
   unsigned word preamble,
   unsigned word cmd,
-  unsigned word destinationCmd,
-  unsigned word destinationSncc,
+  unsigned char destinationCmd,
+  unsigned char destinationSncc,
+  unsigned char __reserved_1,
+  unsigned char __reserved_2,
   unsigned char data[20],
-  unsigned word reserved,
+  unsigned word snccCheckSum,
   unsigned word chkSum
 } _McomPacket;
 
@@ -57,9 +59,21 @@ typedef struct McomPacket {
 McomPacket 	 inPacket;
 McomPacket   outPacket;
 
-int          signalMaster; 
-////////// 
+unsigned char * pInPacket;
+unsigned char * pOutPacket;
 
+unsigned char  outBuffer[packetLen];
+int            outBufferCheckSum;
+int            signalMaster; 
+
+
+unsigned char * pckBndPacketEnd;
+unsigned char * pckBndHeaderEnd;
+unsigned char * pckBndDestEnd;
+unsigned char * pckBndDataEnd;
+
+int            preserveInBuffer; // preserve input buffer (data in InPacket) when
+                                // processing buffer and while communicating (after PB acion was set).
 
 void main() {
 
@@ -83,14 +97,13 @@ void main() {
 /**
  * MCOM Related
  */
-
-
-
 void mcomProcessBuffer() {
 
      __disable_interrupt();
     
-       action &= ~PROCESS_BUFFER;
+       action &= ~PROCESS_BUFFER; // when we release the action, 
+       // contents of inBuffer must be ready to reuse
+       // (and will be destroyed)
      __enable_interrupt();
      return;
 
@@ -104,7 +117,17 @@ void initMCOM() {
   mcomPacketSync = 0;
   zeroMem(&inPacket,packetLen);
   zeroMem(&outPacket,packetLen);
+  zeroMem(outBuffer,packetLen)
   signalMaster = 0;
+
+  pInPacket = (unsigned char *)&inPacket;
+  pOutPacket = (unsigned char*)&outPacket;
+
+  pckBndPacketEnd = inPacket;
+  pckBndPacketEnd += packetLen;
+  pckBndHeaderEnd = &(inPacket.destinationCmd);
+  pckBndDestEnd   = &(inPacket.__reserved_2); // sent 1B before end, txbuffer is always 1b late.
+  pckBndDataEnd   = &(inPacket.snccCheckSum);
 
   // Hardware related stuff
  
@@ -166,55 +189,92 @@ void initGlobal() {
 // INTERRUPTS
 interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
+  unsigned char savepInPacket = (*pInPacket); 
   (*pInPacket) = UCA0RXBUF;
  
 	if (mcomSynced) {
       UCA0TXBUF = (*pOutPacket++);
 
-	    switch (pInPacket++) {
+	    switch (pInPacket) {
 	      case pckBndPacketEnd:
-		      action |= PROCESS_BUFFER;
-		      __bic_SR_register_on_exit(LPM3_bits); // exit LPM, keep global interrupts state      
-		      break;
+          if (inPacket.destinationSncc == currentNodeId) {  // there was a sncc transfer
+              if (inPacket.reserved == outBufferCheckSum) { // successful
+                  outPacket.signalMask1 = 0: // clear signal mask meaning master received the sncc buffer.
+              }
+          }
+          pInPacket = &inPacket;
+          pOutPacket = &outPacket;
+		      if (inPacket.destinationCmd == currentNodeId) { // there was a mi cmd
+            if (inPacket.chkSum == outPacket.chkSum) {
+               action |= PROCESS_BUFFER;
+                __bic_SR_register_on_exit(LPM3_bits); // exit LPM, keep global interrupts state      
+            }
+          }
+          break;
 	      case pckBndHeaderEnd:
-            if ((*(long *)pInPacket) == MI_RESCUE) {
-               outPacket.signalMask1 = (signalMaster >> currentNodeId);
+            if ((*(long *)&inPacket) == MI_RESCUE) {
+               outPacket.signalMask1 |= (signalMaster >> currentNodeId);
+               signalMaster = 0;
             } else {
                 mcomSynced--;
+                preserveInBuffer = 0;
             }
           break;
         case pckBndDestEnd:
-           if (inPacket.destinationSncc == currentNodeId) {
+           if (inPacket.destinationSncc == currentNodeId) && (outPacket.signalMask1) {
+               // if master choose us as sncc and if we signalled master
               pOutPacket = outBuffer; // outBuffer contains sncc data payload
            }
-           if (!(action & PROCESS_BUFFER)) { // we are not busy
-              if (inPacket.destinationCmd == currentNodeId) { // we are concerned
-                checkSum = 0; // start checksumming
-              }
+           checkSum = 0; // start checksumming
+           if (action & PROCESS_BUFFER) {  // we are busy, preserve the input buffer, we
+                                           // are processing it
+              *pInPacket = 0; // normally this is a reserved byte
+                              // force to 0 just so checksum will be correct in any case
+              preserveInBuffer = 1;
            }
            break;
          case pckBndDataEnd:
-             pOutPacket = &(outPacket.reserved);
-             outPacket.chkSum = checkSum;
+             // exchange chksums
+             preserveInBuffer = 0;
+             pOutPacket = &(outPacket.chkSum);
+             pOutPacket--;
+
+             if ((inPacket.destinationSncc == currentNodeId)  // it's our turn (sncc)
+                 && (outPacket.signalMask1))                 //  we signalled master
+             {
+                outPacket.snccCheckSum = outBufferCheckSum;
+             } else {
+                outPacket.snccCheckSum = 0;
+             } 
+
+             if (inPacket.destinationCmd == currentNodeId) // also send cmd chk (lowest Byte) if needed
+             { 
+                outPacket.chkSum = checkSum;
+             } else {
+                outPacket.chkSum = 0;
+             }
 	    }
-      checkSum += UCA0RXBUF;
+      checkSum += (*pInPacket);
+      if (preserveInBuffer) { (*pInPacket) = savepInPacket; }
+      pInPacket++;
 
 	} else {
 		UCA0TXBUF = 0x00;
 		// scan stream and try to find a preamble start sequence
 		// (Oxac Oxac KNOWN CMD)
 		// we are in the intr and have very few cycles to intervene 
-        unsigned char* rescuePtr = *pInPacket;
-        *rescuePtr = *rescuePtr++;
-        *rescuePtr = *rescuePtr++;
-        *rescuePtr = *rescuePtr++;
-        *rescuePtr = UCA0RXBUF;
+        pInPacket = &InPacket;
+        unsigned char* rescuePtrSrc = pInPacket;
+        rescuePtrSrc++;
+
+        *pInPacket++ = *rescuePtrSrc++;
+        *pInPacket++ = *rescuePtrSrc++;
+        *pInPacket++ = *rescuePtrSrc;
+        *pInPacket++ = UCA0RXBUF;
       
-      	if ((*(long *)pckRescue) == MI_RESCUE) {
+      	if ((*(long *)&InPacket) == MI_RESCUE) {
         	mcomSynced++;
-        	pckCurTransferCursor = (*++rescuePtr);
         }
 	}
-
-    return;
+  return;
 }
