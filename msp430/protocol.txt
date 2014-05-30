@@ -22,9 +22,9 @@ After much tinkering, mush simplified & flexible & lower latency & more efficien
 
 [n]
  
-32b [M]   MOSI  [PRE PRE CMD CMD] [DEST DEST | x           x]           [data 20b]  [ x  x CHK CHK] 
+32b [M]   MOSI  [PRE PRE CMD CMD] [DEST CMDID(0-15) | x             x]     [data 20b]  [ x  x CHK CHK] 
 slave process bfr b, receives bfr a sends bfr a
-32b [S-x]  MISO  [PRE PRE CMD CMD] [FROM FROM | SIGNALMASK* SIGNALMASK*] [data 20b]  [ x  x CHKdata CHKdata]
+32b [S-x]  MISO  [PRE PRE CMD CMD] [FROM CMDID | SIGNAL-MASK* SIGNAL-MASK*] [data 20b]  [ ACK-MASK  ACK-MASK CHKdata CHKdata]
 
 continuous
 

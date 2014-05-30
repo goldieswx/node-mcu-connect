@@ -209,6 +209,7 @@ void initGlobal() {
 
 }
 
+ASSIGN max 16 cmds to  a specific device 
 
 // INTERRUPTS
 interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
