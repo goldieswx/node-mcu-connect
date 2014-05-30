@@ -27,47 +27,37 @@ int action;
 #define currentNodeId             8  // id of this node
 
 #define PROCESS_BUFFER 0x01
-#define TREAT_PACKET   0x02
 
 #define MI_CMD      0x220a //    8714
-#define SNCC_CMD    0x30a5  // Mi issues an explicit SNCC 
+
 
 // MCOM related declarations
 
 #define MI_PREAMBLE  0xac // 0b10101100
 
-#define MI_RESCUE1   0xacac220a
-#define MI_RESCUE2   0xacac30a5
+#define MI_RESCUE   0xacac220a
 
 #define MOSI  BIT7 
 #define MISO  BIT6
 #define SCK   BIT5
 
-typedef struct McomPacket
-{ unsigned word preamble,
-  unsigned word cmdId,
-  unsigned word from,
-  unsigned word mask,
+typedef struct McomPacket {
+  unsigned word preamble,
+  unsigned word cmd,
+  unsigned word destinationCmd,
+  unsigned word destinationSncc,
   unsigned char data[20],
   unsigned word reserved,
-  unsigned word chkSum,
-  unsigned word _metaActionProcessed
+  unsigned word chkSum
 } _McomPacket;
 
 
 #define packetLen (sizeof(mcomPacket))
 
-McomPacket 	   pcks[2];
+McomPacket 	 inPacket;
+McomPacket   outPacket;
 
-
-McomPacket *     pckCurrentTransferred;  // current packet being tranferred
-char *     pckCurTransferCursor;    // cursor (*p++ like) of current packet being trsf.
-char *     pckBndTransferCursor;    // boundary of current packet being trsf. (pointer to last current byte + 1) 
-McomPacket *     pckCurrentProcess;      // current packet being processed
-
-unsigned char mcomProcessingBuffer = 0;
-unsigned int  transferErrors= 0;
-
+int          signalMaster; 
 ////////// 
 
 
@@ -86,9 +76,6 @@ void main() {
 	        mcomProcessBuffer(); 
 	        continue;
 	    }
-	    if (action & TREAT_PACKET) {
-	    	mcomTreatPacket();
-	    }
 	}
 
 }
@@ -97,59 +84,14 @@ void main() {
  * MCOM Related
  */
 
-void mcomTreatPacket() {
-
-	packet->_metaActionProcessed = 0;
-
-}
 
 
 void mcomProcessBuffer() {
 
      __disable_interrupt();
-     // pckCurTransferCursor has just been filled.
-     // switching buffers.
-     McomPacket * packet = pckCurrentTransferred;
-     pckCurrentTransferred = pckCurrentProcess;
-     pckCurrentProcess = packet;
     
-     // boundary of packet (physical transfer) is at start of metadata
-     pckBndTransferCursor = (char*) &(pckCurrentTransferred._metaActionProcessed);
-     
-     action &= ~PROCESS_BUFFER;
-     mcomProcessingBuffer ++;
+       action &= ~PROCESS_BUFFER;
      __enable_interrupt();
-
-     // check packet validity.
-
-     if ((packet->preamble == 0xacac) &&
-    	 ((packet->cmdId == MI_CMD) || (packet->cmdId == SNCC_CMD))) {
-
-     		// verify data checksum
-     		int chkSum = 0, dataLen = sizeOf(McomPacket.data);
-     		while (dataLen) {
-     			chkSum += packet->data[dataLen];
-     		}
-
-     		if (packet->chkSum != chkSum) {
-			packet->_metaErr |= ERR_CHECKSUM;
-     			// error wrong packet
-     		} else {
-	            // packet is for us.
-	     		if (packet->from == currentNodeId) {
-	                 action |= TREAT_PACKET; 
-	                 packet->_metaActionProcessed = 0;
-	     		}
-	     	}
-     } else {
-     	if (transferErrors++ > 2) {
-     		mcomSynced = 0;
-     	}
-	 // error wrong packet sets rescue mode
-        
-     }
-
-     mcomProcessingBuffer--;
      return;
 
 }
@@ -159,13 +101,10 @@ void initMCOM() {
 
   // Software related stuff
 
-  pckCurrentTransferred = pck;
-  pckCurrentProcess = pck+1;
-  pckCurTransferCursor = pckCurrentTransferred;
-  // boundary of packet (physical transfer) is at start of metadata
-  pckBndTransferCursor = (char*) &(pckCurrentTransferred._metaActionProcessed);
-  
-  mcomSynced = 0;
+  mcomPacketSync = 0;
+  zeroMem(&inPacket,packetLen);
+  zeroMem(&outPacket,packetLen);
+  signalMaster = 0;
 
   // Hardware related stuff
  
@@ -176,8 +115,6 @@ void initMCOM() {
   P1DIR &= ~(BIT2 | BIT4);
   P1SEL &=  ~(BIT1 | BIT2 | BIT4);
   P1SEL2 &=  ~(BIT1 | BIT2 | BIT4);
-
-  resyncToStream(); 
 
   P1SEL |=  BIT1 | BIT2 | BIT4;
   P1SEL2 |=  BIT1 | BIT2 | BIT4;
@@ -229,41 +166,51 @@ void initGlobal() {
 // INTERRUPTS
 interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
+  (*pInPacket) = UCA0RXBUF;
+ 
 	if (mcomSynced) {
-	    (*pckCurTransferCursor++) = UCA0RXBUF;
-	    UCA0TXBUF = (*pckCurTransferCursor);
+      UCA0TXBUF = (*pOutPacket++);
 
-	    switch (pckCurTransferCursor)
-	      case pckBndTransferCursor:
+	    switch (pInPacket++) {
+	      case pckBndPacketEnd:
 		      action |= PROCESS_BUFFER;
 		      __bic_SR_register_on_exit(LPM3_bits); // exit LPM, keep global interrupts state      
 		      break;
 	      case pckBndHeaderEnd:
-	    	//check is SNCC CMD
-	    	pckCurTransferCursor  = ptrToData;
-	    	pckBndTransferCursor  = ptrToData;
-	    	break;
-              case _signal:
-	    	apply nextSignal to bfr; clear nextsignal
-	    	break;
-	      case _ack:
-	    	apply ack to bfr clear ack
-	    	break;
+            if ((*(long *)pInPacket) == MI_RESCUE) {
+               outPacket.signalMask1 = (signalMaster >> currentNodeId);
+            } else {
+                mcomSynced--;
+            }
+          break;
+        case pckBndDestEnd:
+           if (inPacket.destinationSncc == currentNodeId) {
+              pOutPacket = outBuffer; // outBuffer contains sncc data payload
+           }
+           if (!(action & PROCESS_BUFFER)) { // we are not busy
+              if (inPacket.destinationCmd == currentNodeId) { // we are concerned
+                checkSum = 0; // start checksumming
+              }
+           }
+           break;
+         case pckBndDataEnd:
+             pOutPacket = &(outPacket.reserved);
+             outPacket.chkSum = checkSum;
 	    }
+      checkSum += UCA0RXBUF;
+
 	} else {
 		UCA0TXBUF = 0x00;
 		// scan stream and try to find a preamble start sequence
 		// (Oxac Oxac KNOWN CMD)
 		// we are in the intr and have very few cycles to intervene 
-        unsigned char* rescuePtr = pckCurrentTransferred;
+        unsigned char* rescuePtr = *pInPacket;
         *rescuePtr = *rescuePtr++;
         *rescuePtr = *rescuePtr++;
         *rescuePtr = *rescuePtr++;
         *rescuePtr = UCA0RXBUF;
       
-      	switch (*(long *)pckRescue) {
-      	case MI_RESCUE1:
-      	case MI_RESCUE2:
+      	if ((*(long *)pckRescue) == MI_RESCUE) {
         	mcomSynced++;
         	pckCurTransferCursor = (*++rescuePtr);
         }
