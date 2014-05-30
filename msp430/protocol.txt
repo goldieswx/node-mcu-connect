@@ -49,7 +49,7 @@ slave process bfr a, receives bfr b sends bfr b
 Buffer exchanges.
 M->S
 1.  Master sends a CMD with DATA (20B) to DEST with a CMDID(0-15)  
-2.  Slave receives, executes and send nothing, only constrainy is the slave must
+2.  Slave receives, executes and send nothing, only constraint is the slave must
     ack the CMDID sometime in the future (otherwise slave will run out of ids).
 
 M->S(ack)
@@ -58,6 +58,30 @@ M->S(ack)
 S->M(signal)
 2. Just after processbuffer (synced mode), slave brings MISO high (to signal or not) and use the signal-mask to signal a cmd request.
 
+
+
+Master sends data to Node
+        M->N									  
+        	[PRE PRE MI_CMD MI_CMD][ 0x00 0x02 | x x ][ data][x x CHK CHK]     
+        	[0]				
+        
+        Steps to undertake	 @M If ACK required Wait ACK
+        			 @S CHECK PACKET, @S OK  EXEC CMD  ACK with high ack at the cmdid bit, discard cmdid ANSWER with signal.	
+						  @S NOK EXEC CMD, discard cmdid,SIGNAL wrong chk with signal.	
+
+	
+Slaves Ack packet (any packet that Master sends)
+	N->M
+		[PRE PRE ...][any][x  CHK]             
+		[0]   	          [AckMask CHK]       
+
+Slaves Signal packet (any data that slave must send)
+	N->M
+		[PRE PRE ...][any][x  CHK]             
+		[0]   	          [AckMask CHK]       
+
+        Steps to undertake	 @M SEND SNCC command to inquire data
+        			 @S Respond that SNCC command with data directly
 
 
 
