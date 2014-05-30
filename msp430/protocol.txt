@@ -17,118 +17,47 @@
 */
 
 
-After much tinkering, mush simplified & flexible & lower latency & more efficient (25%overhead) protocol
+After much tinkering, mush simplified & flexible & lower latency & more efficient protocol
 
 
-[n]
- 
-32b [M]   MOSI  [PRE PRE CMD CMD] [DEST CMDID(0-15) | x             x]     [data 20b]  [ x  x CHK CHK] 
-slave process bfr b, receives bfr a sends bfr a
-32b [S-x]  MISO  [PRE PRE CMD CMD] [FROM CMDID | SIGNAL-MASK* SIGNAL-MASK*] [data 20b]  [ ACK-MASK  ACK-MASK CHKdata CHKdata]
+M->N
+Node Avail
 
-continuous
+32b [M]    MOSI  [PRE PRE CMD CMD] [DEST_CMD DEST | x             x]     [data 20b]  [ x  x     CHK CHK] 
+32b [S-x]  MISO  0   0   0   0     0    0             0             0       0            0 CMDID   CHK CHK
 
-[n+1]
+Node Busy
 
-32b   MOSI  [PRE PRE CMD CMD] [DEST DEST | x           x]           [data 20b]  [ x  x CHK CHK]
-slave process bfr a, receives bfr b sends bfr b
-32b [S-y]  MISO  [PRE PRE CMD CMD] [FROM FROM | SIGNALMASK* SIGNALMASK*] [data 20b]  [ x  x CHKdata CHKdata]
+32b [M]    MOSI  [PRE PRE CMD CMD] [DEST_CMD DEST | x             x]     [data 20b]  [ x  x     CHK CHK] 
+32b [S-x]  MISO  0   0   0   0     0    0             0             0       0            0   0       0   0
 
-continuous
+N->M (old sncc mode style, slave cmd can be micmd or sncc)
+32b [M]    MOSI  [PRE  PRE CMD CMD] [DEST_CMD DEST_SNCC | x             x]     [data 20b]  [ x  x     CHK CHK] 
+32b [S-x]  MISO  [PRE* PRE* CMD CMD [node id  mask   node id in mask]     0             0   0       0   0
 
-
-32b   MOSI  [PRE PRE CMD CMD] [DEST DEST | ACK MASK    ACK MASK]           [data 20b]  [ x  x CHK CHK]
-slave process bfr a, receives bfr b sends bfr b
-32b [S-x]   MISO  [PRE PRE CMD CMD] [FROM FROM | SIGNALMASK* SIGNALMASK*] [data 20b]  [ x  x CHKdata CHKdata]
-
-
-...
-[S-y]
-
-
-Buffer exchanges.
-M->S
-1.  Master sends a CMD with DATA (20B) to DEST with a CMDID(0-15)  
-2.  Slave receives, executes and send nothing, only constraint is the slave must
-    ack the CMDID sometime in the future (otherwise slave will run out of ids).
-
-M->S(ack)
-1. Just after processbuffer (synced mode), slave brings MISO high (to signal or not) and use the ack-mask to ack.
-
-S->M(signal)
-2. Just after processbuffer (synced mode), slave brings MISO high (to signal or not) and use the signal-mask to signal a cmd request.
-
-
-
-Master sends data to Node
-        M->N									  
-        	[PRE PRE MI_CMD MI_CMD][ 0x00 0x02 | x x ][ data][x x CHK CHK]     
-        	[0]				
-        
-        Steps to undertake	 @M If ACK required Wait ACK
-        			 @S CHECK PACKET, @S OK  EXEC CMD  ACK with high ack at the cmdid bit, discard cmdid ANSWER with signal.	
-						  @S NOK EXEC CMD, discard cmdid,SIGNAL wrong chk with signal.	
-
-	
-Slaves Ack packet (any packet that Master sends)
-	N->M
-		[PRE PRE ...][any][x  CHK]             
-		[0]   	          [AckMask CHK]       
-
-Slaves Signal packet (any data that slave must send)
-	N->M
-		[PRE PRE ...][any][x  CHK]             
-		[0]   	          [AckMask CHK]       
-
-        Steps to undertake	 @M SEND SNCC command to inquire data
-        			 @S Respond that SNCC command with data directly
-
-
-
-Slave implementation
-
-int(){
-    *p++ = REG;
-    cpuoff    
-}
-
-main()
-  
- EI()
-	 while () {
- 		CPUOFF
-	 }	
-	 (PB() or OTH ACT())
- DI()
-	
 
 
 
 MASTER
 { unsigned word preamble,
   unsigned word cmd,
-  unsigned word destination,
-  unsigned word cmdId,
+  unsigned word destinationCmd,
+  unsigned word destinationSncc,
   unsigned char data[20],
   unsigned word reserved,
   unsigned word chkSum
 }
 
 SLAVE
-{ unsigned word preamble,
-  unsigned word cmdId,
-  unsigned word from,
-  unsigned word signalMask,
+{ 
+  unsigned word preamble,
+  unsigned word cmd,
+  unsigned word signalMask2,
+  unsigned word signalMask1,
   unsigned char data[20],
   unsigned word reserved,
   unsigned word chkSum
 }
 
-CMD avail.
 
-	DATA  MISO sends data to x, receives data from y and reads signalmask
-        SNCC  (also used as SYNC), sends data to none, receives data from none, reads signalmask 
-	   
-	if mcu is busy with a PB, then it just ignore the incoming buffer, will send 0s and master will retry
-	
 	   
