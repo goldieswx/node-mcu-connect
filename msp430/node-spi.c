@@ -58,7 +58,7 @@ typedef struct McomPacket
 #define packetLen (sizeof(mcomPacket))
 
 McomPacket 	   pcks[2];
-McomMetaPacket metaPack[2];
+
 
 McomPacket *     pckCurrentTransferred;  // current packet being tranferred
 char *     pckCurTransferCursor;    // cursor (*p++ like) of current packet being trsf.
@@ -66,6 +66,7 @@ char *     pckBndTransferCursor;    // boundary of current packet being trsf. (p
 McomPacket *     pckCurrentProcess;      // current packet being processed
 
 unsigned char mcomProcessingBuffer = 0;
+unsigned int  transferErrors= 0;
 
 ////////// 
 
@@ -119,7 +120,6 @@ void mcomProcessBuffer() {
      mcomProcessingBuffer ++;
      __enable_interrupt();
 
-     int err = 0;
      // check packet validity.
 
      if ((packet->preamble == 0xacac) &&
@@ -132,7 +132,7 @@ void mcomProcessBuffer() {
      		}
 
      		if (packet->chkSum != chkSum) {
-     			err++;
+			packet->_metaErr |= ERR_CHECKSUM;
      			// error wrong packet
      		} else {
 	            // packet is for us.
@@ -142,8 +142,11 @@ void mcomProcessBuffer() {
 	     		}
 	     	}
      } else {
-     	err++
-	     // error wrong packet
+     	if (transferErrors++ > 2) {
+     		mcomSynced = 0;
+     	}
+	 // error wrong packet sets rescue mode
+        
      }
 
      mcomProcessingBuffer--;
@@ -209,7 +212,19 @@ void initGlobal() {
 
 }
 
-ASSIGN max 16 cmds to  a specific device 
+/*Node (booting up)
+ 
+  => (sync)
+  => [bfr micmd to 2] -> b1in send 0x00s 
+  => [bfr micmd to 2] -> b2in send 0x00s (process b1in)
+
+(signal/ack)
+  => [bfr micmd to 2] -> cmd will be ignored (won't happen, maybe node could send flag busy) ack b1 (or signal b1)
+  => [bfr micmd to 2] -> cmd will be ignored (won't happen, maybe node could send flag busy) ack b2 , signal b1 (and or b2)
+  
+  => [bfr sncc to 2] ->  reponse with answer correponding to cmdid signalled
+  */
+
 
 // INTERRUPTS
 interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
@@ -221,6 +236,19 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 	    if (pckCurTransferCursor == pckBndTransferCursor) {
 	      action |= PROCESS_BUFFER;
 	      __bic_SR_register_on_exit(LPM3_bits); // exit LPM, keep global interrupts state      
+	    } else
+	    if (pckCurTransferCursor == pckBndHeaderEnd) {
+	    	//check is SNCC CMD
+	    	pckCurTransferCursor  = ptrToData;
+	    	pckBndTransferCursor  = ptrToData;
+	    } else
+	    if (pckCurTransferCursor == Signal) {
+	    	apply nextSignal to bfr; clear nextsignal
+	    } else
+	    
+	    if (pckCurTransferCursor == Ack) {
+	    	apply ack to bfr clear ack
+	    
 	    }
 	} else {
 		UCA0TXBUF = 0x00;
