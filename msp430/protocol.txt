@@ -45,6 +45,22 @@ slave process bfr a, receives bfr b sends bfr b
 ...
 [S-y]
 
+
+Buffer exchanges.
+M->S
+1.  Master sends a CMD with DATA (20B) to DEST with a CMDID(0-15)  
+2.  Slave receives, executes and send nothing, only constrainy is the slave must
+    ack the CMDID sometime in the future (otherwise slave will run out of ids).
+
+M->S(ack)
+1. Just after processbuffer (synced mode), slave brings MISO high (to signal or not) and use the ack-mask to ack.
+
+S->M(signal)
+2. Just after processbuffer (synced mode), slave brings MISO high (to signal or not) and use the signal-mask to signal a cmd request.
+
+
+
+
 Slave implementation
 
 int(){
