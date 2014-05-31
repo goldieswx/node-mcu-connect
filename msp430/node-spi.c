@@ -24,7 +24,7 @@
 // global declarations
 
 int action;
-#define currentNodeId             2  // id of this node
+#define currentNodeId             3  // id of this node
 
 #define PROCESS_BUFFER 0x01
 
@@ -35,7 +35,7 @@ int action;
 
 #define MI_PREAMBLE  0xac // 0b10101100
 
-#define MI_RESCUE   0xacac220a
+#define MI_RESCUE   0x220aacac
 
 #define MOSI  BIT7 
 #define MISO  BIT6
@@ -92,12 +92,13 @@ void initGlobal();
 void initMCOM();
 void mcomProcessBuffer();
 void zeroMem(void * p,int len);
-
+void initDebug();
 
 int main() {
 
 	initGlobal();
 	initMCOM();
+  initDebug();
 
 	while(1) {
 	     __enable_interrupt();
@@ -105,10 +106,10 @@ int main() {
 		    __bis_SR_register(LPM3_bits + GIE);   // Enter LPM3, enable interrupts // we need ACLK for timeout.
 	    }
 	    __disable_interrupt(); // needed since action must be locked while being compared
-	  	if (action & PROCESS_BUFFER) {
-	        mcomProcessBuffer(); 
-	        continue;
-	    }
+	  	//if (action & PROCESS_BUFFER) {
+	     //   mcomProcessBuffer(); 
+	     //   continue;
+	    //}
 	}
 
 }
@@ -120,7 +121,7 @@ void mcomProcessBuffer() {
 
      __disable_interrupt();
     
-       action &= ~PROCESS_BUFFER; // when we release the action, 
+     //  action &= ~PROCESS_BUFFER; // when we release the action, 
        // contents of inBuffer must be ready to reuse
        // (and will be destroyed)
      __enable_interrupt();
@@ -152,9 +153,13 @@ void initMCOM() {
 
   pckBndPacketEnd = (unsigned char*)&inPacket;
   pckBndPacketEnd += packetLen;
+  pckBndPacketEnd--;
+
   pckBndHeaderEnd = &(inPacket.destinationCmd);
-  pckBndDestEnd   = &(inPacket.__reserved_2); // sent 1B before end, txbuffer is always 1b late.
+  //pckBndHeaderEnd;
+  pckBndDestEnd   = &(inPacket.__reserved_1); // sent 1B before end, txbuffer is always 1b late.
   pckBndDataEnd   = (unsigned char*)&(inPacket.snccCheckSum);
+  pckBndDataEnd--;
 
   preserveInBuffer = 0;
   // Hardware related stuff
@@ -188,6 +193,15 @@ void initDebug() {
   P2SEL2 &= ~(BIT6 + BIT7);
   P2SEL &= ~(BIT6 + BIT7);
   P2DIR |= BIT6 + BIT7;
+
+  outBuffer[0] = 0xab;
+  outBuffer[1] = 0xcd;
+  outBuffer[2] = 0xef;
+  outBuffer[3] = 0x99;
+  outBuffer[19] = 0xff;
+  outBuffer[20] = 0x34; 
+  outBufferCheckSum = 0x7834;
+  signalMaster = 1; 
 
 }
 
@@ -235,15 +249,19 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
         /* case pckBndPacketEnd */
 	      if (pInPacket==pckBndPacketEnd) { 
+            P2OUT |= BIT7;
             if (inPacket.destinationSncc == currentNodeId) {  // there was a sncc transfer
                 if (inPacket.snccCheckSum == outBufferCheckSum) { // successful
                     outPacket.signalMask1 = 0; // clear signal mask meaning master received the sncc buffer.
+                    
                 }
             }
             pInPacket = (unsigned char*)&inPacket;
+            pInPacket--; // -- since it is sytematically increased
             pOutPacket = (unsigned char*)&outPacket;
   		      if (inPacket.destinationCmd == currentNodeId) { // there was a mi cmd
               if (inPacket.chkSum == outPacket.chkSum) {
+                 P2OUT |= BIT6;
                  action |= PROCESS_BUFFER;
                   __bic_SR_register_on_exit(LPM3_bits); // exit LPM, keep global interrupts state      
               }
@@ -253,7 +271,7 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
         /* case pckBndHeaderEnd */
 	      if (pInPacket==pckBndHeaderEnd) {
               if ((*(long *)&inPacket) == MI_RESCUE) {
-                 outPacket.signalMask1 |= (signalMaster >> currentNodeId);
+                  outPacket.signalMask1 |= (signalMaster << currentNodeId);
                  signalMaster = 0;
               } else {
                   mcomPacketSync--;
@@ -318,9 +336,7 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
       
       	if ((*(long *)&inPacket) == MI_RESCUE) {
         	mcomPacketSync++;
-          P2OUT |= BIT6;
         }
-        P2OUT |= BIT7;
 	}
   return;
 }
