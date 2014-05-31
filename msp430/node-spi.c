@@ -30,7 +30,7 @@ int action;
 
 #define MI_CMD      0x220a //    8714
 
-
+#define word int
 // MCOM related declarations
 
 #define MI_PREAMBLE  0xac // 0b10101100
@@ -41,29 +41,29 @@ int action;
 #define MISO  BIT6
 #define SCK   BIT5
 
-typedef struct McomInPacket {
-  unsigned word preamble,
-  unsigned word cmd,
-  unsigned char destinationCmd,
-  unsigned char destinationSncc,
-  unsigned char __reserved_1,
-  unsigned char __reserved_2,
-  unsigned char data[20],
-  unsigned word snccCheckSum,
-  unsigned word chkSum
-} _McomInPacket;
+typedef struct _McomInPacket {
+  unsigned word preamble;
+  unsigned word cmd;
+  unsigned char destinationCmd;
+  unsigned char destinationSncc;
+  unsigned char __reserved_1;
+  unsigned char __reserved_2;
+  unsigned char data[20];
+  unsigned word snccCheckSum;
+  unsigned word chkSum;
+} McomInPacket;
 
-typedef struct McomOutPacket {
-  unsigned word preamble,
-  unsigned word cmd,
-  unsigned char signalMask2,
-  unsigned char signalMask1,
-  unsigned char __reserved_1,
-  unsigned char __reserved_2,
-  unsigned char data[20],
-  unsigned word snccCheckSum,
-  unsigned word chkSum
-} _McomOutPacket;
+typedef struct _McomOutPacket {
+  unsigned word preamble;
+  unsigned word cmd;
+  unsigned char signalMask2;
+  unsigned char signalMask1;
+  unsigned char __reserved_1;
+  unsigned char __reserved_2;
+  unsigned char data[20];
+  unsigned word snccCheckSum;
+  unsigned word chkSum;
+} McomOutPacket;
 
 
 #define packetLen (sizeof(McomInPacket))
@@ -77,17 +77,24 @@ unsigned char * pOutPacket;
 unsigned char  outBuffer[packetLen];
 int            outBufferCheckSum;
 int            signalMaster; 
-
+int            mcomPacketSync;
 
 unsigned char * pckBndPacketEnd;
 unsigned char * pckBndHeaderEnd;
 unsigned char * pckBndDestEnd;
 unsigned char * pckBndDataEnd;
 
+int            checkSum; // checksum used in the SPI interrupt
 int            preserveInBuffer; // preserve input buffer (data in InPacket) when
                                 // processing buffer and while communicating (after PB acion was set).
 
-void main() {
+void initGlobal();
+void initMCOM();
+void mcomProcessBuffer();
+void zeroMem(void * p,int len);
+
+
+int main() {
 
 	initGlobal();
 	initMCOM();
@@ -122,6 +129,14 @@ void mcomProcessBuffer() {
 }
 
 
+void zeroMem(void * p,int len) {
+     
+     while (len--) {
+        *(unsigned char*)p++ = 0x00;
+     }
+}
+
+
 void initMCOM() {
 
   // Software related stuff
@@ -129,18 +144,19 @@ void initMCOM() {
   mcomPacketSync = 0;
   zeroMem(&inPacket,packetLen);
   zeroMem(&outPacket,packetLen);
-  zeroMem(outBuffer,packetLen)
+  zeroMem(outBuffer,packetLen);
   signalMaster = 0;
 
   pInPacket = (unsigned char *)&inPacket;
   pOutPacket = (unsigned char*)&outPacket;
 
-  pckBndPacketEnd = inPacket;
+  pckBndPacketEnd = (unsigned char*)&inPacket;
   pckBndPacketEnd += packetLen;
   pckBndHeaderEnd = &(inPacket.destinationCmd);
   pckBndDestEnd   = &(inPacket.__reserved_2); // sent 1B before end, txbuffer is always 1b late.
-  pckBndDataEnd   = &(inPacket.snccCheckSum);
+  pckBndDataEnd   = (unsigned char*)&(inPacket.snccCheckSum);
 
+  preserveInBuffer = 0;
   // Hardware related stuff
  
   // UART A (main comm chanell with MASTER)
@@ -162,6 +178,16 @@ void initMCOM() {
   while(IFG2 & UCA0RXIFG);                  // Wait ifg2 flag on rx  (no idea what it does)
   IE2 |= UCA0RXIE;                          // Enable USCI0 RX interrupt
   UCA0TXBUF = 0x00;                         // We do not want to ouput anything on the line
+
+}
+
+
+void initDebug() {
+
+  P2OUT &= ~(BIT6 + BIT7);
+  P2SEL2 &= ~(BIT6 + BIT7);
+  P2SEL &= ~(BIT6 + BIT7);
+  P2DIR |= BIT6 + BIT7;
 
 }
 
@@ -204,50 +230,57 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
   unsigned char savepInPacket = (*pInPacket); 
   (*pInPacket) = UCA0RXBUF;
  
-	if (mcomSynced) {
+	if (mcomPacketSync) {
       UCA0TXBUF = (*pOutPacket++);
 
-	    switch (pInPacket) {
-	      case pckBndPacketEnd:
-          if (inPacket.destinationSncc == currentNodeId) {  // there was a sncc transfer
-              if (inPacket.reserved == outBufferCheckSum) { // successful
-                  outPacket.signalMask1 = 0: // clear signal mask meaning master received the sncc buffer.
+        /* case pckBndPacketEnd */
+	      if (pInPacket==pckBndPacketEnd) { 
+            if (inPacket.destinationSncc == currentNodeId) {  // there was a sncc transfer
+                if (inPacket.snccCheckSum == outBufferCheckSum) { // successful
+                    outPacket.signalMask1 = 0; // clear signal mask meaning master received the sncc buffer.
+                }
+            }
+            pInPacket = (unsigned char*)&inPacket;
+            pOutPacket = (unsigned char*)&outPacket;
+  		      if (inPacket.destinationCmd == currentNodeId) { // there was a mi cmd
+              if (inPacket.chkSum == outPacket.chkSum) {
+                 action |= PROCESS_BUFFER;
+                  __bic_SR_register_on_exit(LPM3_bits); // exit LPM, keep global interrupts state      
               }
-          }
-          pInPacket = &inPacket;
-          pOutPacket = &outPacket;
-		      if (inPacket.destinationCmd == currentNodeId) { // there was a mi cmd
-            if (inPacket.chkSum == outPacket.chkSum) {
-               action |= PROCESS_BUFFER;
-                __bic_SR_register_on_exit(LPM3_bits); // exit LPM, keep global interrupts state      
             }
-          }
-          break;
-	      case pckBndHeaderEnd:
-            if ((*(long *)&inPacket) == MI_RESCUE) {
-               outPacket.signalMask1 |= (signalMaster >> currentNodeId);
-               signalMaster = 0;
-            } else {
-                mcomSynced--;
-                preserveInBuffer = 0;
-            }
-          break;
-        case pckBndDestEnd:
-           if (inPacket.destinationSncc == currentNodeId) && (outPacket.signalMask1) {
-               // if master choose us as sncc and if we signalled master
-              pOutPacket = outBuffer; // outBuffer contains sncc data payload
-           }
-           checkSum = 0; // start checksumming
-           if (action & PROCESS_BUFFER) {  // we are busy, preserve the input buffer, we
-                                           // are processing it
-              *pInPacket = 0; // normally this is a reserved byte
-                              // force to 0 just so checksum will be correct in any case
-              preserveInBuffer = 1;
-           }
-           break;
-         case pckBndDataEnd:
+            goto afterChecks;
+        }
+        /* case pckBndHeaderEnd */
+	      if (pInPacket==pckBndHeaderEnd) {
+              if ((*(long *)&inPacket) == MI_RESCUE) {
+                 outPacket.signalMask1 |= (signalMaster >> currentNodeId);
+                 signalMaster = 0;
+              } else {
+                  mcomPacketSync--;
+                  preserveInBuffer = 0;
+              }
+            goto afterChecks;
+        }
+
+        /* case pckBndDestEnd */
+        if (pInPacket==pckBndDestEnd) {
+             if ((inPacket.destinationSncc == currentNodeId) && (outPacket.signalMask1)) {
+                 // if master choose us as sncc and if we signalled master
+                pOutPacket = outBuffer; // outBuffer contains sncc data payload
+             }
+             checkSum = 0; // start checksumming
+             if (action & PROCESS_BUFFER) {  // we are busy, preserve the input buffer, we
+                                             // are processing it
+                *pInPacket = 0; // normally this is a reserved byte
+                                // force to 0 just so checksum will be correct in any case
+                preserveInBuffer = 1;
+             }
+             goto afterChecks;
+         }
+         /* case pckBndDataEnd */
+         if  (pInPacket==pckBndDataEnd) {
              // exchange chksums
-             pOutPacket = &(outPacket.chkSum);
+             pOutPacket = (unsigned char*) &(outPacket.chkSum);
              pOutPacket--;
 
              if ((inPacket.destinationSncc == currentNodeId)  // it's our turn (sncc)
@@ -263,7 +296,8 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
                 outPacket.chkSum = 0;
              }
              preserveInBuffer = 0;
-	    }
+          }
+	    /* after all error checks */    afterChecks:
       checkSum += (*pInPacket);
       if (preserveInBuffer) { (*pInPacket) = savepInPacket; }
       pInPacket++;
@@ -273,7 +307,7 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 		// scan stream and try to find a preamble start sequence
 		// (Oxac Oxac KNOWN CMD)
 		// we are in the intr and have very few cycles to intervene 
-        pInPacket = &InPacket;
+        pInPacket = (unsigned char*)&inPacket;
         unsigned char* rescuePtrSrc = pInPacket;
         rescuePtrSrc++;
 
@@ -282,9 +316,11 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
         *pInPacket++ = *rescuePtrSrc;
         *pInPacket++ = UCA0RXBUF;
       
-      	if ((*(long *)&InPacket) == MI_RESCUE) {
-        	mcomSynced++;
+      	if ((*(long *)&inPacket) == MI_RESCUE) {
+        	mcomPacketSync++;
+          P2OUT |= BIT6;
         }
+        P2OUT |= BIT7;
 	}
   return;
 }

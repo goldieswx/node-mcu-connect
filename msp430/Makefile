@@ -1,8 +1,8 @@
 CC=msp430-gcc
 CFLAGS=-Os -Wall -g -mmcu=msp430g2553 -L/usr/msp430/lib/ldscripts/msp430g2553 -T/usr/msp430/lib/ldscripts/msp430.x 
 
-OBJS=adc-to-slave.o
-SLAVE=spi-rb-protocol.o
+OBJS=node-spi.o
+SLAVE=node-spi.o
 ADC=adc-to-slave.o
 TEST=test.o
 
