@@ -46,8 +46,14 @@
 #define BUFLEN 512
 #define PORT 9930
 
+#define MI_STATUS_QUEUED 0x03
+#define MI_STATUS_TRANSFERRED 0X04
+
+#define MCOM_DATA_LEN 20
+#define MCOM_NODE_QUEUE_LEN 10
+
 typedef struct _message {
-    unsigned char data [20] ;
+    unsigned char data [MCOM_DATA_LEN] ;
     int  expectedChecksum;
     int  receivedChecksum;
     int  status;
@@ -62,7 +68,7 @@ typedef struct _McomInPacket {
   unsigned char destinationSncc;
   unsigned char __reserved_1;
   unsigned char __reserved_2;
-  unsigned char data[20];
+  unsigned char data[MCOM_DATA_LEN];
   unsigned word snccCheckSum;
   unsigned word chkSum;
 } McomInPacket;
@@ -74,19 +80,58 @@ typedef struct _McomOutPacket {
   unsigned char signalMask1;
   unsigned char __reserved_1;
   unsigned char __reserved_2;
-  unsigned char data[20];
+  unsigned char data[MCOM_DATA_LEN];
   unsigned word snccCheckSum;
   unsigned word chkSum;
 } McomOutPacket;
 
 
-message * outQueues[32][10]; // ten buffer pointers per device;
+message * outQueues[32][MCOM_NODE_QUEUE_LEN]; // ten buffer pointers per device;
 int     snccRequest[32]; /// 1 if device requested sncc
 
 int onMessageReceived(message * q) {
   debugMessage(q);
 }
 
+
+int sendMessageToNode(message * q) {
+
+      McomInPacket pck;
+      pck.preamble = MI_DOUBLE_PREAMBLE;
+      pck.cmd = MI_CMD;
+      pck.destinationCmd = q->destination;
+      pck.destinationSncc = 0; // Todo
+      pck.__reserved_1 = 0;
+      pck.__reserved_2 = 0;
+      _memcpy(pck.data,q.data,MCOM_DATA_LEN);
+      pck.snccCheckSum = 0;
+      int checkSum = dataCheckSum(pck.data);
+      pck.chkSum = checkSum;
+      q->status = MI_STATUS_QUEUED;
+
+      bcm2835_spi_transfern (&pck,sizeof(McomInPacket));
+  
+      if(pck.chkSum == checkSum) {
+          q->status = MI_STATUS_TRANSFERRED;
+      }
+}
+
+/**
+ * Process the pointer list for one node.
+ */ 
+int processNodeQueue(message ** q) {
+  
+    int i;
+    // pop first valid pointer which message has been transferred 
+    if ((*q) && (*q)->status == MI_STATUS_TRANSFERRED) {
+
+        for (i=1;i<MCOM_NODE_QUEUE_LEN;i++) {
+          *q = (*++q);
+        }
+    } 
+ 
+
+}
 
 int main(int argc, char **argv)
 {
@@ -105,9 +150,15 @@ int main(int argc, char **argv)
   McomOutPacket r;
   while (1) 
   {
-      // for i = 0 to 31;
-      sendMessageToNode(m,snccRequest,&r);
-      // 
+      for(int i=0;i<32;i++) {
+         message * q = outQueues[i][0]; 
+         if (q != null) {
+            sendMessageToNode(q);
+            if (q->status = MI_STATUS_TRANSFERRED) {
+                processNodeQueue(q[i]);
+            }
+         }
+      } 
   }
 
   bcm2835_spi_end();
