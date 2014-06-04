@@ -51,6 +51,7 @@
 
 #define MCOM_DATA_LEN 20
 #define MCOM_NODE_QUEUE_LEN 10
+#define MCOM_MAX_NODES 16
 
 typedef struct _message {
     unsigned char data [MCOM_DATA_LEN] ;
@@ -86,8 +87,9 @@ typedef struct _McomOutPacket {
 } McomOutPacket;
 
 
-message * outQueues[32][MCOM_NODE_QUEUE_LEN]; // ten buffer pointers per device;
-int     snccRequest[32]; /// 1 if device requested sncc
+
+message * outQueues[MCOM_MAX_NODES][MCOM_NODE_QUEUE_LEN]; // ten buffer pointers per device;
+int     snccRequest[MCOM_MAX_NODES]; /// 1 if device requested sncc
 
 int onMessageReceived(message * q) {
   debugMessage(q);
@@ -105,7 +107,7 @@ int sendMessageToNode(message * q) {
       pck.__reserved_2 = 0;
       _memcpy(pck.data,q.data,MCOM_DATA_LEN);
       pck.snccCheckSum = 0;
-      int checkSum = dataCheckSum(pck.data);
+      int checkSum = dataCheckSum(pck.data,MCOM_DATA_LEN);
       pck.chkSum = checkSum;
       q->status = MI_STATUS_QUEUED;
 
@@ -128,6 +130,7 @@ int processNodeQueue(message ** q) {
         for (i=1;i<MCOM_NODE_QUEUE_LEN;i++) {
           *q = (*++q);
         }
+        *q = null;
     } 
  
 
@@ -148,14 +151,13 @@ int main(int argc, char **argv)
   bcm2835_spi_setChipSelectPolarity(BCM2835_SPI_CS0, LOW); 
   
   McomOutPacket r;
-  while (1) 
-  {
-      for(int i=0;i<32;i++) {
-         message * q = outQueues[i][0]; 
-         if (q != null) {
+  while (1)  {
+      for(int i=0;i<MCOM_MAX_NODES;i++) {
+         message ** q = outQueues[i]; 
+         if (*q != null) {
             sendMessageToNode(q);
-            if (q->status = MI_STATUS_TRANSFERRED) {
-                processNodeQueue(q[i]);
+            if ((*q)->status = MI_STATUS_TRANSFERRED) {
+                processNodeQueue(q);
             }
          }
       } 
@@ -167,25 +169,20 @@ return 0;
 }
 
 
-int process_checksum (char * req, int reqLen,int bAppend) {
+int dataChecksum (char * req, int reqLen) {
 
     // proceess chksum on reqlen, append (2B) chksum after reqLen, return checksum;
     unsigned short chk = 0;
-    unsigned short * appendPtr = (unsigned short *)(req+14);
     while (reqLen--) {
        chk += *req++;
     }
     //chk = ~chk;
-    if (bAppend) {
-       *appendPtr = chk; 
-    }
-
     return chk;
 }
 
 void debugMessage(message * m) {
 
- unsigned char data [20] ;
+    unsigned char data [20];
 
     printf("data: ");
     printBuffer(m->data,20);
