@@ -79,11 +79,13 @@ int            outBufferCheckSum;
 int            signalMaster; 
 int            mcomPacketSync;
 
+
 unsigned char * pckBndPacketEnd;
 unsigned char * pckBndHeaderEnd;
 unsigned char * pckBndDestEnd;
 unsigned char * pckBndDataEnd;
 
+int            transmissionErrors;
 int            checkSum; // checksum used in the SPI interrupt
 int            preserveInBuffer; // preserve input buffer (data in InPacket) when
                                 // processing buffer and while communicating (after PB acion was set).
@@ -106,10 +108,10 @@ int main() {
 		    __bis_SR_register(LPM3_bits + GIE);   // Enter LPM3, enable interrupts // we need ACLK for timeout.
 	    }
 	    __disable_interrupt(); // needed since action must be locked while being compared
-	  	//if (action & PROCESS_BUFFER) {
-	     //   mcomProcessBuffer(); 
-	     //   continue;
-	    //}
+	  	if (action & PROCESS_BUFFER) {
+	        mcomProcessBuffer(); 
+	        continue;
+	    }
 	}
 
 }
@@ -121,7 +123,7 @@ void mcomProcessBuffer() {
 
      __disable_interrupt();
     
-     //  action &= ~PROCESS_BUFFER; // when we release the action, 
+      action &= ~PROCESS_BUFFER; // when we release the action, 
        // contents of inBuffer must be ready to reuse
        // (and will be destroyed)
      __enable_interrupt();
@@ -142,6 +144,7 @@ void initMCOM() {
 
   // Software related stuff
 
+  transmissionErrors = 0;
   mcomPacketSync = 0;
   zeroMem(&inPacket,packetLen);
   zeroMem(&outPacket,packetLen);
@@ -336,7 +339,12 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
       
       	if ((*(long *)&inPacket) == MI_RESCUE) {
         	mcomPacketSync++;
+        } else {
+          if(transmissionErrors++ >= 100) {
+            WDTCTL = WDTHOLD;
+          }
         }
+
 	}
   return;
 }

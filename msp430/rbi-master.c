@@ -53,6 +53,7 @@
 #define MCOM_NODE_QUEUE_LEN 10
 #define MCOM_MAX_NODES 16
 
+
 typedef struct _message {
     unsigned char data [MCOM_DATA_LEN] ;
     int  expectedChecksum;
@@ -87,9 +88,15 @@ typedef struct _McomOutPacket {
 } McomOutPacket;
 
 
-
 message * outQueues[MCOM_MAX_NODES][MCOM_NODE_QUEUE_LEN]; // ten buffer pointers per device;
 int     snccRequest[MCOM_MAX_NODES]; /// 1 if device requested sncc
+
+/* functions */
+void debugMessage(message * m);
+void _memcpy( void* dest, void *src, int len);
+int dataCheckSum (unsigned char * req, int reqLen);
+
+/* impl */
 
 int onMessageReceived(message * q) {
   debugMessage(q);
@@ -105,32 +112,37 @@ int sendMessageToNode(message * q) {
       pck.destinationSncc = 0; // Todo
       pck.__reserved_1 = 0;
       pck.__reserved_2 = 0;
-      _memcpy(pck.data,q.data,MCOM_DATA_LEN);
+      _memcpy(pck.data,q->data,MCOM_DATA_LEN);
       pck.snccCheckSum = 0;
       int checkSum = dataCheckSum(pck.data,MCOM_DATA_LEN);
       pck.chkSum = checkSum;
       q->status = MI_STATUS_QUEUED;
 
-      bcm2835_spi_transfern (&pck,sizeof(McomInPacket));
+      printBuffer((char*)&pck,sizeof(McomInPacket));
+      bcm2835_spi_transfern ((char*)&pck,sizeof(McomInPacket));
+      printBuffer((char*)&pck,sizeof(McomInPacket));
+
   
       if(pck.chkSum == checkSum) {
           q->status = MI_STATUS_TRANSFERRED;
-      }
+
+      } 
+
+
 }
 
 /**
  * Process the pointer list for one node.
  */ 
 int processNodeQueue(message ** q) {
-  
     int i;
     // pop first valid pointer which message has been transferred 
     if ((*q) && (*q)->status == MI_STATUS_TRANSFERRED) {
-
+      
         for (i=1;i<MCOM_NODE_QUEUE_LEN;i++) {
-          *q = (*++q);
+          *q++ = *(q+1);
         }
-        *q = null;
+        *q = NULL;
     } 
  
 
@@ -150,17 +162,34 @@ int main(int argc, char **argv)
   bcm2835_spi_chipSelect(BCM2835_SPI_CS0);                      
   bcm2835_spi_setChipSelectPolarity(BCM2835_SPI_CS0, LOW); 
   
+  memset(outQueues,0,MCOM_MAX_NODES*MCOM_NODE_QUEUE_LEN*sizeof(message*));
+
   McomOutPacket r;
+  int i;
+
+  message m;
+  memset(&m,0,sizeof(message));
+
+  outQueues[0][0]=&m;
+  m.destination = 3;
+  m.data[0] = 0x42;
+  m.data[1] = 0x84;
+  m.data[2] = 0xff;
+  m.data[3] = 0xab;
+
   while (1)  {
-      for(int i=0;i<MCOM_MAX_NODES;i++) {
+      for(i=0;i<MCOM_MAX_NODES;i++) {
          message ** q = outQueues[i]; 
-         if (*q != null) {
-            sendMessageToNode(q);
-            if ((*q)->status = MI_STATUS_TRANSFERRED) {
+         if (*q != NULL) {
+            sendMessageToNode(*q);
+            if ((*q)->status == MI_STATUS_TRANSFERRED) {
+                return 0;
                 processNodeQueue(q);
             }
          }
       } 
+      usleep(1000);
+      //break;
   }
 
   bcm2835_spi_end();
@@ -169,7 +198,7 @@ return 0;
 }
 
 
-int dataChecksum (char * req, int reqLen) {
+int dataCheckSum (unsigned char * req, int reqLen) {
 
     // proceess chksum on reqlen, append (2B) chksum after reqLen, return checksum;
     unsigned short chk = 0;
