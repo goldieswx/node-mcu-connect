@@ -97,11 +97,19 @@ void _memcpy( void* dest, void *src, int len);
 int dataCheckSum (unsigned char * req, int reqLen);
 
 /* impl */
-
 int onMessageReceived(message * q) {
   debugMessage(q);
 }
 
+
+int checkSNCCMessages(McomOutPacket * pck) {
+     
+     unsigned short _signal = *((unsigned short*)&(pck->signalMask2));
+     //if (_signal) {
+       // sncc signal received 
+       printf ("Signal received %x",_signal);
+     //}
+}
 
 int sendMessageToNode(message * q) {
 
@@ -122,12 +130,10 @@ int sendMessageToNode(message * q) {
       bcm2835_spi_transfern ((char*)&pck,sizeof(McomInPacket));
       printBuffer((char*)&pck,sizeof(McomInPacket));
 
-  
       if(pck.chkSum == checkSum) {
           q->status = MI_STATUS_TRANSFERRED;
-
+          checkSNCCMessages((McomOutPacket*)&pck);
       } 
-
 
 }
 
@@ -183,13 +189,14 @@ int main(int argc, char **argv)
          if (*q != NULL) {
             sendMessageToNode(*q);
             if ((*q)->status == MI_STATUS_TRANSFERRED) {
-                return 0;
                 processNodeQueue(q);
             }
          }
       } 
-      usleep(1000);
-      //break;
+
+      usleep(750);
+      break;
+      
   }
 
   bcm2835_spi_end();

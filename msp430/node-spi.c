@@ -153,13 +153,15 @@ void initMCOM() {
 
   pInPacket = (unsigned char *)&inPacket;
   pOutPacket = (unsigned char*)&outPacket;
+  pOutPacket++;
 
   pckBndPacketEnd = (unsigned char*)&inPacket;
   pckBndPacketEnd += packetLen;
   pckBndPacketEnd--;
 
   pckBndHeaderEnd = &(inPacket.destinationCmd);
-  //pckBndHeaderEnd;
+  //pckBndHeaderEnd--;
+
   pckBndDestEnd   = &(inPacket.__reserved_1); // sent 1B before end, txbuffer is always 1b late.
   pckBndDataEnd   = (unsigned char*)&(inPacket.snccCheckSum);
   pckBndDataEnd--;
@@ -252,6 +254,7 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
         /* case pckBndPacketEnd */
 	      if (pInPacket==pckBndPacketEnd) { 
+            UCA0TXBUF = 0x00;
             P2OUT |= BIT7;
             if (inPacket.destinationSncc == currentNodeId) {  // there was a sncc transfer
                 if (inPacket.snccCheckSum == outBufferCheckSum) { // successful
@@ -262,20 +265,22 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
             pInPacket = (unsigned char*)&inPacket;
             pInPacket--; // -- since it is sytematically increased
             pOutPacket = (unsigned char*)&outPacket;
+            pOutPacket++; // -- since we are sytematically 1B late
   		      if (inPacket.destinationCmd == currentNodeId) { // there was a mi cmd
               if (inPacket.chkSum == outPacket.chkSum) {
-                 P2OUT |= BIT6;
+                 P2OUT ^= BIT6;
                  action |= PROCESS_BUFFER;
                   __bic_SR_register_on_exit(LPM3_bits); // exit LPM, keep global interrupts state      
               }
             }
             goto afterChecks;
         }
+
         /* case pckBndHeaderEnd */
 	      if (pInPacket==pckBndHeaderEnd) {
               if ((*(long *)&inPacket) == MI_RESCUE) {
                   outPacket.signalMask1 |= (signalMaster << currentNodeId);
-                 signalMaster = 0;
+                  signalMaster = 0;
               } else {
                   mcomPacketSync--;
                   preserveInBuffer = 0;
@@ -285,6 +290,7 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
         /* case pckBndDestEnd */
         if (pInPacket==pckBndDestEnd) {
+
              if ((inPacket.destinationSncc == currentNodeId) && (outPacket.signalMask1)) {
                  // if master choose us as sncc and if we signalled master
                 pOutPacket = outBuffer; // outBuffer contains sncc data payload
@@ -322,9 +328,10 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
       checkSum += (*pInPacket);
       if (preserveInBuffer) { (*pInPacket) = savepInPacket; }
       pInPacket++;
+      return;
 
 	} else {
-		UCA0TXBUF = 0x00;
+		  UCA0TXBUF = 0x00;
 		// scan stream and try to find a preamble start sequence
 		// (Oxac Oxac KNOWN CMD)
 		// we are in the intr and have very few cycles to intervene 
@@ -339,6 +346,8 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
       
       	if ((*(long *)&inPacket) == MI_RESCUE) {
         	mcomPacketSync++;
+          // sync out buffer also.
+          pOutPacket = ((unsigned char*)&outPacket)+5; // sizeof double preamble, cmd + late byte
         } else {
           if(transmissionErrors++ >= 100) {
             WDTCTL = WDTHOLD;
