@@ -117,11 +117,11 @@ int sendMessageToNode(message * q) {
       pck.preamble = MI_DOUBLE_PREAMBLE;
       pck.cmd = MI_CMD;
       pck.destinationCmd = q->destination;
-      pck.destinationSncc = 0; // Todo
+      pck.destinationSncc = q->expectedChecksum; // Todo
       pck.__reserved_1 = 0;
       pck.__reserved_2 = 0;
       _memcpy(pck.data,q->data,MCOM_DATA_LEN);
-      pck.snccCheckSum = 0;
+      pck.snccCheckSum = 0x7834;
       int checkSum = dataCheckSum(pck.data,MCOM_DATA_LEN);
       pck.chkSum = checkSum;
       q->status = MI_STATUS_QUEUED;
@@ -183,19 +183,36 @@ int main(int argc, char **argv)
   m.data[2] = 0xff;
   m.data[3] = 0xab;
 
+  int j = 0,k=0;
+
   while (1)  {
       for(i=0;i<MCOM_MAX_NODES;i++) {
          message ** q = outQueues[i]; 
          if (*q != NULL) {
+            (*q)->expectedChecksum = j;
+            j = 0;
             sendMessageToNode(*q);
             if ((*q)->status == MI_STATUS_TRANSFERRED) {
-                processNodeQueue(q);
+             //   processNodeQueue(q);
             }
          }
       } 
 
-      usleep(750);
-      break;
+      printf("waiting\n");
+      k = 0;
+      while ((k < 10) && (!bcm2835_gpio_lev(latch)))
+      {
+        usleep(750);
+        k++;
+      }
+
+      if (bcm2835_gpio_lev(latch)) {
+         j = 3;
+      }
+
+      //usleep(7500);
+
+      //return;
       
   }
 

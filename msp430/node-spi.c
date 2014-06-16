@@ -208,6 +208,12 @@ void initDebug() {
   outBufferCheckSum = 0x7834;
   signalMaster = 1; 
 
+    BCSCTL3 = LFXT1S_2; 
+    TA0R = 0;
+    TA0CCR0 = 5000; // 1000;// 32767;              // Count to this, then interrupt;  0 to stop counting
+    TA0CTL = TASSEL_1 | MC_1 | ID_3 ;             // Clock source ACLK
+    TA0CCTL1 = CCIE ;                     // Timer A interrupt enable
+
 }
 
 void initGlobal() {
@@ -226,7 +232,7 @@ void initGlobal() {
   P2SEL &= 0;
   
   P2DIR |= BIT6 + BIT7;  // debug;
-
+  P2OUT |= BIT7;
 }
 
 /*Node (booting up)
@@ -241,7 +247,24 @@ void initGlobal() {
   
   => [bfr sncc to 2] ->  reponse with answer correponding to cmdid signalled
   */
+interrupt(TIMER0_A1_VECTOR) ta1_isr(void) {
 
+  TA0CTL = TACLR;  // stop & clear timer
+  TA0CCTL1 &= 0;   // also disable timer interrupt & clear flag
+
+  TA0CTL = TASSEL_1 | MC_1 | ID_1 ; 
+  TA0CCTL1 = CCIE;
+
+  
+  signalMaster = 1;  // if mcom is in the middle of a receive, or not synchronized, we just set signalMasterFlag
+  
+  // in case we are synced (out of a rescue, and not in a middle of a packet, force MISO high to signal master.)
+  if (mcomPacketSync && (pInPacket == (unsigned char*)&inPacket)) { // not in receive state, but synced
+    UCA0TXBUF = 0x80 | currentNodeId;
+  }
+
+  return;
+} 
 
 // INTERRUPTS
 interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
@@ -255,20 +278,25 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
         /* case pckBndPacketEnd */
 	      if (pInPacket==pckBndPacketEnd) { 
             UCA0TXBUF = 0x00;
-            P2OUT |= BIT7;
+            //P2OUT |= BIT7;
             if (inPacket.destinationSncc == currentNodeId) {  // there was a sncc transfer
                 if (inPacket.snccCheckSum == outBufferCheckSum) { // successful
                     outPacket.signalMask1 = 0; // clear signal mask meaning master received the sncc buffer.
-                    
+                    P2OUT ^= BIT6;
                 }
             }
             pInPacket = (unsigned char*)&inPacket;
             pInPacket--; // -- since it is sytematically increased
             pOutPacket = (unsigned char*)&outPacket;
             pOutPacket++; // -- since we are sytematically 1B late
+
+            if (signalMaster || outPacket.signalMask1) { // since we started receving the pkgs master was signalled
+              UCA0TXBUF = 0x80 | currentNodeId;
+            }
+
   		      if (inPacket.destinationCmd == currentNodeId) { // there was a mi cmd
               if (inPacket.chkSum == outPacket.chkSum) {
-                 P2OUT ^= BIT6;
+                 P2OUT ^= BIT7;
                  action |= PROCESS_BUFFER;
                   __bic_SR_register_on_exit(LPM3_bits); // exit LPM, keep global interrupts state      
               }
