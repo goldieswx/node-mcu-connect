@@ -91,6 +91,8 @@ typedef struct _McomOutPacket {
 message * outQueues[MCOM_MAX_NODES][MCOM_NODE_QUEUE_LEN]; // ten buffer pointers per device;
 int     snccRequest[MCOM_MAX_NODES]; /// 1 if device requested sncc
 
+message * inQueues [MCOM_MAX_NODES];
+
 /* functions */
 void debugMessage(message * m);
 void _memcpy( void* dest, void *src, int len);
@@ -111,30 +113,38 @@ int checkSNCCMessages(McomOutPacket * pck) {
      //}
 }
 
-int sendMessageToNode(message * q) {
 
-      McomInPacket pck;
-      pck.preamble = MI_DOUBLE_PREAMBLE;
-      pck.cmd = MI_CMD;
-      pck.destinationCmd = q->destination;
-      pck.destinationSncc = q->expectedChecksum; // Todo
-      pck.__reserved_1 = 0;
-      pck.__reserved_2 = 0;
-      _memcpy(pck.data,q->data,MCOM_DATA_LEN);
-      pck.snccCheckSum = 0x7834;
-      int checkSum = dataCheckSum(pck.data,MCOM_DATA_LEN);
-      pck.chkSum = checkSum;
-      q->status = MI_STATUS_QUEUED;
+// if q is null, send sncc request message.
 
-      printBuffer((char*)&pck,sizeof(McomInPacket));
-      bcm2835_spi_transfern ((char*)&pck,sizeof(McomInPacket));
-      printBuffer((char*)&pck,sizeof(McomInPacket));
+int sendMessage(message * q) {
 
-      if(pck.chkSum == checkSum) {
-          q->status = MI_STATUS_TRANSFERRED;
-          checkSNCCMessages((McomOutPacket*)&pck);
-      } 
+	McomInPacket pck;
+	preProcessSNCCmessage(&pck,snccRequest,pNumSNCCRequests);
+				
+	pck.preamble = MI_DOUBLE_PREAMBLE;
+	pck.cmd = MI_CMD;
 
+	if (q) {
+		pck.destinationCmd = q->destination;
+		_memcpy(pck.data,q->data,MCOM_DATA_LEN);
+		q->status = MI_STATUS_QUEUED;
+		int checkSum = dataCheckSum(pck.data,MCOM_DATA_LEN);
+		pck.chkSum = checkSum;
+	}
+
+	pck.__reserved_1 = 0;
+	pck.__reserved_2 = 0;
+
+
+	printBuffer((char*)&pck,sizeof(McomInPacket));
+	bcm2835_spi_transfern ((char*)pck,sizeof(McomInPacket));
+	printBuffer((char*)&pck,sizeof(McomInPacket));
+
+	if(pck.chkSum == checkSum) {
+		q->status = MI_STATUS_TRANSFERRED;
+	} 
+
+	postProcessSNCCmessage(&pck,q,snccRequest,pNumSNCCRequests);      
 }
 
 /**
@@ -153,6 +163,40 @@ int processNodeQueue(message ** q) {
  
 
 }
+
+// process udp queue.
+
+int insertNewCmds(message ** outQueues) {
+
+}
+
+// send a packet with only sncc destination,
+// try to get the id of the slave in the first buffer byte if nothing.
+// add the byte corresponding to the masks to the lists snccrequests.
+// wait to be recalled if necessary.
+
+int sendSNCCmessage(int * snccRequest, int * pNumSNCCRequests) {
+
+	McomInPacket pck;
+	preProcessSNCCmessage(&pck,snccRequest,&numSNCCRequests);
+				
+
+	postProcessSNCCmessage(&pck,*q,snccRequest,&numSNCCRequests);      
+
+
+}
+        
+// check the snccrequest queue, choose the next node to signal, if any;
+int preProcessSNCCmessage(McomInPacket* pck, int * snccRequest, int * pNumSNCCRequests) {
+
+}
+
+// update snccrequest queue, in respect to what happened during transfer.
+int postProcessSNCCmessage(McomInPacket* pck,message *q, int * snccRequest, int * pNumSNCCRequests) {
+
+
+}
+
 
 int main(int argc, char **argv)
 {
@@ -183,38 +227,40 @@ int main(int argc, char **argv)
   m.data[2] = 0xff;
   m.data[3] = 0xab;
 
-  int j = 0,k=0;
+  int           numSNCCRequests = 0;
+  int           allMsgProcessed;
+  McomInPacket  pck;
+ 
 
-  while (1)  {
-      for(i=0;i<MCOM_MAX_NODES;i++) {
-         message ** q = outQueues[i]; 
-         if (*q != NULL) {
-            (*q)->expectedChecksum = j;
-            j = 0;
-            sendMessageToNode(*q);
-            if ((*q)->status == MI_STATUS_TRANSFERRED) {
-             //   processNodeQueue(q);
-            }
-         }
-      } 
+	while (1)  {
 
-      printf("waiting\n");
-      k = 0;
-      while ((k < 10) && (!bcm2835_gpio_lev(latch)))
-      {
-        usleep(750);
-        k++;
-      }
+		while (!insertNewCmds(outQueues)) { // give the opportunity to get new buffers from udp.
+			if (bcm2835_gpio_lev(latch)||numSNCCRequests) { // either a node is requesting a sncc packet 
+				//  or we have more snccRequests to service
+				sendMessage(NULL,snccRequest,&numSNCCRequests);
+			} else {
+				usleep(750);
+			}
+		}
 
-      if (bcm2835_gpio_lev(latch)) {
-         j = 3;
-      }
+		allMsgProcessed=0;
 
-      //usleep(7500);
+		while (!allMsgProcessed) {
+			allMsgProcessed++;
 
-      //return;
-      
-  }
+			for(i=0;i<MCOM_MAX_NODES;i++) {
+				message ** q = outQueues[i]; 
+
+				if (*q != NULL) {
+					sendMessage(*q,snccRequest,&numSNCCRequests);         
+					if ((*q)->status == MI_STATUS_TRANSFERRED) {
+						processNodeQueue(q); 
+					}
+					allMsgProcessed=0;
+				}
+			} 
+		}
+	}
 
   bcm2835_spi_end();
 
