@@ -122,19 +122,20 @@ int checkSNCCMessages(McomOutPacket * pck) {
 // wait to be recalled if necessary.
 
 
-int sendMessage(message * q) {
+int sendMessage(message * inQueue,int * snccRequest, int * pNumSNCCRequests) {
 
 	McomInPacket pck;
-	message * outQ;
-	preProcessSNCCmessage(&pck,snccRequest,pNumSNCCRequests,&outQ);
+	message * outQueue;
+
+	preProcessSNCCmessage(&pck,snccRequest,pNumSNCCRequests,&outQueue);
 				
 	pck.preamble = MI_DOUBLE_PREAMBLE;
 	pck.cmd = MI_CMD;
 
-	if (q) {
-		pck.destinationCmd = q->destination;
-		_memcpy(pck.data,q->data,MCOM_DATA_LEN);
-		q->status = MI_STATUS_QUEUED;
+	if (inQueue) {
+		pck.destinationCmd = inQueue->destination;
+		_memcpy(pck.data,inQueue->data,MCOM_DATA_LEN);
+		inQueue->status = MI_STATUS_QUEUED;
 		int checkSum = dataCheckSum(pck.data,MCOM_DATA_LEN);
 		pck.chkSum = checkSum;
 	}
@@ -148,10 +149,10 @@ int sendMessage(message * q) {
 	printBuffer((char*)&pck,sizeof(McomInPacket));
 
 	if(pck.chkSum == checkSum) {
-		q->status = MI_STATUS_TRANSFERRED;
+		inQueue->status = MI_STATUS_TRANSFERRED;
 	} 
 
-	postProcessSNCCmessage(&pck,q,snccRequest,pNumSNCCRequests,outQ);      
+	postProcessSNCCmessage(&pck,inQueue,snccRequest,pNumSNCCRequests,outQueue);      
 }
 
 /**
