@@ -115,11 +115,18 @@ int checkSNCCMessages(McomOutPacket * pck) {
 
 
 // if q is null, send sncc request message.
+// if sncc:
+// send a packet with only sncc destination,
+// try to get the id of the slave in the first buffer byte if nothing.
+// add the byte corresponding to the masks to the lists snccrequests.
+// wait to be recalled if necessary.
+
 
 int sendMessage(message * q) {
 
 	McomInPacket pck;
-	preProcessSNCCmessage(&pck,snccRequest,pNumSNCCRequests);
+	message * outQ;
+	preProcessSNCCmessage(&pck,snccRequest,pNumSNCCRequests,&outQ);
 				
 	pck.preamble = MI_DOUBLE_PREAMBLE;
 	pck.cmd = MI_CMD;
@@ -144,7 +151,7 @@ int sendMessage(message * q) {
 		q->status = MI_STATUS_TRANSFERRED;
 	} 
 
-	postProcessSNCCmessage(&pck,q,snccRequest,pNumSNCCRequests);      
+	postProcessSNCCmessage(&pck,q,snccRequest,pNumSNCCRequests,outQ);      
 }
 
 /**
@@ -170,21 +177,6 @@ int insertNewCmds(message ** outQueues) {
 
 }
 
-// send a packet with only sncc destination,
-// try to get the id of the slave in the first buffer byte if nothing.
-// add the byte corresponding to the masks to the lists snccrequests.
-// wait to be recalled if necessary.
-
-int sendSNCCmessage(int * snccRequest, int * pNumSNCCRequests) {
-
-	McomInPacket pck;
-	preProcessSNCCmessage(&pck,snccRequest,&numSNCCRequests);
-				
-
-	postProcessSNCCmessage(&pck,*q,snccRequest,&numSNCCRequests);      
-
-
-}
         
 // check the snccrequest queue, choose the next node to signal, if any;
 int preProcessSNCCmessage(McomInPacket* pck, int * snccRequest, int * pNumSNCCRequests) {
