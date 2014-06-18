@@ -64,7 +64,8 @@ typedef struct _message {
 } message;
 
 typedef struct _McomInPacket {
-  unsigned word preamble;
+  unsigned char preamble_1;
+  unsigned char preamble_2;
   unsigned word cmd;
   unsigned char destinationCmd;
   unsigned char destinationSncc;
@@ -76,7 +77,8 @@ typedef struct _McomInPacket {
 } McomInPacket;
 
 typedef struct _McomOutPacket {
-  unsigned word preamble;
+  unsigned char preamble_1;
+  unsigned char preamble_2;
   unsigned word cmd;
   unsigned char signalMask2;
   unsigned char signalMask1;
@@ -87,6 +89,8 @@ typedef struct _McomOutPacket {
   unsigned word chkSum;
 } McomOutPacket;
 
+#define SIZEOF_MCOM_OUT_PAYLOAD  (MCOM_DATA_LEN+4*sizeof(char))
+#define SIZEOF_MCOM_OUT_HEADER   (2*sizeof(char)+sizeof(word))
 
 message * outQueues[MCOM_MAX_NODES][MCOM_NODE_QUEUE_LEN]; // ten buffer pointers per device;
 int     snccRequest[MCOM_MAX_NODES]; /// 1 if device requested sncc
@@ -125,12 +129,20 @@ int checkSNCCMessages(McomOutPacket * pck) {
 int sendMessage(message * inQueue,int * snccRequest, int * pNumSNCCRequests) {
 
 	McomInPacket pck;
+  (char)* ppck = &pck; 
 	message * outQueue;
 
-	preProcessSNCCmessage(&pck,snccRequest,pNumSNCCRequests,&outQueue);
-				
-	pck.preamble = MI_DOUBLE_PREAMBLE;
-	pck.cmd = MI_CMD;
+  pck.preamble_1 = MI_PREAMBLE;
+  pck.preamble_2 = MI_PREAMBLE;
+  pck.cmd = MI_CMD;
+
+  // send preamble and get the first answer
+  printBuffer(ppck,SIZEOF_MCOM_OUT_HEADER); bcm2835_spi_transfer (ppck,SIZEOF_MCOM_OUT_HEADER); printBuffer(ppck,SIZEOF_MCOM_OUT_HEADER);
+
+  // send first bytes to preprocess, if no sncc request is pending,
+  // we'll try to insert the request in this signalmask already
+	preProcessSNCCmessage(&pck,snccRequest,pNumSNCCRequests,outQueue);
+  ppck += SIZEOF_MCOM_OUT_HEADER;
 
 	if (inQueue) {
 		pck.destinationCmd = inQueue->destination;
@@ -138,19 +150,39 @@ int sendMessage(message * inQueue,int * snccRequest, int * pNumSNCCRequests) {
 		inQueue->status = MI_STATUS_QUEUED;
 		int checkSum = dataCheckSum(pck.data,MCOM_DATA_LEN);
 		pck.chkSum = checkSum;
-	}
+	} else {
+    pck.destinationCmd = 0;
+    pck.chkSum = 0;
+  }
+
+  if (*pNumSNCCRequests) {
+    pck.destinationSncc = outQueue->destination;
+    outQueue->status = MI_STATUS_QUEUED;
+  } else {
+    pck.destinationSncc = 0;
+    pck.snccCheckSum = 0;
+  }
 
 	pck.__reserved_1 = 0;
-	pck.__reserved_2 = 0;
+  pck.__reserved_2 = 0;
 
+  printBuffer(ppck,SIZEOF_MCOM_OUT_PAYLOAD); bcm2835_spi_transfern (ppck,SIZEOF_MCOM_OUT_PAYLOAD); printBuffer(ppck,SIZEOF_MCOM_OUT_PAYLOAD));
+  ppck += SIZEOF_MCOM_OUT_PAYLOAD;
 
-	printBuffer((char*)&pck,sizeof(McomInPacket));
-	bcm2835_spi_transfern ((char*)pck,sizeof(McomInPacket));
-	printBuffer((char*)&pck,sizeof(McomInPacket));
+  if (*pNumSNCCRequests) {
+     int checkSumSNCC = dataCheckSum(pck.data,MCOM_DATA_LEN);
+     pck.snccCheckSum = checkSumSNCC;
+  }
 
-	if(pck.chkSum == checkSum) {
+  printBuffer(ppck,SIZEOF_MCOM_OUT_CHK); bcm2835_spi_transfern (ppck,SIZEOF_MCOM_OUT_CHK);  printBuffer(ppck,SIZEOF_MCOM_OUT_CHK));
+
+	if(inQueue && (pck.chkSum == checkSum)) {
 		inQueue->status = MI_STATUS_TRANSFERRED;
 	} 
+
+  if ((*pNumSNCCRequests) && (pck.snccCheckSum == checkSumSNCC)) {
+     outQueue->status = MI_STATUS_TRANSFERRED;
+  } 
 
 	postProcessSNCCmessage(&pck,inQueue,snccRequest,pNumSNCCRequests,outQueue);      
 }
@@ -180,12 +212,12 @@ int insertNewCmds(message ** outQueues) {
 
         
 // check the snccrequest queue, choose the next node to signal, if any;
-int preProcessSNCCmessage(McomInPacket* pck, int * snccRequest, int * pNumSNCCRequests) {
+int preProcessSNCCmessage(McomOutPacket* pck, int * snccRequest, int * pNumSNCCRequests,message * outQueue) {
 
 }
 
 // update snccrequest queue, in respect to what happened during transfer.
-int postProcessSNCCmessage(McomInPacket* pck,message *q, int * snccRequest, int * pNumSNCCRequests) {
+int postProcessSNCCmessage(McomOutPacket* pck,message *q, int * snccRequest, int * pNumSNCCRequests) {
 
 
 }
