@@ -182,7 +182,7 @@ int sendMessage(message * outQueue,message * inQueues, int * pNumSNCCRequests) {
 		inQueue->status = MI_STATUS_TRANSFERRED;
 	} 
 
-	postProcessSNCCmessage(&pck,inQueues,pNumSNCCRequests,inQueue);      
+	postProcessSNCCmessage(&pck,inQueues,inQueue,pNumSNCCRequests);      
 }
 
 /**
@@ -204,6 +204,22 @@ int processNodeQueue(message ** q) {
 // process udp queue.
 int insertNewCmds(message ** outQueues) {
  
+   static message m;
+   static int i;
+   int id = 3;
+ 
+   if (!i) {
+      outQueues[MCOM_NODE_QUEUE_LEN*id] = &m;
+      m.destination = 3;
+      m.data[0] = 0x11;
+      m.data[1] = 0x22;
+      m.data[19] = 0X19;
+      m.status = 0;
+      i++;
+      return 1;
+   }
+
+   return 0;
 }
 
 		
@@ -241,8 +257,11 @@ int preProcessSNCCmessage(McomOutPacket* pck, message * inQueues,int * pNumSNCCR
 // update snccrequest queue, in respect to what happened during transfer.
 int postProcessSNCCmessage(McomOutPacket* pck,message * inQueues,message * inQueue,int * pNumSNCCRequests) {
 
+  
 	  int processedNode = 0;
 	  if (inQueue) {
+  
+
 	  	 //preprocess assigned a queue, so let's check.
 	  	 if (inQueue->status == MI_STATUS_TRANSFERRED) {
 	  	 		inQueue->status = 0;
@@ -254,22 +273,28 @@ int postProcessSNCCmessage(McomOutPacket* pck,message * inQueues,message * inQue
 	  // analyse signalmask.
 	  unsigned int i,j = 1;
 
+  
 	  *pNumSNCCRequests = 0; // recaculate num of open sncc requests
-	  
+	
+
 	  for(i=0;i<8;i++) {
+      printf("test1\n");
 	  		if (pck->signalMask1 & j) {
-	  			if (j != inQueue->destination) { // ignore signal of 'just processed' node 
+	  		printf("test4\n");
+        	if ((inQueue == NULL) || (j != inQueue->destination)) { // ignore signal of 'just processed' node 
 	  											  // (can't (already) request another one)
-	  				inQueues[j].destination = j;
-     				inQueues[j].status = SNCC_SIGNAL_RECEIVED;
+	  				inQueues[i].destination = i;
+     				inQueues[i].status = SNCC_SIGNAL_RECEIVED;
 	  			}
 	  		}
 	  		j <<= 1;
 
-	  		if (inQueues[j].status == SNCC_SIGNAL_RECEIVED) {
+	  		if (inQueues[i].status == SNCC_SIGNAL_RECEIVED) {
 	  			(*pNumSNCCRequests)++;
 	  		}
 	  }
+
+    
 
 }
 
@@ -297,12 +322,6 @@ int main(int argc, char **argv)
   message m;
   memset(&m,0,sizeof(message));
 
-  outQueues[0][0]=&m;
-  m.destination = 3;
-  m.data[0] = 0x42;
-  m.data[1] = 0x84;
-  m.data[2] = 0xff;
-  m.data[3] = 0xab;
 
   int           numSNCCRequests = 0;
   int           allMsgProcessed;
@@ -319,7 +338,6 @@ int main(int argc, char **argv)
 				usleep(750);
 			}
 		}
-
 		allMsgProcessed=0;
 
 		while (!allMsgProcessed) {
@@ -329,6 +347,7 @@ int main(int argc, char **argv)
 				message ** q = outQueues[i]; 
 
 				if (*q != NULL) {
+
 					sendMessage(*q,inQueues,&numSNCCRequests);         
 					if ((*q)->status == MI_STATUS_TRANSFERRED) {
 						processNodeQueue(q); 
