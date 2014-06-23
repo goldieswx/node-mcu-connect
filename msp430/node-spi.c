@@ -24,9 +24,11 @@
 // global declarations
 
 int action;
-#define currentNodeId             3  // id of this node
+#define currentNodeId   4          
+  // id of this node
 
 #define PROCESS_BUFFER 0x01
+#define DEBUG_PROCESS_TIMER 0x02
 
 #define MI_CMD      0x220a //    8714
 
@@ -95,6 +97,7 @@ void initMCOM();
 void mcomProcessBuffer();
 void zeroMem(void * p,int len);
 void initDebug();
+void debugProcessTimer();
 
 int main() {
 
@@ -112,6 +115,10 @@ int main() {
 	        mcomProcessBuffer(); 
 	        continue;
 	    }
+      if (action & DEBUG_PROCESS_TIMER) {
+          debugProcessTimer(); 
+          continue;
+      }
 	}
 
 }
@@ -128,6 +135,32 @@ void mcomProcessBuffer() {
        // (and will be destroyed)
      __enable_interrupt();
      return;
+
+}
+
+void debugProcessTimer() {
+
+
+    __enable_interrupt();
+    TA0CCTL1 &= 0;   // also disable timer interrupt & clear flag
+
+    TA0CTL = TASSEL_1 | MC_1 | ID_1; 
+    TA0CCTL1 = CCIE;
+
+    
+    signalMaster = 1;  // if mcom is in the middle of a receive, or not synchronized, we just set signalMasterFlag
+
+    action &= ~DEBUG_PROCESS_TIMER;
+
+    __disable_interrupt();
+    
+    // in case we are synced (out of a rescue, and not in a middle of a packet, force MISO high to signal master.)
+    //__disable_interrupt();
+    if (mcomPacketSync && (pInPacket == (unsigned char*)&inPacket)) { // not in receive state, but synced
+      UCA0TXBUF = 0x80 | currentNodeId;
+    }
+
+
 
 }
 
@@ -199,6 +232,9 @@ void initDebug() {
   P2SEL &= ~(BIT6 + BIT7);
   P2DIR |= BIT6 + BIT7;
 
+  P1DIR |= BIT0 + BIT3;
+
+
   outBuffer[0] = 0xab;
   outBuffer[1] = 0xcd;
   outBuffer[2] = 0xef;
@@ -210,8 +246,8 @@ void initDebug() {
 
     BCSCTL3 = LFXT1S_2; 
     TA0R = 0;
-    TA0CCR0 = 5000; // 1000;// 32767;              // Count to this, then interrupt;  0 to stop counting
-    TA0CTL = TASSEL_1 | MC_1  | ID_3 ;             // Clock source ACLK
+    TA0CCR0 = 100; // 1000;// 32767;              // Count to this, then interrupt;  0 to stop counting
+    TA0CTL = TASSEL_1 | MC_1  | ID_1 ;             // Clock source ACLK
     TA0CCTL1 = CCIE ;                     // Timer A interrupt enable
 
 }
@@ -231,8 +267,8 @@ void initGlobal() {
   P2SEL2 &= 0;
   P2SEL &= 0;
   
-  P2DIR |= BIT6 + BIT7;  // debug;
-  P2OUT |= BIT7;
+  P1DIR |= BIT0 + BIT3;  // debug;
+  P1OUT |= BIT3;
 }
 
 /*Node (booting up)
@@ -250,19 +286,9 @@ void initGlobal() {
 interrupt(TIMER0_A1_VECTOR) ta1_isr(void) {
 
   TA0CTL = TACLR;  // stop & clear timer
-  TA0CCTL1 &= 0;   // also disable timer interrupt & clear flag
-
-  TA0CTL = TASSEL_1 | MC_1 | ID_3; 
-  TA0CCTL1 = CCIE;
-
-  
-  signalMaster = 1;  // if mcom is in the middle of a receive, or not synchronized, we just set signalMasterFlag
-  
-  // in case we are synced (out of a rescue, and not in a middle of a packet, force MISO high to signal master.)
-  if (mcomPacketSync && (pInPacket == (unsigned char*)&inPacket)) { // not in receive state, but synced
-    UCA0TXBUF = 0x80 | currentNodeId;
-  }
-
+  TA0CCTL1 &= 0;
+  action |= DEBUG_PROCESS_TIMER;
+  __bic_SR_register_on_exit(LPM3_bits);
   return;
 } 
 
@@ -282,7 +308,7 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
             if (inPacket.destinationSncc == currentNodeId) {  // there was a sncc transfer
                 if (inPacket.snccCheckSum == outBufferCheckSum) { // successful
                     outPacket.signalMask1 = 0; // clear signal mask meaning master received the sncc buffer.
-                    P2OUT ^= BIT6;
+                    P1OUT ^= BIT0;
                 }
             }
             pInPacket = (unsigned char*)&inPacket;
@@ -296,7 +322,7 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
   		      if (inPacket.destinationCmd == currentNodeId) { // there was a mi cmd
               if (inPacket.chkSum == outPacket.chkSum) {
-                 P2OUT ^= BIT7;
+                 P1OUT ^= BIT3;
                  action |= PROCESS_BUFFER;
                   __bic_SR_register_on_exit(LPM3_bits); // exit LPM, keep global interrupts state      
               }

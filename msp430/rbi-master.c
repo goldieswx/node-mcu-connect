@@ -205,18 +205,33 @@ int processNodeQueue(message ** q) {
 int insertNewCmds(message ** outQueues) {
  
    static message m;
+   static message n;
+
    static int i;
-   int id = 3;
+   int id = 4;
  
    if (!i) {
-      outQueues[MCOM_NODE_QUEUE_LEN*id] = &m;
-      m.destination = 3;
+      /*outQueues[MCOM_NODE_QUEUE_LEN*3] = &m;
+      m.destination = 4;
       m.data[0] = 0x11;
       m.data[1] = 0x22;
       m.data[19] = 0X19;
-      m.status = 0;
+      m.status = 0;*/
+      //i++;
+
+      outQueues[(MCOM_NODE_QUEUE_LEN*4)] = &n;
+      n.destination = 4;
+      n.data[0] = 0x99;
+      n.data[1] = 0x33;
+      n.data[19] = 0X12;
+      n.status = 0;
       i++;
+
+
       return 1;
+   } else {
+     i++;
+     if (i==5000) { i=0;}
    }
 
    return 0;
@@ -230,12 +245,13 @@ int preProcessSNCCmessage(McomOutPacket* pck, message * inQueues,int * pNumSNCCR
          // do not favor a particular node, hence loop from
    	     // lastnodeService to max node, then from 0 to lastnodeSeviced
    		int i, currentNode;
-   		for (i=lastNodeServiced;i<(MCOM_MAX_NODES+lastNodeServiced);i++) {
+   		for (i=lastNodeServiced+1;i<(MCOM_MAX_NODES+lastNodeServiced+1);i++) {
    			currentNode = i%MCOM_MAX_NODES;
    			if (inQueues[currentNode].status == SNCC_SIGNAL_RECEIVED) {
+          printf("Signal received on node [%d]\n",currentNode);
    				*inQueue = &(inQueues[currentNode]);
    				(*inQueue)->destination = currentNode;
-   			}
+   			} 
    		}
    } else {
    		// nodes will squeeze their id in the preamble. 
@@ -244,7 +260,8 @@ int preProcessSNCCmessage(McomOutPacket* pck, message * inQueues,int * pNumSNCCR
 
    		if (pck->preamble_1) {
    			int probableNode = pck->preamble_1 & 0x7F; // strip off nofify bit
-   			if (pck->preamble_1 < MCOM_MAX_NODES) {
+   			if (probableNode< MCOM_MAX_NODES) {
+          printf("sncc preamble received from node: [%x]\n",probableNode);
    				*inQueue = &(inQueues[probableNode]);
    				(*inQueue)->destination = probableNode;
    				(*inQueue)->status = SNCC_PREAMBLE_RECEIVED;
@@ -264,6 +281,7 @@ int postProcessSNCCmessage(McomOutPacket* pck,message * inQueues,message * inQue
 
 	  	 //preprocess assigned a queue, so let's check.
 	  	 if (inQueue->status == MI_STATUS_TRANSFERRED) {
+          printf("SNCC Status transferred\n");
 	  	 		inQueue->status = 0;
 	  	 		processedNode = inQueue->destination;
 	  	 		lastNodeServiced = processedNode;
@@ -279,7 +297,7 @@ int postProcessSNCCmessage(McomOutPacket* pck,message * inQueues,message * inQue
 
 	  for(i=0;i<8;i++) {
 	  		if (pck->signalMask1 & j) {
-        	if ((inQueue == NULL) || (j != inQueue->destination)) { // ignore signal of 'just processed' node 
+        	if ((inQueue == NULL) || (i != inQueue->destination)) { // ignore signal of 'just processed' node 
 	  											  // (can't (already) request another one)
 	  				inQueues[i].destination = i;
      				inQueues[i].status = SNCC_SIGNAL_RECEIVED;
