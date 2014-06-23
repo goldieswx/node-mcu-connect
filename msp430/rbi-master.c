@@ -278,9 +278,7 @@ int postProcessSNCCmessage(McomOutPacket* pck,message * inQueues,message * inQue
 	
 
 	  for(i=0;i<8;i++) {
-      printf("test1\n");
 	  		if (pck->signalMask1 & j) {
-	  		printf("test4\n");
         	if ((inQueue == NULL) || (j != inQueue->destination)) { // ignore signal of 'just processed' node 
 	  											  // (can't (already) request another one)
 	  				inQueues[i].destination = i;

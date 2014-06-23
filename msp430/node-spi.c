@@ -204,14 +204,14 @@ void initDebug() {
   outBuffer[2] = 0xef;
   outBuffer[3] = 0x99;
   outBuffer[19] = 0xff;
-  outBuffer[20] = 0x34; 
-  outBufferCheckSum = 0x7834;
+  outBuffer[20] = 0xff; 
+  outBufferCheckSum = 0x3ff;
   signalMaster = 1; 
 
     BCSCTL3 = LFXT1S_2; 
     TA0R = 0;
     TA0CCR0 = 5000; // 1000;// 32767;              // Count to this, then interrupt;  0 to stop counting
-    TA0CTL = TASSEL_1 | MC_1 | ID_3 ;             // Clock source ACLK
+    TA0CTL = TASSEL_1 | MC_1  | ID_3 ;             // Clock source ACLK
     TA0CCTL1 = CCIE ;                     // Timer A interrupt enable
 
 }
@@ -252,7 +252,7 @@ interrupt(TIMER0_A1_VECTOR) ta1_isr(void) {
   TA0CTL = TACLR;  // stop & clear timer
   TA0CCTL1 &= 0;   // also disable timer interrupt & clear flag
 
-  TA0CTL = TASSEL_1 | MC_1 | ID_1 ; 
+  TA0CTL = TASSEL_1 | MC_1 | ID_3; 
   TA0CCTL1 = CCIE;
 
   
@@ -346,7 +346,7 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
              } 
              if ((!preserveInBuffer) && (inPacket.destinationCmd == currentNodeId)) 
              {   // also send cmd chk if it's its turn and if we are not busy 
-                outPacket.chkSum = checkSum;
+                outPacket.chkSum = checkSum + (*pInPacket);
              } else {
                 outPacket.chkSum = 0;
              }
