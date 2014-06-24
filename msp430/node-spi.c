@@ -298,17 +298,17 @@ interrupt(TIMER0_A1_VECTOR) ta1_isr(void) {
 interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
   unsigned char savepInPacket = (*pInPacket); 
+
+   if (UCA0STAT & UCOE) {
+	// buffer overrun occured
+	mcomPacketSync = 0;
+   }
+
   (*pInPacket) = UCA0RXBUF;
  
       if (mcomPacketSync) {
 
-	     if (UCA0STAT & UCOE) {
-		// buffer overrun occured
-		mcomPacketSync = 0;
-		return;
-	     }
 	     UCA0TXBUF = (*pOutPacket++);
-
 
         /* case pckBndPacketEnd */
 	      if (pInPacket==pckBndPacketEnd) { 
