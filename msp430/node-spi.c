@@ -157,7 +157,9 @@ void debugProcessTimer() {
     // in case we are synced (out of a rescue, and not in a middle of a packet, force MISO high to signal master.)
     //__disable_interrupt();
     if (mcomPacketSync && (pInPacket == (unsigned char*)&inPacket)) { // not in receive state, but synced
-      UCA0TXBUF = 0x80 | currentNodeId;
+      if (UCA0TXIFG) {
+      	UCA0TXBUF = 0x80 | currentNodeId;
+      }
     }
 
 
@@ -255,8 +257,8 @@ void initDebug() {
 void initGlobal() {
 
   WDTCTL = WDTPW + WDTHOLD;   // Stop watchdog timer
-  BCSCTL1 = CALBC1_8MHZ;
-  DCOCTL = CALDCO_8MHZ;
+  BCSCTL1 = CALBC1_12MHZ;
+  DCOCTL = CALDCO_12MHZ;
   BCSCTL3 |= LFXT1S_2;                      // Set clock source to VLO (low power osc for timer)
 
   P1REN &= 0; 
@@ -298,8 +300,15 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
   unsigned char savepInPacket = (*pInPacket); 
   (*pInPacket) = UCA0RXBUF;
  
-	if (mcomPacketSync) {
-      UCA0TXBUF = (*pOutPacket++);
+      if (mcomPacketSync) {
+
+	     if (UCA0STAT & UCOE) {
+		// buffer overrun occured
+		mcomPacketSync = 0;
+		return;
+	     }
+	     UCA0TXBUF = (*pOutPacket++);
+
 
         /* case pckBndPacketEnd */
 	      if (pInPacket==pckBndPacketEnd) { 
@@ -336,7 +345,7 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
                   outPacket.signalMask1 |= (signalMaster << currentNodeId);
                   signalMaster = 0;
               } else {
-                  mcomPacketSync--;
+                  mcomPacketSync = 0;
                   preserveInBuffer = 0;
               }
             goto afterChecks;
