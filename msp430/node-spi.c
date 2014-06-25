@@ -136,7 +136,7 @@ void mcomProcessBuffer() {
 }
 
 
-void signalMaster() {
+void _signalMaster() {
 	
   outBuffer[0] = 0xab;
   outBuffer[1] = 0xcd;
