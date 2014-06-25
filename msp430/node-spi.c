@@ -20,13 +20,16 @@
 #include "msp430g2553.h"
 #include <legacymsp430.h>
 
+#define node2_0 1
 
 // global declarations
 
 int action;
-#define currentNodeId             3  // id of this node
+#define currentNodeId   3
+  // id of this node
 
 #define PROCESS_BUFFER 0x01
+
 
 #define MI_CMD      0x220a //    8714
 
@@ -96,11 +99,18 @@ void mcomProcessBuffer();
 void zeroMem(void * p,int len);
 void initDebug();
 
+//// extension related
+void initADCE();
+void checkADC(); 
+char transfer(char s); 
+
+
 int main() {
 
 	initGlobal();
 	initMCOM();
   initDebug();
+  initADCE();
 
 	while(1) {
 	     __enable_interrupt();
@@ -129,6 +139,31 @@ void mcomProcessBuffer() {
      __enable_interrupt();
      return;
 
+}
+
+
+void _signalMaster() {
+	
+  outBuffer[0] = 0xab;
+  outBuffer[1] = 0xcd;
+  outBuffer[2] = 0xef;
+  outBuffer[3] = 0x99;
+  outBuffer[19] = 0xff;
+  outBuffer[20] = 0xff; 
+  outBufferCheckSum = 0x3ff;
+
+    __disable_interrupt();	
+
+    signalMaster = 1;
+    // in case we are synced (out of a rescue, and not in a middle of a packet, force MISO high to signal master.)
+    //__disable_interrupt();
+    if (mcomPacketSync && (pInPacket == (unsigned char*)&inPacket)) { // not in receive state, but synced
+      if (UCA0TXIFG) {
+      	UCA0TXBUF = 0x80 | currentNodeId;
+      }
+    }
+
+	
 }
 
 
@@ -194,33 +229,22 @@ void initMCOM() {
 
 void initDebug() {
 
+#ifdef node2_0
   P2OUT &= ~(BIT6 + BIT7);
   P2SEL2 &= ~(BIT6 + BIT7);
   P2SEL &= ~(BIT6 + BIT7);
   P2DIR |= BIT6 + BIT7;
-
-  outBuffer[0] = 0xab;
-  outBuffer[1] = 0xcd;
-  outBuffer[2] = 0xef;
-  outBuffer[3] = 0x99;
-  outBuffer[19] = 0xff;
-  outBuffer[20] = 0x34; 
-  outBufferCheckSum = 0x7834;
-  signalMaster = 1; 
-
-    BCSCTL3 = LFXT1S_2; 
-    TA0R = 0;
-    TA0CCR0 = 5000; // 1000;// 32767;              // Count to this, then interrupt;  0 to stop counting
-    TA0CTL = TASSEL_1 | MC_1 | ID_3 ;             // Clock source ACLK
-    TA0CCTL1 = CCIE ;                     // Timer A interrupt enable
+#else
+  P1DIR |= BIT0 + BIT3;
+#endif
 
 }
 
 void initGlobal() {
 
   WDTCTL = WDTPW + WDTHOLD;   // Stop watchdog timer
-  BCSCTL1 = CALBC1_8MHZ;
-  DCOCTL = CALDCO_8MHZ;
+  BCSCTL1 = CALBC1_12MHZ;
+  DCOCTL = CALDCO_12MHZ;
   BCSCTL3 |= LFXT1S_2;                      // Set clock source to VLO (low power osc for timer)
 
   P1REN &= 0; 
@@ -230,9 +254,14 @@ void initGlobal() {
 
   P2SEL2 &= 0;
   P2SEL &= 0;
-  
+
+#ifdef node2_0  
   P2DIR |= BIT6 + BIT7;  // debug;
   P2OUT |= BIT7;
+#else
+  P1DIR |= BIT0 + BIT3;  // debug;
+  P1OUT |= BIT3;
+#endif
 }
 
 /*Node (booting up)
@@ -247,33 +276,22 @@ void initGlobal() {
   
   => [bfr sncc to 2] ->  reponse with answer correponding to cmdid signalled
   */
-interrupt(TIMER0_A1_VECTOR) ta1_isr(void) {
-
-  TA0CTL = TACLR;  // stop & clear timer
-  TA0CCTL1 &= 0;   // also disable timer interrupt & clear flag
-
-  TA0CTL = TASSEL_1 | MC_1 | ID_1 ; 
-  TA0CCTL1 = CCIE;
-
-  
-  signalMaster = 1;  // if mcom is in the middle of a receive, or not synchronized, we just set signalMasterFlag
-  
-  // in case we are synced (out of a rescue, and not in a middle of a packet, force MISO high to signal master.)
-  if (mcomPacketSync && (pInPacket == (unsigned char*)&inPacket)) { // not in receive state, but synced
-    UCA0TXBUF = 0x80 | currentNodeId;
-  }
-
-  return;
-} 
 
 // INTERRUPTS
 interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
   unsigned char savepInPacket = (*pInPacket); 
+
+   if (UCA0STAT & UCOE) {
+	// buffer overrun occured
+	mcomPacketSync = 0;
+   }
+
   (*pInPacket) = UCA0RXBUF;
  
-	if (mcomPacketSync) {
-      UCA0TXBUF = (*pOutPacket++);
+      if (mcomPacketSync) {
+
+	     UCA0TXBUF = (*pOutPacket++);
 
         /* case pckBndPacketEnd */
 	      if (pInPacket==pckBndPacketEnd) { 
@@ -282,7 +300,12 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
             if (inPacket.destinationSncc == currentNodeId) {  // there was a sncc transfer
                 if (inPacket.snccCheckSum == outBufferCheckSum) { // successful
                     outPacket.signalMask1 = 0; // clear signal mask meaning master received the sncc buffer.
-                    P2OUT ^= BIT6;
+
+                    #ifdef node2_0  
+                      P2OUT ^= BIT6;
+                    #else
+                      P1OUT ^= BIT0;
+                    #endif
                 }
             }
             pInPacket = (unsigned char*)&inPacket;
@@ -296,7 +319,11 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
   		      if (inPacket.destinationCmd == currentNodeId) { // there was a mi cmd
               if (inPacket.chkSum == outPacket.chkSum) {
-                 P2OUT ^= BIT7;
+                   #ifdef node2_0  
+                      P2OUT ^= BIT7;
+                    #else
+                      P1OUT ^= BIT3;
+                    #endif
                  action |= PROCESS_BUFFER;
                   __bic_SR_register_on_exit(LPM3_bits); // exit LPM, keep global interrupts state      
               }
@@ -310,8 +337,10 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
                   outPacket.signalMask1 |= (signalMaster << currentNodeId);
                   signalMaster = 0;
               } else {
-                  mcomPacketSync--;
+                  mcomPacketSync = 0;
                   preserveInBuffer = 0;
+                  inPacket.preamble =0;
+                  inPacket.cmd = 0;
               }
             goto afterChecks;
         }
@@ -346,7 +375,7 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
              } 
              if ((!preserveInBuffer) && (inPacket.destinationCmd == currentNodeId)) 
              {   // also send cmd chk if it's its turn and if we are not busy 
-                outPacket.chkSum = checkSum;
+                outPacket.chkSum = checkSum + (*pInPacket);
              } else {
                 outPacket.chkSum = 0;
              }
@@ -384,4 +413,136 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
 	}
   return;
+}
+
+
+/// Extension related stuff
+
+
+#define MOSI  BIT7 
+#define MISO  BIT6
+#define SCK   BIT5
+
+#define CS_NOTIFY_MASTER  BIT3   // External Interrupt 
+#define CS_INCOMING_PACKET  BIT4   // Master enable the line before sending
+
+#define ADC_CHECK      0x02
+
+interrupt(PORT2_VECTOR) p2_isr(void) {
+
+  //__enable_interrupt();
+  if (P2IFG & CS_NOTIFY_MASTER) {
+    P2IE &= ~CS_NOTIFY_MASTER;
+    action |= ADC_CHECK;
+    __bic_SR_register_on_exit(LPM3_bits /*+ GIE*/); // exit LPM     
+  }
+
+  return;
+  
+} 
+
+
+/**
+ *  ADCE Related 
+ */
+
+void initADCE() {
+    
+  P2DIR &= ~CS_NOTIFY_MASTER ;
+  P2DIR |= CS_INCOMING_PACKET;
+  P2IE |=  CS_NOTIFY_MASTER ; 
+  P2IES &= ~CS_NOTIFY_MASTER ;    
+
+  P2REN |=  CS_INCOMING_PACKET;
+
+  // UARTB 
+  // Comm channel with extentions
+  
+  P1DIR |= BIT5 | BIT7;
+  P1DIR &= ~BIT6;
+
+  //power the extension
+  P1DIR |= BIT3;
+  P1OUT |= BIT3;
+
+}
+
+void checkADC() {
+    
+
+    P2IE &= ~CS_NOTIFY_MASTER;
+    P2IFG |= CS_NOTIFY_MASTER;    // Just preacaution, we will soon enable interrupts, make sure we don't allow reenty.
+    __enable_interrupt();         // Our process is low priority, only listenning to master spi is the priority.
+    
+    action &= ~ADC_CHECK;         // Clear current action flag.
+    
+ //   P2OUT ^= BIT7;  // debug        // ADC Extension (ADCE) is a module ocnnected thru USCI-B and two GPIO pins
+    P2OUT |= CS_INCOMING_PACKET;    // Warn ADCE that we are about to start an spi transfer.
+    
+    // delayCyclesProcessBuffer(20); // Give some time to ADCE to react
+    __delay_cycles(7500);
+
+
+    unsigned char c[16];
+    unsigned char * p = c;
+    
+    *p = transfer(0);               // Get Packet length from ADCE
+    
+    int len = *p++ & 0b00001111;
+
+    __delay_cycles(3000);
+
+    while (len--) {
+        *p++ = transfer(0);
+        __delay_cycles(3000);
+    }
+
+
+    //lastresp[16] = c[0];            // Temporarily set the response somewhere (FIX)
+    //lastresp[17] = c[1];
+    //lastresp[18] = c[2];
+    //lastresp[19] = 0x07;
+
+    // action |= SIGNAL_MASTER;        // Inform master we have some data to transmit.
+    _signalMaster();
+
+    __disable_interrupt();
+
+
+}
+
+char transfer(char s) {
+
+    unsigned char ret=0;
+    int i;
+
+    for(i=0;i<8;i++) {
+
+        P1OUT |= SCK;
+        __delay_cycles( 20 );
+
+        ret <<= 1;
+        // Put bits on the line, most significant bit first.
+        if(s & 0x80) {
+              P1OUT |= MOSI;
+        } else {
+              P1OUT &= ~MOSI;
+        }
+        s <<= 1;
+
+        // Pulse the clock low and wait to send the bit.  According to
+         // the data sheet, data is transferred on the rising edge.
+        P1OUT &= ~SCK;
+        __delay_cycles( 20 );
+
+        // Send the clock back high and wait to set the next bit.  
+        if (P1IN & MISO) {
+          ret |= 0x01;
+        } else {
+          ret &= 0xFE;
+        }
+
+    }
+    return ret; 
+
 }
