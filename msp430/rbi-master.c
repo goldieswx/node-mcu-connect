@@ -211,12 +211,13 @@ int insertNewCmds(message ** outQueues) {
    int id = 4;
  
    if (!i) {
-      /*outQueues[MCOM_NODE_QUEUE_LEN*3] = &m;
-      m.destination = 4;
+      outQueues[MCOM_NODE_QUEUE_LEN*3] = &m;
+      m.destination = 3;
       m.data[0] = 0x11;
       m.data[1] = 0x22;
       m.data[19] = 0X19;
-      m.status = 0;*/
+      m.status = 0;
+
       //i++;
 
       outQueues[(MCOM_NODE_QUEUE_LEN*4)] = &n;

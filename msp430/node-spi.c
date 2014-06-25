@@ -20,11 +20,12 @@
 #include "msp430g2553.h"
 #include <legacymsp430.h>
 
+#define node2_0 1
 
 // global declarations
 
 int action;
-#define currentNodeId   4          
+#define currentNodeId   3
   // id of this node
 
 #define PROCESS_BUFFER 0x01
@@ -229,13 +230,14 @@ void initMCOM() {
 
 void initDebug() {
 
+#ifdef node2_0
   P2OUT &= ~(BIT6 + BIT7);
   P2SEL2 &= ~(BIT6 + BIT7);
   P2SEL &= ~(BIT6 + BIT7);
   P2DIR |= BIT6 + BIT7;
-
+#else
   P1DIR |= BIT0 + BIT3;
-
+#endif
 
   outBuffer[0] = 0xab;
   outBuffer[1] = 0xcd;
@@ -248,7 +250,7 @@ void initDebug() {
 
     BCSCTL3 = LFXT1S_2; 
     TA0R = 0;
-    TA0CCR0 = 100; // 1000;// 32767;              // Count to this, then interrupt;  0 to stop counting
+    TA0CCR0 = 50; // 1000;// 32767;              // Count to this, then interrupt;  0 to stop counting
     TA0CTL = TASSEL_1 | MC_1  | ID_1 ;             // Clock source ACLK
     TA0CCTL1 = CCIE ;                     // Timer A interrupt enable
 
@@ -268,9 +270,14 @@ void initGlobal() {
 
   P2SEL2 &= 0;
   P2SEL &= 0;
-  
+
+#ifdef node2_0  
+  P2DIR |= BIT6 + BIT7;  // debug;
+  P2OUT |= BIT7;
+#else
   P1DIR |= BIT0 + BIT3;  // debug;
   P1OUT |= BIT3;
+#endif
 }
 
 /*Node (booting up)
@@ -317,7 +324,12 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
             if (inPacket.destinationSncc == currentNodeId) {  // there was a sncc transfer
                 if (inPacket.snccCheckSum == outBufferCheckSum) { // successful
                     outPacket.signalMask1 = 0; // clear signal mask meaning master received the sncc buffer.
-                    P1OUT ^= BIT0;
+
+                    #ifdef node2_0  
+                      P2OUT ^= BIT6;
+                    #else
+                      P1OUT ^= BIT0;
+                    #endif
                 }
             }
             pInPacket = (unsigned char*)&inPacket;
@@ -331,7 +343,11 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
   		      if (inPacket.destinationCmd == currentNodeId) { // there was a mi cmd
               if (inPacket.chkSum == outPacket.chkSum) {
-                 P1OUT ^= BIT3;
+                   #ifdef node2_0  
+                      P2OUT ^= BIT7;
+                    #else
+                      P1OUT ^= BIT3;
+                    #endif
                  action |= PROCESS_BUFFER;
                   __bic_SR_register_on_exit(LPM3_bits); // exit LPM, keep global interrupts state      
               }
@@ -347,6 +363,8 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
               } else {
                   mcomPacketSync = 0;
                   preserveInBuffer = 0;
+                  inPacket.preamble =0;
+                  inPacket.cmd = 0;
               }
             goto afterChecks;
         }
