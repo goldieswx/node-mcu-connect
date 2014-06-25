@@ -26,6 +26,7 @@
 #include <unistd.h>
 #include <stdlib.h> 
 #include <string.h>
+#include <sys/time.h>
 
 #define word short
 #define latch  RPI_GPIO_P1_22
@@ -48,6 +49,9 @@
 
 #define MI_STATUS_QUEUED 0x03
 #define MI_STATUS_TRANSFERRED 0x04
+#define MI_STATUS_DROPPED 0x08
+
+
 #define SNCC_SIGNAL_RECEIVED  0x05
 #define SNCC_PREAMBLE_RECEIVED 0x06
 
@@ -55,14 +59,17 @@
 #define MCOM_NODE_QUEUE_LEN 10
 #define MCOM_MAX_NODES 16
 
+#define MAX_TRANSFER_ERRORS_MESSAGE  100
+
 
 typedef struct _message {
 	unsigned char data [MCOM_DATA_LEN] ;
-	int  expectedChecksum;
-	int  receivedChecksum;
-	int  status;
-	int  transferError;
-	int  destination;
+	int   expectedChecksum;
+	int   receivedChecksum;
+	int   status;
+	int   transferError;
+	int   destination;
+	unsigned long  noRetryUntil;
 } message;
 
 typedef struct _McomInPacket {
@@ -109,8 +116,29 @@ int dataCheckSum (unsigned char * req, int reqLen);
 
 /* impl */
 int onMessageReceived(message * q) {
-  debugMessage(q);
+	debugMessage(q);
 }
+
+unsigned long getTickCount() {
+
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+	return (tv.tv_sec * 1000) + (tv.tv_usec / 1000);
+
+}
+
+void setRetryDelay(message * q) {
+
+ 	q->noRetryUntil = getTickCount()+50;
+
+}
+
+int canRetry(message *q) {
+
+	return q && (!(*q->transferError) || (getTickCount() >= q->noRetryUntil));
+
+}
+
 
 // if q is null, send sncc request message.
 // if sncc:
@@ -146,6 +174,8 @@ int sendMessage(message * outQueue,message * inQueues, int * pNumSNCCRequests) {
 		outQueue->status = MI_STATUS_QUEUED;
 		checkSum = dataCheckSum(pck.data,MCOM_DATA_LEN);
 		pck.chkSum = checkSum;
+		outQueue->transferError = 0;
+		outQueue->noRetryUntil = 0;
 	} else {
 		pck.destinationCmd = 0;
 		pck.chkSum = 0;
@@ -173,8 +203,13 @@ int sendMessage(message * outQueue,message * inQueues, int * pNumSNCCRequests) {
 
 	printBuffer(ppck,SIZEOF_MCOM_OUT_CHK); bcm2835_spi_transfern (ppck,SIZEOF_MCOM_OUT_CHK);  printBuffer(ppck,SIZEOF_MCOM_OUT_CHK);
 
-	if(outQueue && (pck.chkSum == checkSum)) {
-		outQueue->status = MI_STATUS_TRANSFERRED;
+	if(outQueue)
+		if (pck.chkSum == checkSum)) {
+			outQueue->status = MI_STATUS_TRANSFERRED;
+		} else {
+			outQueue->transferError++;
+			setRetryDelay(outQueue);
+		}
 	} 
 
 	if (inQueue && (pck.snccCheckSum == checkSumSNCC)) {
@@ -191,13 +226,31 @@ int sendMessage(message * outQueue,message * inQueues, int * pNumSNCCRequests) {
 int processNodeQueue(message ** q) {
 	int i;
 	// pop first valid pointer which message has been transferred 
-	if ((*q) && (*q)->status == MI_STATUS_TRANSFERRED) {
-	  
+	if ((*q) && (((*q)->status == MI_STATUS_TRANSFERRED) || ((*q)->status == MI_STATUS_DROPPED))) {
 		for (i=1;i<MCOM_NODE_QUEUE_LEN;i++) {
 		  *q++ = *(q+1);
 		}
 		*q = NULL;
 	} 
+
+}
+
+
+void dropMessageOnExcessiveErrors (message ** q) {
+
+	if (*q) {
+		if ((*q)->transferError >= MAX_TRANSFER_ERRORS_MESSAGE) {
+			 *q->status = MI_STATUS_DROPPED;
+			 onMessageDropped(*q);
+			 processNodeQueue(q);
+		}
+	}
+
+}
+
+
+void onMessageDropped (message *q) {
+
 
 }
 
@@ -358,19 +411,33 @@ int main(int argc, char **argv)
 		allMsgProcessed=0;
 
 		while (!allMsgProcessed) {
+			
 			allMsgProcessed++;
+			
+			int transferErrorsPresent = 0;
+			int onlyTransferErrors = 1;
 
 			for(i=0;i<MCOM_MAX_NODES;i++) {
 				message ** q = outQueues[i]; 
 
 				if (*q != NULL) {
-
-					sendMessage(*q,inQueues,&numSNCCRequests);         
+					if(canRetry(*q)) sendMessage(*q,inQueues,&numSNCCRequests);         
 					if ((*q)->status == MI_STATUS_TRANSFERRED) {
 						processNodeQueue(q); 
+						onlyTransferErrors = 0;
+					} else {
+						transferErrorsPresent += (*q)->transferError;
+						dropMessageOnExcessiveErrors(q);
 					}
+					
 					allMsgProcessed=0;
 				}
+			}
+			if (transferErrorsPresent) {
+				if (onlyTransferErrors) {
+					insertNewCmds((message**)outQueues);
+					usleep(750); 
+				} 
 			} 
 		}
 	}
