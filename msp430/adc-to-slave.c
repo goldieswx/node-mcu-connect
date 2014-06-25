@@ -77,6 +77,7 @@ void checkDAC() {
         pbfr = bfr;
         P2OUT |= CS_NOTIFY_MASTER;
         lastValue = readValue;
+
         return;
       }
    }
@@ -105,10 +106,16 @@ int main(void)
     P2DIR = CS_NOTIFY_MASTER | BIT5;
     P2DIR &= ~CS_INCOMING_PACKET;
     P2OUT &= 0;
-    P2IE  = CS_INCOMING_PACKET;
-    P2IES &= 0;
-    P2REN |= CS_NOTIFY_MASTER;
 
+
+    P2REN = 0;
+//    P2REN |= CS_INCOMING_PACKET;
+    P2SEL = 0;
+    P2SEL2 = 0;
+    P2IES &= 0;
+    P2IFG = 0;
+    P2IE  = CS_INCOMING_PACKET;
+   
     P1SEL =   BIT1 + BIT5 + BIT6 + BIT7 ; 
     P1SEL2 =   BIT5 + BIT6 + BIT7 ;
 
@@ -121,10 +128,10 @@ int main(void)
     //UCB0TXBUF = 0x32;                         // We do not want to ouput anything on the line
     UCB0TXBUF = 0x00;
 
-    BCSCTL3 |= LFXT1S_2; 
+    BCSCTL3 = LFXT1S_2; 
 
     TA0R = 0;
-    TA0CCR0 = 300; // 1000;// 32767;              // Count to this, then interrupt;  0 to stop counting
+    TA0CCR0 = 2000; // 1000;// 32767;              // Count to this, then interrupt;  0 to stop counting
     TA0CTL = TASSEL_1 | MC_1 ;             // Clock source ACLK
     TA0CCTL1 = CCIE ;                     // Timer A interrupt enable
 
@@ -160,7 +167,7 @@ interrupt(ADC10_VECTOR) ADC10_ISR (void) {
 interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
    UCB0TXBUF = *pbfr++;      
-
+      
       if (pbfr == bfrBoundary) {
             IE2 &= ~UCB0RXIE;              // Disable SPI interrupt     
             P2IFG &= ~CS_INCOMING_PACKET;   // clear master notification interrupt flag        
@@ -169,11 +176,8 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
             TA0CTL = TASSEL_1 | MC_1;  // enable timer.
             TA0CCTL1 = CCIE;
 
-            __bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM
-
             pbfr = bfr;
-            bfrBoundary = bfr;
-
+           // bfrBoundary = bfr;
       }
   
   IFG2 &= ~UCB0RXIFG;   // clear current interrupt flag
@@ -184,17 +188,31 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 interrupt(PORT2_VECTOR) P2_ISR(void) {
 
    if(P2IFG & CS_INCOMING_PACKET) {         // slave is ready to transmit, enable the SPI interrupt
+    if (P2OUT & CS_NOTIFY_MASTER) {   // did we notify master in the first place ?
        if (!(P2IES & CS_INCOMING_PACKET)) { // check raising edge
-          if (P2OUT & CS_NOTIFY_MASTER) {   // did we notify master in the first place ?
-              if (pbfr != bfrBoundary) {
-                //IFG2 &= ~UCB0RXIFG;
+              
+
+                IFG2 &= ~UCB0RXIFG;
                 IE2 |= UCB0RXIE;              // enable spi interrupt
                 UCB0TXBUF = *pbfr;           // prepare first byte
-              }
+                P2IES |= CS_INCOMING_PACKET;
           }
-       } 
+         else {
+            IE2 &= ~UCB0RXIE;              // Disable SPI interrupt     
+            
+            TA0CTL = TASSEL_1 | MC_1;  // enable timer.
+            TA0CCTL1 = CCIE;
+
+            pbfr = bfr;
+            bfrBoundary = bfr;
+            P2IES &= 0;
+            P2OUT &= ~CS_NOTIFY_MASTER;    // Bring notify line low
+        
+       }
+      }
     }
-   
+
+   P2IFG &= ~CS_INCOMING_PACKET;   // clear master notification interrupt flag        
    return;
 }
 

@@ -29,6 +29,7 @@ int action;
   // id of this node
 
 #define PROCESS_BUFFER 0x01
+#define ADC_CHECK      0x02
 
 
 #define MI_CMD      0x220a //    8714
@@ -122,6 +123,10 @@ int main() {
 	        mcomProcessBuffer(); 
 	        continue;
 	    }
+      if (action & ADC_CHECK) {
+          checkADC(); 
+          continue;
+      }
 	}
 
 }
@@ -144,13 +149,20 @@ void mcomProcessBuffer() {
 
 void _signalMaster() {
 	
-  outBuffer[0] = 0xab;
+ /* outBuffer[0] = 0xab;
   outBuffer[1] = 0xcd;
   outBuffer[2] = 0xef;
   outBuffer[3] = 0x99;
   outBuffer[19] = 0xff;
   outBuffer[20] = 0xff; 
-  outBufferCheckSum = 0x3ff;
+  outBufferCheckSum = 0x3ff; */
+    int i;
+    unsigned int chk = 0;
+    for (i=0;i<20;i++) {
+      chk += outBuffer[i];
+    }
+    outBuffer[20] = chk & 0xFF;
+    outBufferCheckSum = chk;
 
     __disable_interrupt();	
 
@@ -451,9 +463,10 @@ void initADCE() {
   P2DIR &= ~CS_NOTIFY_MASTER ;
   P2DIR |= CS_INCOMING_PACKET;
   P2IE |=  CS_NOTIFY_MASTER ; 
-  P2IES &= ~CS_NOTIFY_MASTER ;    
+  P2IES &= ~CS_NOTIFY_MASTER ;  
+  P2OUT &= ~CS_INCOMING_PACKET;  
 
-  P2REN |=  CS_INCOMING_PACKET;
+  P2REN |=  CS_NOTIFY_MASTER;
 
   // UARTB 
   // Comm channel with extentions
@@ -476,11 +489,13 @@ void checkADC() {
     
     action &= ~ADC_CHECK;         // Clear current action flag.
     
- //   P2OUT ^= BIT7;  // debug        // ADC Extension (ADCE) is a module ocnnected thru USCI-B and two GPIO pins
+    P2OUT ^= BIT6;  // debug        // ADC Extension (ADCE) is a module ocnnected thru USCI-B and two GPIO pins
+  
+  __delay_cycles(10000);
     P2OUT |= CS_INCOMING_PACKET;    // Warn ADCE that we are about to start an spi transfer.
     
     // delayCyclesProcessBuffer(20); // Give some time to ADCE to react
-    __delay_cycles(7500);
+    __delay_cycles(10000);
 
 
     unsigned char c[16];
@@ -488,14 +503,24 @@ void checkADC() {
     
     *p = transfer(0);               // Get Packet length from ADCE
     
-    int len = *p++ & 0b00001111;
+    int len = 5;//*p++ & 0b00001111;
+    int xlen = len;
 
-    __delay_cycles(3000);
+    __delay_cycles(10000);
 
     while (len--) {
         *p++ = transfer(0);
-        __delay_cycles(3000);
+        __delay_cycles(10000);
+        P2OUT ^= BIT7;
     }
+
+    outBuffer[0] = 0x15;
+    outBuffer[1] = c[0];
+    outBuffer[2] = c[1];
+    outBuffer[3] = c[2];
+    outBuffer[4] = c[3];
+    outBuffer[5] = 0x55;
+    outBuffer[6] = xlen;    
 
 
     //lastresp[16] = c[0];            // Temporarily set the response somewhere (FIX)
@@ -504,9 +529,16 @@ void checkADC() {
     //lastresp[19] = 0x07;
 
     // action |= SIGNAL_MASTER;        // Inform master we have some data to transmit.
-    _signalMaster();
-
+    __delay_cycles(10000);
+ 
     __disable_interrupt();
+    P2IE |= CS_NOTIFY_MASTER;
+    P2IFG |= CS_NOTIFY_MASTER;    // Just preacaution, we will soon enable interrupts, make sure we don't allow reenty.
+    P2OUT &= ~CS_INCOMING_PACKET;  
+  
+    
+    _signalMaster();
+   
 
 
 }
@@ -519,7 +551,7 @@ char transfer(char s) {
     for(i=0;i<8;i++) {
 
         P1OUT |= SCK;
-        __delay_cycles( 20 );
+        __delay_cycles( 200 );
 
         ret <<= 1;
         // Put bits on the line, most significant bit first.
@@ -533,7 +565,7 @@ char transfer(char s) {
         // Pulse the clock low and wait to send the bit.  According to
          // the data sheet, data is transferred on the rising edge.
         P1OUT &= ~SCK;
-        __delay_cycles( 20 );
+        __delay_cycles( 200 );
 
         // Send the clock back high and wait to set the next bit.  
         if (P1IN & MISO) {

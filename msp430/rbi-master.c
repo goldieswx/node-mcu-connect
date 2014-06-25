@@ -116,8 +116,18 @@ int dataCheckSum (unsigned char * req, int reqLen);
 
 /* impl */
 int onMessageReceived(message * q) {
-	debugMessage(q);
+
+  printf("Received\n");
+  debugMessage(q);
+	
 }
+
+int onMessageSent(message * q) {
+
+  printf("Transferred\n");
+
+}
+
 
 unsigned long getTickCount() {
 
@@ -135,7 +145,7 @@ void setRetryDelay(message * q) {
 
 int canRetry(message *q) {
 
-	return q && (!(*q->transferError) || (getTickCount() >= q->noRetryUntil));
+	return q && (!(q->transferError) || (getTickCount() >= q->noRetryUntil));
 
 }
 
@@ -174,8 +184,6 @@ int sendMessage(message * outQueue,message * inQueues, int * pNumSNCCRequests) {
 		outQueue->status = MI_STATUS_QUEUED;
 		checkSum = dataCheckSum(pck.data,MCOM_DATA_LEN);
 		pck.chkSum = checkSum;
-		outQueue->transferError = 0;
-		outQueue->noRetryUntil = 0;
 	} else {
 		pck.destinationCmd = 0;
 		pck.chkSum = 0;
@@ -203,9 +211,10 @@ int sendMessage(message * outQueue,message * inQueues, int * pNumSNCCRequests) {
 
 	printBuffer(ppck,SIZEOF_MCOM_OUT_CHK); bcm2835_spi_transfern (ppck,SIZEOF_MCOM_OUT_CHK);  printBuffer(ppck,SIZEOF_MCOM_OUT_CHK);
 
-	if(outQueue)
-		if (pck.chkSum == checkSum)) {
+	if(outQueue) {
+		if (pck.chkSum == checkSum) {
 			outQueue->status = MI_STATUS_TRANSFERRED;
+      onMessageSent(outQueue);
 		} else {
 			outQueue->transferError++;
 			setRetryDelay(outQueue);
@@ -215,6 +224,7 @@ int sendMessage(message * outQueue,message * inQueues, int * pNumSNCCRequests) {
 	if (inQueue && (pck.snccCheckSum == checkSumSNCC)) {
 		_memcpy(inQueue->data,pck.data,MCOM_DATA_LEN);
 		inQueue->status = MI_STATUS_TRANSFERRED;
+    onMessageReceived(inQueue);
 	} 
 
 	postProcessSNCCmessage(&pck,inQueues,inQueue,pNumSNCCRequests);      
@@ -236,11 +246,18 @@ int processNodeQueue(message ** q) {
 }
 
 
+void onMessageDropped (message *q) {
+
+  printf("Dropped");
+  debugMessage(q);
+
+}
+
 void dropMessageOnExcessiveErrors (message ** q) {
 
 	if (*q) {
 		if ((*q)->transferError >= MAX_TRANSFER_ERRORS_MESSAGE) {
-			 *q->status = MI_STATUS_DROPPED;
+			 (*q)->status = MI_STATUS_DROPPED;
 			 onMessageDropped(*q);
 			 processNodeQueue(q);
 		}
@@ -249,10 +266,6 @@ void dropMessageOnExcessiveErrors (message ** q) {
 }
 
 
-void onMessageDropped (message *q) {
-
-
-}
 
 // process udp queue.
 int insertNewCmds(message ** outQueues) {
@@ -270,6 +283,7 @@ int insertNewCmds(message ** outQueues) {
       m.data[1] = 0x22;
       m.data[19] = 0X19;
       m.status = 0;
+      m.transferError = 0;
 
       //i++;
 
@@ -279,6 +293,7 @@ int insertNewCmds(message ** outQueues) {
       n.data[1] = 0x33;
       n.data[19] = 0X12;
       n.status = 0;
+      n.transferError = 0;
       i++;
 
 
@@ -302,7 +317,7 @@ int preProcessSNCCmessage(McomOutPacket* pck, message * inQueues,int * pNumSNCCR
    		for (i=lastNodeServiced+1;i<(MCOM_MAX_NODES+lastNodeServiced+1);i++) {
    			currentNode = i%MCOM_MAX_NODES;
    			if (inQueues[currentNode].status == SNCC_SIGNAL_RECEIVED) {
-          printf("Signal received on node [%d]\n",currentNode);
+          //printf("Signal received on node [%d]\n",currentNode);
    				*inQueue = &(inQueues[currentNode]);
    				(*inQueue)->destination = currentNode;
    			} 
@@ -315,7 +330,7 @@ int preProcessSNCCmessage(McomOutPacket* pck, message * inQueues,int * pNumSNCCR
    		if (pck->preamble_1) {
    			int probableNode = pck->preamble_1 & 0x7F; // strip off nofify bit
    			if (probableNode< MCOM_MAX_NODES) {
-          printf("sncc preamble received from node: [%x]\n",probableNode);
+          //printf("sncc preamble received from node: [%x]\n",probableNode);
    				*inQueue = &(inQueues[probableNode]);
    				(*inQueue)->destination = probableNode;
    				(*inQueue)->status = SNCC_PREAMBLE_RECEIVED;
@@ -335,7 +350,7 @@ int postProcessSNCCmessage(McomOutPacket* pck,message * inQueues,message * inQue
 
 	  	 //preprocess assigned a queue, so let's check.
 	  	 if (inQueue->status == MI_STATUS_TRANSFERRED) {
-          printf("SNCC Status transferred\n");
+         // printf("SNCC Status transferred\n");
 	  	 		inQueue->status = 0;
 	  	 		processedNode = inQueue->destination;
 	  	 		lastNodeServiced = processedNode;
@@ -427,6 +442,7 @@ int main(int argc, char **argv)
 						onlyTransferErrors = 0;
 					} else {
 						transferErrorsPresent += (*q)->transferError;
+            //printf("Transfererrors : %d [node: %d]",(*q)->transferError,(*q)->destination);
 						dropMessageOnExcessiveErrors(q);
 					}
 					
@@ -464,7 +480,7 @@ void debugMessage(message * m) {
 	unsigned char data [20];
 
 	printf("data: ");
-	printBuffer(m->data,20);
+	printBuffer2(m->data,20);
 	printf("expectedChecksum: 0x%x\n",m->expectedChecksum);
 	printf("receivedChecksum: 0x%x\n",m->receivedChecksum);
 	printf("status: 0x%x\n",m->status);
@@ -475,6 +491,7 @@ void debugMessage(message * m) {
 
 int printBuffer (char * b,int size) {
 
+  return;
   int i;
   for (i=0;i<size;i++) {
 	printf("%x ",b[i]);
@@ -482,6 +499,17 @@ int printBuffer (char * b,int size) {
   printf("\n");
 
 }
+
+int printBuffer2 (char * b,int size) {
+
+  int i;
+  for (i=0;i<size;i++) {
+  printf("%x ",b[i]);
+  }
+  printf("\n");
+
+}
+
 
 void zeroMem(void * p,int len) {
 	 
