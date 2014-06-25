@@ -29,7 +29,7 @@ int action;
   // id of this node
 
 #define PROCESS_BUFFER 0x01
-#define DEBUG_PROCESS_TIMER 0x02
+
 
 #define MI_CMD      0x220a //    8714
 
@@ -98,7 +98,7 @@ void initMCOM();
 void mcomProcessBuffer();
 void zeroMem(void * p,int len);
 void initDebug();
-void debugProcessTimer();
+
 
 int main() {
 
@@ -116,10 +116,6 @@ int main() {
 	        mcomProcessBuffer(); 
 	        continue;
 	    }
-      if (action & DEBUG_PROCESS_TIMER) {
-          debugProcessTimer(); 
-          continue;
-      }
 	}
 
 }
@@ -139,22 +135,20 @@ void mcomProcessBuffer() {
 
 }
 
-void debugProcessTimer() {
 
+void signalMaster() {
+	
+  outBuffer[0] = 0xab;
+  outBuffer[1] = 0xcd;
+  outBuffer[2] = 0xef;
+  outBuffer[3] = 0x99;
+  outBuffer[19] = 0xff;
+  outBuffer[20] = 0xff; 
+  outBufferCheckSum = 0x3ff;
 
-    __enable_interrupt();
-    TA0CCTL1 &= 0;   // also disable timer interrupt & clear flag
+    __disable_interrupt();	
 
-    TA0CTL = TASSEL_1 | MC_1 | ID_1; 
-    TA0CCTL1 = CCIE;
-
-    
-    signalMaster = 1;  // if mcom is in the middle of a receive, or not synchronized, we just set signalMasterFlag
-
-    action &= ~DEBUG_PROCESS_TIMER;
-
-    __disable_interrupt();
-    
+    signalMaster = 1;
     // in case we are synced (out of a rescue, and not in a middle of a packet, force MISO high to signal master.)
     //__disable_interrupt();
     if (mcomPacketSync && (pInPacket == (unsigned char*)&inPacket)) { // not in receive state, but synced
@@ -163,8 +157,7 @@ void debugProcessTimer() {
       }
     }
 
-
-
+	
 }
 
 
@@ -239,21 +232,6 @@ void initDebug() {
   P1DIR |= BIT0 + BIT3;
 #endif
 
-  outBuffer[0] = 0xab;
-  outBuffer[1] = 0xcd;
-  outBuffer[2] = 0xef;
-  outBuffer[3] = 0x99;
-  outBuffer[19] = 0xff;
-  outBuffer[20] = 0xff; 
-  outBufferCheckSum = 0x3ff;
-  signalMaster = 1; 
-
-    BCSCTL3 = LFXT1S_2; 
-    TA0R = 0;
-    TA0CCR0 = 50; // 1000;// 32767;              // Count to this, then interrupt;  0 to stop counting
-    TA0CTL = TASSEL_1 | MC_1  | ID_1 ;             // Clock source ACLK
-    TA0CCTL1 = CCIE ;                     // Timer A interrupt enable
-
 }
 
 void initGlobal() {
@@ -292,14 +270,6 @@ void initGlobal() {
   
   => [bfr sncc to 2] ->  reponse with answer correponding to cmdid signalled
   */
-interrupt(TIMER0_A1_VECTOR) ta1_isr(void) {
-
-  TA0CTL = TACLR;  // stop & clear timer
-  TA0CCTL1 &= 0;
-  action |= DEBUG_PROCESS_TIMER;
-  __bic_SR_register_on_exit(LPM3_bits);
-  return;
-} 
 
 // INTERRUPTS
 interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
