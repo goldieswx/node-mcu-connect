@@ -99,12 +99,18 @@ void mcomProcessBuffer();
 void zeroMem(void * p,int len);
 void initDebug();
 
+//// extension related
+void initADCE();
+void checkADC(); 
+char transfer(char s); 
+
 
 int main() {
 
 	initGlobal();
 	initMCOM();
   initDebug();
+  initADCE();
 
 	while(1) {
 	     __enable_interrupt();
@@ -407,4 +413,136 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
 	}
   return;
+}
+
+
+/// Extension related stuff
+
+
+#define MOSI  BIT7 
+#define MISO  BIT6
+#define SCK   BIT5
+
+#define CS_NOTIFY_MASTER  BIT3   // External Interrupt 
+#define CS_INCOMING_PACKET  BIT4   // Master enable the line before sending
+
+#define ADC_CHECK      0x02
+
+interrupt(PORT2_VECTOR) p2_isr(void) {
+
+  //__enable_interrupt();
+  if (P2IFG & CS_NOTIFY_MASTER) {
+    P2IE &= ~CS_NOTIFY_MASTER;
+    action |= ADC_CHECK;
+    __bic_SR_register_on_exit(LPM3_bits /*+ GIE*/); // exit LPM     
+  }
+
+  return;
+  
+} 
+
+
+/**
+ *  ADCE Related 
+ */
+
+void initADCE() {
+    
+  P2DIR &= ~CS_NOTIFY_MASTER ;
+  P2DIR |= CS_INCOMING_PACKET;
+  P2IE |=  CS_NOTIFY_MASTER ; 
+  P2IES &= ~CS_NOTIFY_MASTER ;    
+
+  P2REN |=  CS_INCOMING_PACKET;
+
+  // UARTB 
+  // Comm channel with extentions
+  
+  P1DIR |= BIT5 | BIT7;
+  P1DIR &= ~BIT6;
+
+  //power the extension
+  P1DIR |= BIT3;
+  P1OUT |= BIT3;
+
+}
+
+void checkADC() {
+    
+
+    P2IE &= ~CS_NOTIFY_MASTER;
+    P2IFG |= CS_NOTIFY_MASTER;    // Just preacaution, we will soon enable interrupts, make sure we don't allow reenty.
+    __enable_interrupt();         // Our process is low priority, only listenning to master spi is the priority.
+    
+    action &= ~ADC_CHECK;         // Clear current action flag.
+    
+ //   P2OUT ^= BIT7;  // debug        // ADC Extension (ADCE) is a module ocnnected thru USCI-B and two GPIO pins
+    P2OUT |= CS_INCOMING_PACKET;    // Warn ADCE that we are about to start an spi transfer.
+    
+    // delayCyclesProcessBuffer(20); // Give some time to ADCE to react
+    __delay_cycles(7500);
+
+
+    unsigned char c[16];
+    unsigned char * p = c;
+    
+    *p = transfer(0);               // Get Packet length from ADCE
+    
+    int len = *p++ & 0b00001111;
+
+    __delay_cycles(3000);
+
+    while (len--) {
+        *p++ = transfer(0);
+        __delay_cycles(3000);
+    }
+
+
+    //lastresp[16] = c[0];            // Temporarily set the response somewhere (FIX)
+    //lastresp[17] = c[1];
+    //lastresp[18] = c[2];
+    //lastresp[19] = 0x07;
+
+    // action |= SIGNAL_MASTER;        // Inform master we have some data to transmit.
+    _signalMaster();
+
+    __disable_interrupt();
+
+
+}
+
+char transfer(char s) {
+
+    unsigned char ret=0;
+    int i;
+
+    for(i=0;i<8;i++) {
+
+        P1OUT |= SCK;
+        __delay_cycles( 20 );
+
+        ret <<= 1;
+        // Put bits on the line, most significant bit first.
+        if(s & 0x80) {
+              P1OUT |= MOSI;
+        } else {
+              P1OUT &= ~MOSI;
+        }
+        s <<= 1;
+
+        // Pulse the clock low and wait to send the bit.  According to
+         // the data sheet, data is transferred on the rising edge.
+        P1OUT &= ~SCK;
+        __delay_cycles( 20 );
+
+        // Send the clock back high and wait to set the next bit.  
+        if (P1IN & MISO) {
+          ret |= 0x01;
+        } else {
+          ret &= 0xFE;
+        }
+
+    }
+    return ret; 
+
 }
