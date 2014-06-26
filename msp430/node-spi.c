@@ -20,12 +20,13 @@
 #include "msp430g2553.h"
 #include <legacymsp430.h>
 
-#define node2_0 1
+//#define node2_0 1
+//#define ADCE 1
 
 // global declarations
 
 int action;
-#define currentNodeId   3
+#define currentNodeId   4
   // id of this node
 
 #define PROCESS_BUFFER 0x01
@@ -111,7 +112,9 @@ int main() {
 	initGlobal();
 	initMCOM();
   initDebug();
+#ifdef ADCE
   initADCE();
+#endif
 
 	while(1) {
 	     __enable_interrupt();
@@ -489,7 +492,7 @@ void checkADC() {
     
     action &= ~ADC_CHECK;         // Clear current action flag.
     
-    P2OUT ^= BIT6;  // debug        // ADC Extension (ADCE) is a module ocnnected thru USCI-B and two GPIO pins
+   // P2OUT ^= BIT6;  // debug        // ADC Extension (ADCE) is a module ocnnected thru USCI-B and two GPIO pins
   
     __delay_cycles(10000);
     P2OUT |= CS_INCOMING_PACKET;    // Warn ADCE that we are about to start an spi transfer.
@@ -511,7 +514,7 @@ void checkADC() {
     while (len--) {
         *p++ = transfer(0);
         __delay_cycles(10000);
-        P2OUT ^= BIT7;
+       // P2OUT ^= BIT7;
     }
 
     outBuffer[0] = 0x15;

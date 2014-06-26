@@ -300,7 +300,7 @@ int insertNewCmds(message ** outQueues) {
       return 1;
    } else {
      i++;
-     if (i==5000) { i=0;}
+     if (i==10000) { i=0;}
    }
 
    return 0;

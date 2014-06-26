@@ -47,12 +47,10 @@ char transfer(char s) {
 
 void beginSampleDac() {
 
-    if (0==(P2IN & CS_INCOMING_PACKET))  {
-      __delay_cycles(10);
       action &= ~BEGIN_SAMPLE_DAC;
       ADC10CTL0 |= ENC + ADC10SC;          // Sampling and conversion start
+  
       // wait for interrupt.   
-    }
 }
 
 void checkDAC() {
@@ -62,6 +60,7 @@ void checkDAC() {
     int chan = 7;
     readValue = ADC10MEM; // Assigns the value held in ADC10MEM to the integer called ADC_value
   
+    P2OUT |= BIT5;
     if (readValue > 500) {
 
       int len = 4;
@@ -77,8 +76,7 @@ void checkDAC() {
         pbfr = bfr;
         P2OUT |= CS_NOTIFY_MASTER;
         lastValue = readValue;
-
-        return;
+          return;
       }
    }
     
@@ -129,7 +127,7 @@ int main(void)
     BCSCTL3 = LFXT1S_2; 
 
     TA0R = 0;
-    TA0CCR0 = 2000; // 1000;// 32767;              // Count to this, then interrupt;  0 to stop counting
+    TA0CCR0 = 500; // 1000;// 32767;              // Count to this, then interrupt;  0 to stop counting
     TA0CTL = TASSEL_1 | MC_1 ;             // Clock source ACLK
     TA0CCTL1 = CCIE ;                     // Timer A interrupt enable
 
@@ -138,10 +136,11 @@ int main(void)
     pbfr = bfr;
 
     while(1)    {
-        __enable_interrupt(); // process pending interrupts (between actions)
         if (!action) {
             __bis_SR_register(LPM3_bits + GIE);
         }
+        __enable_interrupt(); // process pending interrupts (between actions)
+        __delay_cycles(100);
         __disable_interrupt(); 
         
         if(action & BEGIN_SAMPLE_DAC) {
@@ -216,6 +215,8 @@ interrupt(TIMER0_A1_VECTOR) ta1_isr(void) {
 
   TA0CTL = TACLR;  // stop & clear timer
   TA0CCTL1 &= 0;   // also disable timer interrupt & clear flag
+
+
 
   action |= BEGIN_SAMPLE_DAC;
   __bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM
