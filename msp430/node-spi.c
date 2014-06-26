@@ -491,7 +491,7 @@ void checkADC() {
     
     P2OUT ^= BIT6;  // debug        // ADC Extension (ADCE) is a module ocnnected thru USCI-B and two GPIO pins
   
-  __delay_cycles(10000);
+    __delay_cycles(10000);
     P2OUT |= CS_INCOMING_PACKET;    // Warn ADCE that we are about to start an spi transfer.
     
     // delayCyclesProcessBuffer(20); // Give some time to ADCE to react
@@ -531,14 +531,11 @@ void checkADC() {
     // action |= SIGNAL_MASTER;        // Inform master we have some data to transmit.
     __delay_cycles(10000);
  
-    __disable_interrupt();
-    P2IE |= CS_NOTIFY_MASTER;
-    P2IFG |= CS_NOTIFY_MASTER;    // Just preacaution, we will soon enable interrupts, make sure we don't allow reenty.
-    P2OUT &= ~CS_INCOMING_PACKET;  
-  
-    
     _signalMaster();
-   
+
+    P2IFG &= ~CS_NOTIFY_MASTER;        
+    P2IE |= CS_NOTIFY_MASTER;
+    P2OUT &= ~CS_INCOMING_PACKET;   // release extension signal
 
 
 }
