@@ -188,19 +188,21 @@ interrupt(PORT2_VECTOR) P2_ISR(void) {
                 IFG2 &= ~UCB0RXIFG;
                 IE2 |= UCB0RXIE;              // enable spi interrupt
                 UCB0TXBUF = *pbfr;           // prepare first byte
-                P2IES |= CS_INCOMING_PACKET;
+                P2IES |= CS_INCOMING_PACKET; // switch to falling edge
           }
          else {
+ 
+            IFG2 &= ~UCB0RXIFG;
             IE2 &= ~UCB0RXIE;              // Disable SPI interrupt     
             
+            pbfr = bfr;
+            bfrBoundary = bfr;
+            P2IES &= ~CS_INCOMING_PACKET;  // switch to raising edge
+            P2OUT &= ~CS_NOTIFY_MASTER;    // Bring notify line low
+
             TA0CTL = TASSEL_1 | MC_1;  // enable timer.
             TA0CCTL1 = CCIE;
 
-            pbfr = bfr;
-            bfrBoundary = bfr;
-            P2IES &= 0;
-            P2OUT &= ~CS_NOTIFY_MASTER;    // Bring notify line low
-        
        }
       }
     }
