@@ -124,8 +124,6 @@ int main(void)
     UCB0CTL1 &= ~UCSWRST;                     // **Initialize USCI state machine**
 
     while(IFG2 & UCB0RXIFG);                  // Wait ifg2 flag on rx  (no idea what it does)
-    //IE2 |= UCB0RXIE;                          // Enable USCI0 RX interrupt
-    //UCB0TXBUF = 0x32;                         // We do not want to ouput anything on the line
     UCB0TXBUF = 0x00;
 
     BCSCTL3 = LFXT1S_2; 
@@ -140,10 +138,11 @@ int main(void)
     pbfr = bfr;
 
     while(1)    {
+        __enable_interrupt(); // process pending interrupts (between actions)
         if (!action) {
             __bis_SR_register(LPM3_bits + GIE);
         }
-        __enable_interrupt(); __delay_cycles(10); __disable_interrupt(); // process pending interrupts
+        __disable_interrupt(); 
         
         if(action & BEGIN_SAMPLE_DAC) {
             beginSampleDac();
@@ -158,31 +157,25 @@ int main(void)
  
 interrupt(ADC10_VECTOR) ADC10_ISR (void) { 
    
-   action |= CHECK_DAC;
-   ADC10CTL0 &= ~ADC10IFG;
-  __bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM   
-   return;
+    action |= CHECK_DAC;
+    ADC10CTL0 &= ~ADC10IFG;
+    __bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM   
+    return;
+
 }
  
 interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
-   UCB0TXBUF = *pbfr++;      
-      
-      if (pbfr == bfrBoundary) {
-            IE2 &= ~UCB0RXIE;              // Disable SPI interrupt     
-            P2IFG &= ~CS_INCOMING_PACKET;   // clear master notification interrupt flag        
-            P2OUT &= ~CS_NOTIFY_MASTER;    // Bring notify line low
-           
-            TA0CTL = TASSEL_1 | MC_1;  // enable timer.
-            TA0CCTL1 = CCIE;
+    UCB0TXBUF = *pbfr++;      
+    
+    if (pbfr == bfrBoundary) {
+        IE2 &= ~UCB0RXIE;              // Disable SPI interrupt     
+        pbfr = bfr;
+    }
+    
+    IFG2 &= ~UCB0RXIFG;   // clear current interrupt flag
+    return;
 
-            pbfr = bfr;
-           // bfrBoundary = bfr;
-      }
-  
-  IFG2 &= ~UCB0RXIFG;   // clear current interrupt flag
-  return;
-  
 }
 
 interrupt(PORT2_VECTOR) P2_ISR(void) {
