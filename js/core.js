@@ -18,9 +18,9 @@
 
 
 var dgram = require('dgram');
-var lowLevelArduinoInterface = require('./low-level.js');
+var lowLevelMCUInterface = require('./low-level.js');
 
-var ArduinoInterface = function(arduinoSettings) {
+var MCUInterface = function(settings) {
 
   var $this = this;
   this.aliases = {};
@@ -29,7 +29,7 @@ var ArduinoInterface = function(arduinoSettings) {
   this._initializeAliases();
 
   this.client = dgram.createSocket("udp4");
-  this.settings = arduinoSettings;
+  this.settings = settings;
 
   this._listenntingSocket = dgram.createSocket('udp4');
   this._listenntingSocket.on("message",function(msg,rinfo){
@@ -43,84 +43,43 @@ var ArduinoInterface = function(arduinoSettings) {
   this._initializeNotifications();
 
   // tell ardino we are alive and are listenning.
-  this._sendMessage(lowLevelArduinoInterface.listenMessage());
+  this._sendMessage(lowLevelMCUInterface.listenMessage());
 };
 
 
-ArduinoInterface.const = { HIGH:1, LOW:0, ANALOG: 2, DIGITAL: 1, state: { initial:-1,loTreshold:2,hiTreshold:3,high:1,low:0} };
+MCUInterface.const = { HIGH:1, LOW:0, ANALOG: 2, DIGITAL: 1, state: { initial:-1,loTreshold:2,hiTreshold:3,high:1,low:0} };
 
-ArduinoInterface.prototype.select = function($select) {
+MCUInterface.prototype.select = function($select) {
     for (var i=0;i<this.selectInterfaces.length;i++) {
       if (this.selectInterfaces[i].selector === $select) {
         return this.selectInterfaces[i];
       }
     }
-    var $interface = new ArduinoInterfaceSelect(this,$select);
+    var $interface = new MCUInterfaceSelect(this,$select);
     this.selectInterfaces.push($interface);
     return $interface;
 };
 
-ArduinoInterface.prototype._initializeNotifications = function() {
 
-  for(var i=0;i<10;i++) {
-      this._analogNotifications.push({available:true});
-  }
-
-  for(var i=0;i<10;i++) {
-      this._digitalNotifications.push({available:true});
-  }
-};
-
-ArduinoInterface.prototype.getAnalogNotificationId = function() {
-
-  for(var i=0;i<this._analogNotifications.length;i++) {
-      if (this._analogNotifications[i].available) return i;
-  }
-  return null;
-};
-
-ArduinoInterface.prototype.releaseAnalogNotificationId = function(id) {
-
-  if (id<this._analogNotifications.length) {
-    this._analogNotifications[id].available = true;
-  }
-};
-
-ArduinoInterface.prototype.getDigitalNotificationId = function() {
-
-  for(var i=0;i<this._digitalNotifications.length;i++) {
-      if (this._digitalNotifications[i].available) return i;
-  }
-  return null;
-};
-
-ArduinoInterface.prototype.releaseDigitalNotificationId = function(id) {
-
-  if (id<this._digitalNotifications.length) {
-    this._digitalNotifications[id].available = true;
-  }
-};
-
-
-ArduinoInterface.prototype._initializeAliases = function() {
+MCUInterface.prototype._initializeAliases = function() {
 
    for(var i=0;i<6;i++) {
      var alias = {};
-     alias.type = ArduinoInterface.const.ANALOG;
+     alias.type = MCUInterface.const.ANALOG;
      alias.pinId = i;
      this.aliases['A/'+i] = alias;
    }
 
    for(var i=0;i<14;i++) {
      var alias = {};
-     alias.type = ArduinoInterface.const.DIGITAL;
+     alias.type = MCUInterface.const.DIGITAL;
      alias.pinId = i;
      this.aliases['D/'+i] = alias;
    }
 
 }
 
-ArduinoInterface.prototype._sendMessage = function(message) {
+MCUInterface.prototype._sendMessage = function(message) {
 
    console.log(message);
    var client = dgram.createSocket("udp4");
@@ -130,45 +89,32 @@ ArduinoInterface.prototype._sendMessage = function(message) {
 
 };
 
-ArduinoInterface.prototype._onUDPReceiveMessage = function(msg,rinfo) {
+MCUInterface.prototype._onUDPReceiveMessage = function(msg,rinfo) {
 
     var sMsg = msg.toString();
     var bMsg = {};
-
-    if (sMsg.indexOf('ST/A') == 0) {
-        bMsg.type = ArduinoInterface.const.ANALOG;
-    }
-
-    if (sMsg.indexOf('ST/D') == 0) {
-        bMsg.type = ArduinoInterface.const.DIGITAL;
-    }
-
-    var tmp = sMsg.substr(4).split('/');
-    bMsg.pinId = parseInt(tmp[0]);
-    bMsg.value = parseInt(tmp[1]);
 
 
     for (var i=0;i<this.selectInterfaces.length;i++) {
        this.selectInterfaces[i]._callback(bMsg,sMsg);
     }
 
-    console.log(sMsg);
 };
 
-var ArduinoInterfaceSelect = function($arduinoInterface,selector){
-   this._arduinoInterface = $arduinoInterface;
+var MCUInterfaceSelect = function($MCUInterface,selector){
+   this._MCUInterface = $MCUInterface;
 
    this.selector = selector;
-   this.alias = this._arduinoInterface.aliases[selector];
+   this.alias = this._MCUInterface.aliases[selector];
 
    this._callbacks = [];
    this._delayExecution = 0;
    this._timeouts = [];
 };
 
-ArduinoInterfaceSelect.prototype.clone = function() {
+MCUInterfaceSelect.prototype.clone = function() {
 
-   var clone = new ArduinoInterfaceSelect(this._arduinoInterface,this.selector);
+   var clone = new MCUInterfaceSelect(this._MCUInterface,this.selector);
    clone._callbacks = this._callbacks;
    clone._timeouts = this._timeouts;
    return clone;
@@ -180,7 +126,7 @@ ArduinoInterfaceSelect.prototype.clone = function() {
 * returns a clone of the select interface bound to the same interface
 * with delayed execution (of enabled/disable)
 */
-ArduinoInterfaceSelect.prototype.every = function (duration) {
+MCUInterfaceSelect.prototype.every = function (duration) {
 
     var clone = this.clone();
     clone._delayExecution = clone._delayExecution + (parseInt(duration)*1000);
@@ -188,15 +134,15 @@ ArduinoInterfaceSelect.prototype.every = function (duration) {
     return clone;
 };
 
-ArduinoInterfaceSelect.prototype.on = function($event,$function) {
+MCUInterfaceSelect.prototype.on = function($event,$function) {
 
      //console.log($event);
-     var event = new ArduinoInterfaceEvent($event,$function,this._arduinoInterface,this);
+     var event = new MCUInterfaceEvent($event,$function,this._MCUInterface,this);
      this._callbacks.push(event);
 
 };
 
-ArduinoInterfaceSelect.prototype._execute = function(fn){
+MCUInterfaceSelect.prototype._execute = function(fn){
 
    if (this._delayExecution) {
       if (this._executionType != 'recurring') {
@@ -210,15 +156,15 @@ ArduinoInterfaceSelect.prototype._execute = function(fn){
 
 };
 
-ArduinoInterfaceSelect.prototype.pwm = function(value,option) {
+MCUInterfaceSelect.prototype.pwm = function(value,option) {
 
    var _this = this;
    var _arguments = arguments;
 
    var setPWMFn = function() {
 
-     _this._arduinoInterface._sendMessage(
-     lowLevelArduinoInterface.setAnalogStateMessage(_this.alias.pinId,value));
+     _this._MCUInterface._sendMessage(
+     lowLevelMCUInterface.setAnalogStateMessage(_this.alias.pinId,value));
 
    }
    this._execute(function(){setPWMFn();});
@@ -227,7 +173,7 @@ ArduinoInterfaceSelect.prototype.pwm = function(value,option) {
 
 }
 
-ArduinoInterfaceSelect.prototype.enable = function(option) {
+MCUInterfaceSelect.prototype.enable = function(option) {
 
    var _this = this;
    var _arguments = arguments;
@@ -235,11 +181,11 @@ ArduinoInterfaceSelect.prototype.enable = function(option) {
    var enableFn = function() {
 
    if (_arguments.length && option.length) {
-      _this._arduinoInterface._sendMessage(
-      lowLevelArduinoInterface.setDigitalStateMessageDuration(_this.alias.pinId,ArduinoInterface.const.HIGH,parseInt(option)));
+      _this._MCUInterface._sendMessage(
+      lowLevelMCUInterface.setDigitalStateMessageDuration(_this.alias.pinId,MCUInterface.const.HIGH,parseInt(option)));
    } else {
-      _this._arduinoInterface._sendMessage(
-      lowLevelArduinoInterface.setDigitalStateMessage(_this.alias.pinId,ArduinoInterface.const.HIGH));
+      _this._MCUInterface._sendMessage(
+      lowLevelMCUInterface.setDigitalStateMessage(_this.alias.pinId,MCUInterface.const.HIGH));
    }
 
    }
@@ -247,30 +193,30 @@ ArduinoInterfaceSelect.prototype.enable = function(option) {
    return this;
 };
 
-ArduinoInterfaceSelect.prototype.disable = function(option) {
+MCUInterfaceSelect.prototype.disable = function(option) {
 
     var _this = this;
     var _arguments = arguments;
 
     var disableFn = function() {
-      _this._arduinoInterface._sendMessage(
-      lowLevelArduinoInterface.setDigitalStateMessage(_this.alias.pinId,ArduinoInterface.const.LOW));
+      _this._MCUInterface._sendMessage(
+      lowLevelMCUInterface.setDigitalStateMessage(_this.alias.pinId,MCUInterface.const.LOW));
     };
 
    this._execute(function(){disableFn();});
    return this;
 }
 
-ArduinoInterfaceSelect.prototype.refresh = function() {
+MCUInterfaceSelect.prototype.refresh = function() {
 
-  if (this.alias.type == ArduinoInterface.const.ANALOG) {
+  if (this.alias.type == MCUInterface.const.ANALOG) {
 
     var _this = this;
     var _arguments = arguments;
 
     var refreshFn = function() {
-      _this._arduinoInterface._sendMessage(
-      lowLevelArduinoInterface.getAnalogStateMessage(_this.alias.pinId));
+      _this._MCUInterface._sendMessage(
+      lowLevelMCUInterface.getAnalogStateMessage(_this.alias.pinId));
     };
 
    this._execute(function(){refreshFn();});
@@ -280,12 +226,12 @@ ArduinoInterfaceSelect.prototype.refresh = function() {
 
 }
 
-ArduinoInterfaceSelect.prototype._matchAlias = function(bMsg) {
+MCUInterfaceSelect.prototype._matchAlias = function(bMsg) {
     return ((bMsg.type == this.alias.type) && (bMsg.pinId == this.alias.pinId));
 }
 
 
-ArduinoInterfaceSelect.prototype._callback = function(bMsg) {
+MCUInterfaceSelect.prototype._callback = function(bMsg) {
 
    if (this._matchAlias(bMsg)) {
       for(var i =0;i<this._callbacks.length;i++) {
@@ -298,7 +244,7 @@ ArduinoInterfaceSelect.prototype._callback = function(bMsg) {
 /*
  * cancels all settimeouts created by in/_delayExecutions.
  */
-ArduinoInterfaceSelect.prototype.unbind = function() {
+MCUInterfaceSelect.prototype.unbind = function() {
    for(var i=0;i<this._timeouts.length;i++) {
      clearTimeout(this._timeouts[i]);
    }
@@ -309,7 +255,7 @@ ArduinoInterfaceSelect.prototype.unbind = function() {
 * returns a clone of the select interface bound to the same interface
 * with delayed execution (of enabled/disable)
 */
-ArduinoInterfaceSelect.prototype.in = function (duration) {
+MCUInterfaceSelect.prototype.in = function (duration) {
 
     var clone = this.clone();
     clone._delayExecution = clone._delayExecution + (parseInt(duration)*1000);
@@ -318,15 +264,15 @@ ArduinoInterfaceSelect.prototype.in = function (duration) {
 
 };
 
-var ArduinoInterfaceEvent = function(settings,$function,arduinoInterface,arduinoSelectInterface) {
+var MCUInterfaceEvent = function(settings,$function,MCUInterface,MCUSelectInterface) {
 
     this.settings = settings;
     this._callback = $function;
-    this._arduinoInterface = arduinoInterface;
-    this._arduinoSelectInterface = arduinoSelectInterface;
+    this._MCUInterface = MCUInterface;
+    this._MCUSelectInterface = MCUSelectInterface;
 
     this._maps = {};
-    this.tresholdState = ArduinoInterface.const.state.initial;
+    this.tresholdState = MCUInterface.const.state.initial;
 
     this._mapsImpl =  {
         ntc:function(settings,value,type) {
@@ -367,19 +313,19 @@ var ArduinoInterfaceEvent = function(settings,$function,arduinoInterface,arduino
         },
     };
 
-    $function.call(arduinoInterface,{state:ArduinoInterface.const.state.initial,event:this});
+    $function.call(MCUInterface,{state:MCUInterface.const.state.initial,event:this});
 
     if (settings.state=='change') {
-          this.notificationId = this._arduinoInterface.getAnalogNotificationId();
+          this.notificationId = this._MCUInterface.getAnalogNotificationId();
 
-          var message = lowLevelArduinoInterface.notifyDigitalMessage(this.notificationId,
-                                                       this._arduinoSelectInterface.alias.pinId);
-          this._arduinoInterface._sendMessage(message);
+          var message = lowLevelMCUInterface.notifyDigitalMessage(this.notificationId,
+                                                       this._MCUSelectInterface.alias.pinId);
+          this._MCUInterface._sendMessage(message);
     }
 
 }
 
-ArduinoInterfaceEvent.prototype.trigger = function (message) {
+MCUInterfaceEvent.prototype.trigger = function (message) {
 
     // if any calculate maps and apply to message.
     for (var i in this._maps) {
@@ -395,10 +341,10 @@ ArduinoInterfaceEvent.prototype.trigger = function (message) {
       if (message.value >= this._tresholdParams.value + this._tresholdParams.hiRange) {
 
         var newState = this._tresholdParams.direction=='increasing'
-                      ?ArduinoInterface.const.state.hiTreshold
-                      :ArduinoInterface.const.state.loTreshold;
+                      ?MCUInterface.const.state.hiTreshold
+                      :MCUInterface.const.state.loTreshold;
         if (newState != this.tresholdState) {
-          this._callback.call(this.arduinoInterface,
+          this._callback.call(this.MCUInterface,
                 {
                    state:  newState ,
                    event:  this
@@ -409,18 +355,18 @@ ArduinoInterfaceEvent.prototype.trigger = function (message) {
       if (message.value <= this._tresholdParams.value - this._tresholdParams.loRange) {
 
          var newState = this._tresholdParams.direction=='increasing'
-                      ?ArduinoInterface.const.state.loTreshold
-                      :ArduinoInterface.const.state.hiTreshold;
+                      ?MCUInterface.const.state.loTreshold
+                      :MCUInterface.const.state.hiTreshold;
 
         if (newState != this.tresholdState) {
-         this._callback.call(this.arduinoInterface,
+         this._callback.call(this.MCUInterface,
               { state: newState,
                 event:this
               },message);
        }
       }
     } else if (this.settings.state == 'change'){ 
-         this._callback.call(this.arduinoInterface,
+         this._callback.call(this.MCUInterface,
               { state: message.value,
                 event:this
               },message);
@@ -428,13 +374,13 @@ ArduinoInterfaceEvent.prototype.trigger = function (message) {
 
 }
 
-ArduinoInterfaceEvent.prototype.setMap = function(name,settings) {
+MCUInterfaceEvent.prototype.setMap = function(name,settings) {
     this._maps[name] = settings;
     return this;
 }
 
 
-ArduinoInterfaceEvent.prototype.setTreshold = function(settings) {
+MCUInterfaceEvent.prototype.setTreshold = function(settings) {
 
   var tresholdParams = settings;
   tresholdParams.direction = 'increasing';
@@ -448,15 +394,15 @@ ArduinoInterfaceEvent.prototype.setTreshold = function(settings) {
        tresholdParams = this._mapsImpl[this._maps[settings.useMap].type](this._maps[settings.useMap],settings,'treshold');
   }
 
-  var notificationId = this._arduinoInterface.getAnalogNotificationId();
+  var notificationId = this._MCUInterface.getAnalogNotificationId();
 
-  var message = lowLevelArduinoInterface.notifyAnalogMessage(notificationId,
-                                               this._arduinoSelectInterface.alias.pinId,
+  var message = lowLevelMCUInterface.notifyAnalogMessage(notificationId,
+                                               this._MCUSelectInterface.alias.pinId,
                                                tresholdParams.value,
                                                tresholdParams.loRange,
                                                tresholdParams.hiRange);
 
-  this._arduinoInterface._sendMessage(message);
+  this._MCUInterface._sendMessage(message);
 
   this._tresholdParams = tresholdParams;
   this._tresholdParams.notificationId = notificationId;
@@ -465,4 +411,4 @@ ArduinoInterfaceEvent.prototype.setTreshold = function(settings) {
 }
 
 
-exports.UDPInterface = ArduinoInterface;
+exports.UDPInterface = MCUInterface;
