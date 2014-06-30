@@ -26,7 +26,7 @@
 // global declarations
 
 int action;
-#define currentNodeId   4
+#define currentNodeId   2
   // id of this node
 
 #define PROCESS_BUFFER 0x01

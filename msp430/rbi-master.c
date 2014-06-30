@@ -10,7 +10,7 @@
 	This program is distributed in the hope that it will be useful,
 	but WITHOUT ANY WARRANTY; without even the implied warranty of
 	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-	GNU General Public License for more details.
+	GNU General Public License for more details.F_memcpuy
 
 	You should have received a copy of the GNU General Public License
 	along with this program.  If not, see <http://www.gnu.org/licenses/>. 
@@ -27,6 +27,7 @@
 #include <stdlib.h> 
 #include <string.h>
 #include <sys/time.h>
+#include "fcntl.h"
 
 #define word short
 #define latch  RPI_GPIO_P1_22
@@ -60,6 +61,13 @@
 #define MCOM_MAX_NODES 16
 
 #define MAX_TRANSFER_ERRORS_MESSAGE  100
+
+typedef struct _UDPMessage {
+
+	unsigned char data [MCOM_DATA_LEN] ;
+	int   destination;
+
+} UDPMessage;
 
 
 typedef struct _message {
@@ -108,6 +116,15 @@ message * outQueues[MCOM_MAX_NODES][MCOM_NODE_QUEUE_LEN]; // ten buffer pointers
 message inQueues [MCOM_MAX_NODES];
 int     lastNodeServiced = 0;
 
+//// server socket
+struct sockaddr_in my_addr, cli_addr;
+int sockfd; 
+socklen_t slen=sizeof(cli_addr);
+
+//// client socket.
+int clientSocket;
+struct sockaddr_in si_other;
+
 
 /* functions */
 void debugMessage(message * m);
@@ -117,14 +134,14 @@ int dataCheckSum (unsigned char * req, int reqLen);
 /* impl */
 int onMessageReceived(message * q) {
 
-  printf("Received\n");
-  debugMessage(q);
-	
+  //printf("Received\n");
+  //debugMessage(q);
+	sendto(clientSocket, q->data, 20, 0, (struct sockaddr* ) &si_other, slen);
 }
 
 int onMessageSent(message * q) {
 
-  printf("Transferred\n");
+//  printf("Transferred\n");
 
 }
 
@@ -270,38 +287,20 @@ void dropMessageOnExcessiveErrors (message ** q) {
 // process udp queue.
 int insertNewCmds(message ** outQueues) {
  
-   static message m;
-   static message n;
+	UDPMessage buf;
+    static message m;
 
-   static int i;
-   int id = 4;
- 
-   if (!i) {
-      outQueues[MCOM_NODE_QUEUE_LEN*3] = &m;
-      m.destination = 3;
-      m.data[0] = 0x11;
-      m.data[1] = 0x22;
-      m.data[19] = 0X19;
-      m.status = 0;
-      m.transferError = 0;
-
-      //i++;
-
-      outQueues[(MCOM_NODE_QUEUE_LEN*4)] = &n;
-      n.destination = 4;
-      n.data[0] = 0x99;
-      n.data[1] = 0x33;
-      n.data[19] = 0X12;
-      n.status = 0;
-      n.transferError = 0;
-      i++;
-
-
-      return 1;
-   } else {
-     i++;
-     if (i==10000) { i=0;}
-   }
+    if (recvfrom (sockfd, &buf, sizeof(UDPMessage), 0, (struct sockaddr*)&cli_addr, &slen) == sizeof(UDPMessage)) {
+		_memcpy(m.data,&buf,sizeof(UDPMessage));
+	    m.status = 0;
+    	m.transferError = 0;
+    	m.destination = buf.destination;
+		//printf("%d\n",buf.destination);
+		if (m.destination <= MCOM_MAX_NODES) {
+			outQueues[(MCOM_NODE_QUEUE_LEN*3)] = &m;
+		}
+    	return 1;
+ 	}
 
    return 0;
 }
@@ -386,6 +385,9 @@ int postProcessSNCCmessage(McomOutPacket* pck,message * inQueues,message * inQue
 
 int main(int argc, char **argv)
 {
+  client();
+  lstn();
+
   if (!bcm2835_init())
 	return 1;
 
@@ -529,22 +531,23 @@ void _memcpy( void* dest, void *src, int len) {
  
 void err(char *str)
 {
-	perror(str);
-	exit(1);
+	printf(str);
+	printf("\n");
+	//exit(1);
 }
  
 int lstn(void)
 {
-	struct sockaddr_in my_addr, cli_addr;
-	int sockfd, i; 
-	socklen_t slen=sizeof(cli_addr);
-	char buf[BUFLEN];
- 
+
+
 	if ((sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP))==-1)
 	  err("socket");
 	else
 	  printf("Server : Socket() successful\n");
  
+	fcntl(sockfd, F_SETFL, O_NONBLOCK);
+
+
 	bzero(&my_addr, sizeof(my_addr));
 	my_addr.sin_family = AF_INET;
 	my_addr.sin_port = htons(PORT);
@@ -555,14 +558,26 @@ int lstn(void)
 	else
 	  printf("Server : bind() successful\n");
  
-	while(1)
-	{
-		if (recvfrom(sockfd, buf, BUFLEN, 0, (struct sockaddr*)&cli_addr, &slen)==-1)
-			err("recvfrom()");
-		printf("Received packet from %s:%d\nData: %s\n\n",
-			   inet_ntoa(cli_addr.sin_addr), ntohs(cli_addr.sin_port), buf);
-	}
- 
-	close(sockfd);
+	//close(sockfd);
 	return 0;
 }
+
+int client() 
+{
+
+    
+    int slen=sizeof(si_other);
+    
+    clientSocket=socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	memset((char *) &si_other, 0, sizeof(si_other));
+
+	si_other.sin_family = AF_INET;
+	si_other.sin_port = htons(PORT+1);
+
+	inet_aton("127.0.0.1", &si_other.sin_addr);
+//    
+
+//	close(s);
+}
+
+
