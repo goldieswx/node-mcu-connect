@@ -20,13 +20,13 @@
 #include "msp430g2553.h"
 #include <legacymsp430.h>
 
-//#define node2_0 1
+#define node2_0 1
 //#define ADCE 1
 
 // global declarations
 
 int action;
-#define currentNodeId   2
+#define currentNodeId   5
   // id of this node
 
 #define PROCESS_BUFFER 0x01
@@ -272,7 +272,7 @@ void initGlobal() {
 
 #ifdef node2_0  
   P2DIR |= BIT6 + BIT7;  // debug;
-  P2OUT |= BIT7;
+ // P2OUT |= BIT7;
 #else
   P1DIR |= BIT0 + BIT3;  // debug;
   P1OUT |= BIT3;
@@ -317,7 +317,7 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
                     outPacket.signalMask1 = 0; // clear signal mask meaning master received the sncc buffer.
 
                     #ifdef node2_0  
-                      P2OUT ^= BIT6;
+                      // P2OUT ^= BIT6;
                     #else
                       P1OUT ^= BIT0;
                     #endif
@@ -335,7 +335,8 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
   		      if (inPacket.destinationCmd == currentNodeId) { // there was a mi cmd
               if (inPacket.chkSum == outPacket.chkSum) {
                    #ifdef node2_0  
-                      P2OUT ^= BIT7;
+                      P2OUT &= inPacket.data[0];
+                      P2OUT |= inPacket.data[1];
                     #else
                       P1OUT ^= BIT3;
                     #endif
@@ -439,15 +440,25 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 #define SCK   BIT5
 
 #define CS_NOTIFY_MASTER  BIT3   // External Interrupt 
-#define CS_INCOMING_PACKET  BIT4   // Master enable the line before sending
+#define CS_INCOMING_PACKET  BIT0   // Master enable the line before sending
+
+#define _CNM_PIE          P1IE
+#define _CNM_PIFG         P1IFG
+#define _CNM_PDIR         P1DIR
+#define _CNM_PIES         P1IES
+#define _CNM_PREN         P1REN
+
+#define _CIP_POUT         P2OUT
+#define _CIP_PORT_VECTOR  PORT2_VECTOR
+#define _CIP_PDIR         P2DIR
 
 #define ADC_CHECK      0x02
 
-interrupt(PORT2_VECTOR) p2_isr(void) {
+interrupt(_CIP_PORT_VECTOR) p2_isr(void) { //PORT2_VECTOR
 
   //__enable_interrupt();
-  if (P2IFG & CS_NOTIFY_MASTER) {
-    P2IE &= ~CS_NOTIFY_MASTER;
+  if (_CNM_PIFG & CS_NOTIFY_MASTER) {
+    _CNM_PIE &= ~CS_NOTIFY_MASTER;
     action |= ADC_CHECK;
     __bic_SR_register_on_exit(LPM3_bits /*+ GIE*/); // exit LPM     
   }
@@ -463,13 +474,13 @@ interrupt(PORT2_VECTOR) p2_isr(void) {
 
 void initADCE() {
     
-  P2DIR &= ~CS_NOTIFY_MASTER ;
-  P2DIR |= CS_INCOMING_PACKET;
-  P2IE |=  CS_NOTIFY_MASTER ; 
-  P2IES &= ~CS_NOTIFY_MASTER ;  
-  P2OUT &= ~CS_INCOMING_PACKET;  
+  _CNM_PDIR &= ~CS_NOTIFY_MASTER ;
+  _CNM_PIE |=  CS_NOTIFY_MASTER ; 
+  _CNM_PIES &= ~CS_NOTIFY_MASTER ;  
+  _CNM_PREN |=  CS_NOTIFY_MASTER;
 
-  P2REN |=  CS_NOTIFY_MASTER;
+  _CIP_PDIR |= CS_INCOMING_PACKET;
+  _CIP_POUT &= ~CS_INCOMING_PACKET;  
 
   // UARTB 
   // Comm channel with extentions
@@ -486,8 +497,8 @@ void initADCE() {
 void checkADC() {
     
 
-    P2IE &= ~CS_NOTIFY_MASTER;
-    P2IFG |= CS_NOTIFY_MASTER;    // Just preacaution, we will soon enable interrupts, make sure we don't allow reenty.
+    _CNM_PIE &= ~CS_NOTIFY_MASTER;
+    _CNM_PIFG |= CS_NOTIFY_MASTER;    // Just preacaution, we will soon enable interrupts, make sure we don't allow reenty.
     __enable_interrupt();         // Our process is low priority, only listenning to master spi is the priority.
     
     action &= ~ADC_CHECK;         // Clear current action flag.
@@ -495,7 +506,7 @@ void checkADC() {
    // P2OUT ^= BIT6;  // debug        // ADC Extension (ADCE) is a module ocnnected thru USCI-B and two GPIO pins
   
     __delay_cycles(10000);
-    P2OUT |= CS_INCOMING_PACKET;    // Warn ADCE that we are about to start an spi transfer.
+    _CIP_POUT |= CS_INCOMING_PACKET;    // Warn ADCE that we are about to start an spi transfer.
     
     // delayCyclesProcessBuffer(20); // Give some time to ADCE to react
     __delay_cycles(10000);
@@ -536,9 +547,9 @@ void checkADC() {
  
     _signalMaster();
 
-    P2IFG &= ~CS_NOTIFY_MASTER;        
-    P2IE |= CS_NOTIFY_MASTER;
-    P2OUT &= ~CS_INCOMING_PACKET;   // release extension signal
+    _CNM_PIFG &= ~CS_NOTIFY_MASTER;        
+    _CNM_PIE |= CS_NOTIFY_MASTER;
+    _CIP_POUT &= ~CS_INCOMING_PACKET;   // release extension signal
 
 
 }
