@@ -16,6 +16,30 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>. 
 */
 
+/*
+Proposed impl.
+
+NODE TO IO
+**********
+
+======> SIG 
+(======> INTR)
+>>>>>>>>> MISO/MOSI/CLK [0x40,BFRLEN(Defined by NODE),xxxx,CHK_EXCHANGE] (clk driven by NODE)
+(======> INTR)
+
+
+
+IO TO NODE
+**********
+
+======> INTR
+======> SIG
+>>>>>>>>> MISO/MOSI/CLK [0x30,BFRLEN(Defined by IO),xxxx,CHK_EXCHANGE] (clk driven by NODE)
+======> _INTR_
+
+*/
+
+
 #include "msp430g2553.h"
 #include <legacymsp430.h>
 
