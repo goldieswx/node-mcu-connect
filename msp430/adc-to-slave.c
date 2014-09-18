@@ -55,8 +55,8 @@ unsigned char * bfrBoundary;
 #define MISO  BIT6
 #define SCK   BIT5
 
-#define CS_NOTIFY_MASTER  BIT3   // External Interrupt 
-#define CS_INCOMING_PACKET  BIT4   // Master enable the line before sending
+#define CS_NOTIFY_MASTER  BIT3   // External Interrupt INTR = P2.2
+#define CS_INCOMING_PACKET  BIT4   // Master enable the line before sending  SIG = P3.2
 
 #define PACKET_DAC 0b10010000
 
@@ -116,14 +116,18 @@ int main(void)
     WDTCTL = WDTPW + WDTHOLD;        
     BCSCTL1 = CALBC1_1MHZ;           // DCOCTL = CALDCO_1MHZ;
     BCSCTL2 &= ~(DIVS_3);            // SMCLK/DCO @ 1MHz
-    P1SEL |= BIT1;                   // ADC input pin P1.2
-
-    ADC10CTL1 = INCH_1 + ADC10DIV_0 ;         // Channel 3, ADC10CLK/3
-    ADC10CTL0 = SREF_0 + ADC10SHT_0 + ADC10ON + ADC10IE;  // Vcc,Vss as ref. Sample and hold 64 cycles
-    ADC10AE0 |= BIT1;    
-
+    
     P1DIR = BIT0;
-    P1OUT &= 0;
+    P1OUT = 0;
+
+    P1SEL = 0;
+    P1SEL2 = 0;
+    //P1SEL |= BIT1;                   // ADC input pin P1.2
+
+   // ADC10CTL1 = INCH_1 + ADC10DIV_0 ;         // Channel 3, ADC10CLK/3
+   // ADC10CTL0 = SREF_0 + ADC10SHT_0 + ADC10ON + ADC10IE;  // Vcc,Vss as ref. Sample and hold 64 cycles
+   // ADC10AE0 |= BIT1;    
+
 
     P2DIR = CS_NOTIFY_MASTER | BIT5;
     P2DIR &= ~CS_INCOMING_PACKET;
@@ -138,7 +142,7 @@ int main(void)
     P2IFG = 0;
     P2IE  = CS_INCOMING_PACKET;
    
-    P1SEL =   BIT1 + BIT5 + BIT6 + BIT7 ; 
+    P1SEL |=    BIT5 + BIT6 + BIT7 ; 
     P1SEL2 =   BIT5 + BIT6 + BIT7 ;
 
     UCB0CTL1 = UCSWRST;                       // **Put state machine in reset**
@@ -146,14 +150,17 @@ int main(void)
     UCB0CTL1 &= ~UCSWRST;                     // **Initialize USCI state machine**
 
     while(IFG2 & UCB0RXIFG);                  // Wait ifg2 flag on rx  (no idea what it does)
-    UCB0TXBUF = 0x00;
+    UCB0TXBUF = 0x12;
+
+         IFG2 &= ~UCB0RXIFG;
+                IE2 |= UCB0RXIE;   
 
     BCSCTL3 = LFXT1S_2; 
 
     TA0R = 0;
     TA0CCR0 = 500; // 1000;// 32767;              // Count to this, then interrupt;  0 to stop counting
     TA0CTL = TASSEL_1 | MC_1 ;             // Clock source ACLK
-    TA0CCTL1 = CCIE ;                     // Timer A interrupt enable
+   // TA0CCTL1 = CCIE ;                     // Timer A interrupt enable
 
     action = 0;
     bfrBoundary = bfr;
@@ -189,13 +196,14 @@ interrupt(ADC10_VECTOR) ADC10_ISR (void) {
  
 interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
-    UCB0TXBUF = *pbfr++;      
+    UCB0TXBUF = 0x77; // *pbfr++;      
     
-    if (pbfr == bfrBoundary) {
+  /*if (pbfr == bfrBoundary) {
         IE2 &= ~UCB0RXIE;              // Disable SPI interrupt     
         pbfr = bfr;
-    }
+    } */
     
+    P1OUT = BIT0;
     IFG2 &= ~UCB0RXIFG;   // clear current interrupt flag
     return;
 
@@ -203,8 +211,9 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
 interrupt(PORT2_VECTOR) P2_ISR(void) {
 
+return;
    if(P2IFG & CS_INCOMING_PACKET) {         // slave is ready to transmit, enable the SPI interrupt
-    if (P2OUT & CS_NOTIFY_MASTER) {   // did we notify master in the first place ?
+    //if (P2OUT & CS_NOTIFY_MASTER) {   // did we notify master in the first place ?
        if (!(P2IES & CS_INCOMING_PACKET)) { // check raising edge
               
 
@@ -227,7 +236,7 @@ interrupt(PORT2_VECTOR) P2_ISR(void) {
             TA0CCTL1 = CCIE;
 
        }
-      }
+      //}
     }
 
    P2IFG &= ~CS_INCOMING_PACKET;   // clear master notification interrupt flag        

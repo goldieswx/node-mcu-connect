@@ -21,7 +21,7 @@
 #include <legacymsp430.h>
 
 #define node2_0 1
-//#define ADCE 1
+#define ADCE 1
 
 // global declarations
 
@@ -159,6 +159,7 @@ void _signalMaster() {
   outBuffer[19] = 0xff;
   outBuffer[20] = 0xff; 
   outBufferCheckSum = 0x3ff; */
+
     int i;
     unsigned int chk = 0;
     for (i=0;i<20;i++) {
@@ -320,6 +321,7 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
                       // P2OUT ^= BIT6;
                     #else
                       P1OUT ^= BIT0;
+                      //action |= ADC_CHECK;    
                     #endif
                 }
             }
@@ -337,6 +339,7 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
                    #ifdef node2_0  
                       P2OUT &= inPacket.data[0];
                       P2OUT |= inPacket.data[1];
+                      action |= ADC_CHECK;    
                     #else
                       P1OUT ^= BIT3;
                     #endif
@@ -474,13 +477,13 @@ interrupt(_CIP_PORT_VECTOR) p2_isr(void) { //PORT2_VECTOR
 
 void initADCE() {
     
-  _CNM_PDIR &= ~CS_NOTIFY_MASTER ;
+  /*_CNM_PDIR &= ~CS_NOTIFY_MASTER ;
   _CNM_PIE |=  CS_NOTIFY_MASTER ; 
   _CNM_PIES &= ~CS_NOTIFY_MASTER ;  
   _CNM_PREN |=  CS_NOTIFY_MASTER;
 
   _CIP_PDIR |= CS_INCOMING_PACKET;
-  _CIP_POUT &= ~CS_INCOMING_PACKET;  
+  _CIP_POUT &= ~CS_INCOMING_PACKET;  */
 
   // UARTB 
   // Comm channel with extentions
@@ -489,8 +492,8 @@ void initADCE() {
   P1DIR &= ~BIT6;
 
   //power the extension
-  P1DIR |= BIT3;
-  P1OUT |= BIT3;
+  //P1DIR |= BIT3;
+  //P1OUT |= BIT3;
 
 }
 
