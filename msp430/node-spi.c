@@ -105,7 +105,7 @@ void initDebug();
 void initADCE();
 void checkADC(); 
 char transfer(char s); 
-
+void ioMSG();
 
 int main() {
 
@@ -139,12 +139,16 @@ int main() {
  */
 void mcomProcessBuffer() {
 
-     __disable_interrupt();
-    
-      action &= ~PROCESS_BUFFER; // when we release the action, 
-       // contents of inBuffer must be ready to reuse
-       // (and will be destroyed)
+//     __disable_interrupt();
      __enable_interrupt();
+
+     ioMSG();
+     action &= ~PROCESS_BUFFER; 
+     // when we release the action, we will stop being busy and
+     // contents of inBuffer must be ready to reuse
+     // (and will be destroyed)
+  
+
      return;
 
 }
@@ -337,9 +341,9 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
   		      if (inPacket.destinationCmd == currentNodeId) { // there was a mi cmd
               if (inPacket.chkSum == outPacket.chkSum) {
                    #ifdef node2_0  
-                      P2OUT &= inPacket.data[0];
-                      P2OUT |= inPacket.data[1];
-                      action |= ADC_CHECK;    
+                    //  P2OUT &= inPacket.data[0];
+                    //  P2OUT |= inPacket.data[1];
+                      //action |= ADC_CHECK;    
                     #else
                       P1OUT ^= BIT3;
                     #endif
@@ -450,16 +454,17 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 #define _CNM_PDIR         P1DIR
 #define _CNM_PIES         P1IES
 #define _CNM_PREN         P1REN
+#define _CNM_PORT_VECTOR  PORT1_VECTOR
 
 #define _CIP_POUT         P2OUT
-#define _CIP_PORT_VECTOR  PORT2_VECTOR
 #define _CIP_PDIR         P2DIR
 
 #define ADC_CHECK      0x02
 
-interrupt(_CIP_PORT_VECTOR) p2_isr(void) { //PORT2_VECTOR
+interrupt(_CNM_PORT_VECTOR) p2_isr(void) { //PORT2_VECTOR
 
   //__enable_interrupt();
+
   if (_CNM_PIFG & CS_NOTIFY_MASTER) {
     _CNM_PIE &= ~CS_NOTIFY_MASTER;
     action |= ADC_CHECK;
@@ -477,13 +482,13 @@ interrupt(_CIP_PORT_VECTOR) p2_isr(void) { //PORT2_VECTOR
 
 void initADCE() {
     
-  /*_CNM_PDIR &= ~CS_NOTIFY_MASTER ;
+  _CNM_PDIR &= ~CS_NOTIFY_MASTER ;
   _CNM_PIE |=  CS_NOTIFY_MASTER ; 
   _CNM_PIES &= ~CS_NOTIFY_MASTER ;  
   _CNM_PREN |=  CS_NOTIFY_MASTER;
 
   _CIP_PDIR |= CS_INCOMING_PACKET;
-  _CIP_POUT &= ~CS_INCOMING_PACKET;  */
+  _CIP_POUT &= ~CS_INCOMING_PACKET;  
 
   // UARTB 
   // Comm channel with extentions
@@ -496,6 +501,42 @@ void initADCE() {
   //P1OUT |= BIT3;
 
 }
+
+void ioMSG() {
+  
+    _CIP_POUT |= CS_INCOMING_PACKET;    // Warn ADCE that we are about to start an spi transfer.
+    __delay_cycles(1000);
+    
+    // delayCyclesProcessBuffer(20); // Give some time to ADCE to react
+    unsigned char c[16];
+    unsigned char * p = c;
+    
+                    //P2OUT &= (inPacket.data[0] & (BIT6 | BIT7));
+                    //P2OUT |= inPacket.data[1];
+
+
+    *p = transfer(inPacket.data[0]);               // Get Packet length from ADCE
+    //*p = transfer(inPacket.data[0]);               // Get Packet length from ADCE
+    //*p = transfer(inPacket.data[0]);               // Get Packet length from ADCE
+
+     outBuffer[0] = inPacket.data[0];
+    outBuffer[1] = inPacket.data[1];
+
+
+    //_signalMaster();
+
+    /*int len = 2;
+
+    while (len--) {
+        *p++ = transfer(0);
+        __delay_cycles(10000);
+       // P2OUT ^= BIT7;
+    }*/   //__delay_cycles(100000);
+
+    _CIP_POUT &= ~CS_INCOMING_PACKET;   // release extension signal
+
+}
+
 
 void checkADC() {
     

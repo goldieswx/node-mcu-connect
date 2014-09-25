@@ -55,8 +55,8 @@ unsigned char * bfrBoundary;
 #define MISO  BIT6
 #define SCK   BIT5
 
-#define CS_NOTIFY_MASTER  BIT3   // External Interrupt INTR = P2.2
-#define CS_INCOMING_PACKET  BIT4   // Master enable the line before sending  SIG = P3.2
+#define CS_NOTIFY_MASTER  BIT2   // External Interrupt INTR = P2.2
+#define CS_INCOMING_PACKET  BIT2   // Master enable the line before sending  SIG = P3.2
 
 #define PACKET_DAC 0b10010000
 
@@ -79,12 +79,11 @@ void beginSampleDac() {
 
 void checkDAC() {
     action &= ~CHECK_DAC;
-
     static int lastValue;
     int chan = 7;
     readValue = ADC10MEM; // Assigns the value held in ADC10MEM to the integer called ADC_value
   
-    P2OUT |= BIT5;
+    //P2OUT |= BIT5;
     if (readValue > 500) {
 
       int len = 4;
@@ -98,7 +97,7 @@ void checkDAC() {
       if ((readValue > (lastValue+15)) || (readValue < (lastValue-15)))
       {
         pbfr = bfr;
-        P2OUT |= CS_NOTIFY_MASTER;
+        P3OUT |= CS_NOTIFY_MASTER;
         lastValue = readValue;
           return;
       }
@@ -117,50 +116,57 @@ int main(void)
     BCSCTL1 = CALBC1_1MHZ;           // DCOCTL = CALDCO_1MHZ;
     BCSCTL2 &= ~(DIVS_3);            // SMCLK/DCO @ 1MHz
     
-    P1DIR = BIT0;
+    P1DIR = BIT0 + BIT1 + BIT5 + BIT7;
     P1OUT = 0;
 
     P1SEL = 0;
     P1SEL2 = 0;
-    //P1SEL |= BIT1;                   // ADC input pin P1.2
+    
+    P1SEL |= BIT1;                   // ADC input pin P1.2
 
-   // ADC10CTL1 = INCH_1 + ADC10DIV_0 ;         // Channel 3, ADC10CLK/3
-   // ADC10CTL0 = SREF_0 + ADC10SHT_0 + ADC10ON + ADC10IE;  // Vcc,Vss as ref. Sample and hold 64 cycles
-   // ADC10AE0 |= BIT1;    
+    ADC10CTL1 = INCH_1 + ADC10DIV_0 ;         // Channel 3, ADC10CLK/3
+    ADC10CTL0 = SREF_0 + ADC10SHT_0 + ADC10ON + ADC10IE;  // Vcc,Vss as ref. Sample and hold 64 cycles
+    ADC10AE0 |= BIT1;    
 
 
-    P2DIR = CS_NOTIFY_MASTER | BIT5;
+    P3DIR = CS_NOTIFY_MASTER;
     P2DIR &= ~CS_INCOMING_PACKET;
     P2OUT &= 0;
+    P3DIR &= 0;
 
 
     P2REN = 0;
-//    P2REN |= CS_INCOMING_PACKET;
     P2SEL = 0;
     P2SEL2 = 0;
     P2IES &= 0;
-    P2IFG = 0;
+
+    P3REN = 0;
+    P3SEL = 0;
+    P3SEL2 = 0;
+
     P2IE  = CS_INCOMING_PACKET;
+    P2IFG = 0;
+
    
     P1SEL |=    BIT5 + BIT6 + BIT7 ; 
     P1SEL2 =   BIT5 + BIT6 + BIT7 ;
 
-    UCB0CTL1 = UCSWRST;                       // **Put state machine in reset**
-    UCB0CTL0 |= UCCKPH  + UCCKPL + UCMSB + UCSYNC;     // 3-pin, 8-bit SPI slave
-    UCB0CTL1 &= ~UCSWRST;                     // **Initialize USCI state machine**
-
-    while(IFG2 & UCB0RXIFG);                  // Wait ifg2 flag on rx  (no idea what it does)
-    UCB0TXBUF = 0x12;
-
-         IFG2 &= ~UCB0RXIFG;
-                IE2 |= UCB0RXIE;   
-
+  
     BCSCTL3 = LFXT1S_2; 
+
+     UCB0CTL1 = UCSWRST;                       // **Put state machine in reset**
+     __delay_cycles(10);
+     UCB0CTL0 |= UCCKPH   + UCCKPL + UCMSB + UCSYNC;     // 3-pin, 8-bit SPI slave
+     UCB0CTL1 &= ~UCSWRST;                     // **Initialize USCI state machine**
+
+     while(IFG2 & UCB0RXIFG);                  // Wait ifg2 flag on rx  (no idea what it does)
+    //IE2 |= UCB0RXIE;                          // Enable USCI0 RX interrupt
+    UCB0TXBUF = 0x00;                         // We do not want to ouput anything on the line
 
     TA0R = 0;
     TA0CCR0 = 500; // 1000;// 32767;              // Count to this, then interrupt;  0 to stop counting
     TA0CTL = TASSEL_1 | MC_1 ;             // Clock source ACLK
-   // TA0CCTL1 = CCIE ;                     // Timer A interrupt enable
+    TA0CCTL1 = CCIE ;                     // Timer A interrupt enable
 
     action = 0;
     bfrBoundary = bfr;
@@ -168,6 +174,7 @@ int main(void)
 
     while(1)    {
         if (!action) {
+          //  P1OUT |= BIT0;
             __bis_SR_register(LPM3_bits + GIE);
         }
         __enable_interrupt(); // process pending interrupts (between actions)
@@ -196,14 +203,19 @@ interrupt(ADC10_VECTOR) ADC10_ISR (void) {
  
 interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
-    UCB0TXBUF = 0x77; // *pbfr++;      
+    //UCB0TXBUF = 0x77; // *pbfr++;      
     
-  /*if (pbfr == bfrBoundary) {
-        IE2 &= ~UCB0RXIE;              // Disable SPI interrupt     
+    /* if (pbfr == bfrBoundary) {
+        IE2 &= ~UCB0RXIE;   // Disable SPI interrupt     
         pbfr = bfr;
     } */
     
-    P1OUT = BIT0;
+    if (UCB0RXBUF)  { 
+      P1OUT |= BIT0 + BIT1; 
+    } else {
+      P1OUT &= 0; 
+    }
+
     IFG2 &= ~UCB0RXIFG;   // clear current interrupt flag
     return;
 
@@ -211,29 +223,31 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
 interrupt(PORT2_VECTOR) P2_ISR(void) {
 
-return;
+//   return;
    if(P2IFG & CS_INCOMING_PACKET) {         // slave is ready to transmit, enable the SPI interrupt
     //if (P2OUT & CS_NOTIFY_MASTER) {   // did we notify master in the first place ?
        if (!(P2IES & CS_INCOMING_PACKET)) { // check raising edge
               
 
-                IFG2 &= ~UCB0RXIFG;
                 IE2 |= UCB0RXIE;              // enable spi interrupt
                 UCB0TXBUF = *pbfr;           // prepare first byte
+            
+                IFG2 &= ~UCB0RXIFG;
+
                 P2IES |= CS_INCOMING_PACKET; // switch to falling edge
           }
          else {
  
-            IFG2 &= ~UCB0RXIFG;
             IE2 &= ~UCB0RXIE;              // Disable SPI interrupt     
+            IFG2 &= ~UCB0RXIFG;
             
-            pbfr = bfr;
-            bfrBoundary = bfr;
+           // pbfr = bfr;
+           // bfrBoundary = bfr;
             P2IES &= ~CS_INCOMING_PACKET;  // switch to raising edge
-            P2OUT &= ~CS_NOTIFY_MASTER;    // Bring notify line low
+            // P2OUT &= ~CS_NOTIFY_MASTER;    // Bring notify line low
 
-            TA0CTL = TASSEL_1 | MC_1;  // enable timer.
-            TA0CCTL1 = CCIE;
+           // TA0CTL = TASSEL_1 | MC_1;  // enable timer.
+           // TA0CCTL1 = CCIE;
 
        }
       //}
@@ -248,7 +262,6 @@ interrupt(TIMER0_A1_VECTOR) ta1_isr(void) {
 
   TA0CTL = TACLR;  // stop & clear timer
   TA0CCTL1 &= 0;   // also disable timer interrupt & clear flag
-
 
 
   action |= BEGIN_SAMPLE_DAC;
