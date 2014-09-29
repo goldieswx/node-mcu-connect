@@ -519,9 +519,8 @@ void ioMSG() {
     //*p = transfer(inPacket.data[0]);               // Get Packet length from ADCE
     //*p = transfer(inPacket.data[0]);               // Get Packet length from ADCE
 
-     outBuffer[0] = inPacket.data[0];
+    outBuffer[0] = inPacket.data[0];
     outBuffer[1] = inPacket.data[1];
-
 
     //_signalMaster();
 
@@ -561,7 +560,7 @@ void checkADC() {
     
     *p = transfer(0);               // Get Packet length from ADCE
     
-    int len = 5;//*p++ & 0b00001111;
+    int len = 5;//*p++ & 0b000hghf01111;
     int xlen = len;
 
     __delay_cycles(10000);
@@ -604,7 +603,6 @@ char transfer(char s) {
     int i;
 
     for(i=0;i<8;i++) {
-
         P1OUT |= SCK;
         __delay_cycles( 200 );
 
@@ -628,7 +626,6 @@ char transfer(char s) {
         } else {
           ret &= 0xFE;
         }
-
     }
     return ret; 
 

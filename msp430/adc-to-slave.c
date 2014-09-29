@@ -80,12 +80,11 @@ void beginSampleDac() {
 void checkDAC() {
     action &= ~CHECK_DAC;
     static int lastValue;
-    int chan = 7;
-    readValue = ADC10MEM; // Assigns the value held in ADC10MEM to the integer called ADC_value
-  
-    //P2OUT |= BIT5;
-    if (readValue > 500) {
 
+    readValue = ADC10MEM; // Assigns the value held in ADC10MEM to the integer called ADC_value
+
+    //P2OUT |= BIT5;
+    if (readValue < 700) {
       int len = 4;
       bfr[0] = PACKET_DAC | len;
       bfr[3] = 0x2;    
@@ -96,10 +95,13 @@ void checkDAC() {
 
       if ((readValue > (lastValue+15)) || (readValue < (lastValue-15)))
       {
+          P3OUT |= CS_NOTIFY_MASTER;
+         //P1OUT ^= (BIT0 + BIT1);   
+          bfr[1] = readValue / 4 ;
+
+
         pbfr = bfr;
-        P3OUT |= CS_NOTIFY_MASTER;
         lastValue = readValue;
-          return;
       }
    }
     
@@ -119,20 +121,19 @@ int main(void)
     P1DIR = BIT0 + BIT1 + BIT5 + BIT7;
     P1OUT = 0;
 
-    P1SEL = 0;
-    P1SEL2 = 0;
-    
-    P1SEL |= BIT1;                   // ADC input pin P1.2
+    P1SEL = BIT2;
+       //P1SEL |= BIT1;                   // ADC input pin P1.2
 
-    ADC10CTL1 = INCH_1 + ADC10DIV_0 ;         // Channel 3, ADC10CLK/3
+    ADC10CTL1 = INCH_2 + ADC10DIV_0 ;         // Channel 3, ADC10CLK/3
     ADC10CTL0 = SREF_0 + ADC10SHT_0 + ADC10ON + ADC10IE;  // Vcc,Vss as ref. Sample and hold 64 cycles
-    ADC10AE0 |= BIT1;    
+    ADC10AE0 |= BIT2;    
 
 
-    P3DIR = CS_NOTIFY_MASTER;
     P2DIR &= ~CS_INCOMING_PACKET;
     P2OUT &= 0;
     P3DIR &= 0;
+    P3DIR |= CS_NOTIFY_MASTER;
+    P3OUT &= 0,
 
 
     P2REN = 0;
@@ -161,10 +162,10 @@ int main(void)
 
      while(IFG2 & UCB0RXIFG);                  // Wait ifg2 flag on rx  (no idea what it does)
     //IE2 |= UCB0RXIE;                          // Enable USCI0 RX interrupt
-    UCB0TXBUF = 0x00;                         // We do not want to ouput anything on the line
+    UCB0TXBUF = 0x13;                         // We do not want to ouput anything on the line
 
     TA0R = 0;
-    TA0CCR0 = 500; // 1000;// 32767;              // Count to this, then interrupt;  0 to stop counting
+    TA0CCR0 = 500;              // Count to this, then interrupt;  0 to stop counting
     TA0CTL = TASSEL_1 | MC_1 ;             // Clock source ACLK
     TA0CCTL1 = CCIE ;                     // Timer A interrupt enable
 
@@ -203,7 +204,7 @@ interrupt(ADC10_VECTOR) ADC10_ISR (void) {
  
 interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
-    //UCB0TXBUF = 0x77; // *pbfr++;      
+    UCB0TXBUF = bfr[1]; // *pbfr++;      
     
     /* if (pbfr == bfrBoundary) {
         IE2 &= ~UCB0RXIE;   // Disable SPI interrupt     
@@ -263,7 +264,15 @@ interrupt(TIMER0_A1_VECTOR) ta1_isr(void) {
   TA0CTL = TACLR;  // stop & clear timer
   TA0CCTL1 &= 0;   // also disable timer interrupt & clear flag
 
+  P3OUT &= ~CS_NOTIFY_MASTER;
 
+/*  P3OUT ^= CS_NOTIFY_MASTER;
+  P1OUT ^= (BIT0 + BIT1);   
+
+  TA0CTL = TASSEL_1 | MC_1; 
+  TA0CCTL1 = CCIE;
+  return;
+*/
   action |= BEGIN_SAMPLE_DAC;
   __bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM
   return;
