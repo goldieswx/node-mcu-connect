@@ -515,12 +515,19 @@ void ioMSG() {
                     //P2OUT |= inPacket.data[1];
 
 
-    *p = transfer(inPacket.data[0]);               // Get Packet length from ADCE
+    //*p = transfer(inPacket.data[0]);               // Get Packet length from ADCE
     //*p = transfer(inPacket.data[0]);               // Get Packet length from ADCE
     //*p = transfer(inPacket.data[0]);               // Get Packet length from ADCE
 
-    outBuffer[0] = inPacket.data[0];
-    outBuffer[1] = inPacket.data[1];
+    transfer(1);
+    __delay_cycles(1000);
+    transfer(inPacket.data[1]);
+    __delay_cycles(1000);
+    transfer(inPacket.data[2]);
+    __delay_cycles(1000);
+
+    //outBuffer[0] = inPacket.data[0];
+    //outBuffer[1] = inPacket.data[1];
 
     //_signalMaster();
 
@@ -558,10 +565,10 @@ void checkADC() {
     unsigned char c[16];
     unsigned char * p = c;
     
-    *p = transfer(0);               // Get Packet length from ADCE
+    *p = transfer(2);               // Get Packet length from ADCE
     
-    int len = 5;//*p++ & 0b000hghf01111;
-    int xlen = len;
+    int len = 5;
+
 
     __delay_cycles(10000);
 
@@ -572,12 +579,12 @@ void checkADC() {
     }
 
     outBuffer[0] = 0x15;
-    outBuffer[1] = c[0];
-    outBuffer[2] = c[1];
-    outBuffer[3] = c[2];
-    outBuffer[4] = c[3];
+    outBuffer[1] = c[1];
+    outBuffer[2] = c[2];
+    outBuffer[3] = c[3];
+    outBuffer[4] = c[4];
     outBuffer[5] = 0x55;
-    outBuffer[6] = xlen;    
+    outBuffer[6] = 0x11;    
 
 
     //lastresp[16] = c[0];            // Temporarily set the response somewhere (FIX)

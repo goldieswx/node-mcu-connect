@@ -46,9 +46,15 @@ IO TO NODE
 unsigned int readValue=0;
 unsigned int action=0;
 
-unsigned char bfr [16];
-unsigned char * pbfr;
-unsigned char * bfrBoundary;
+unsigned int inHeader=0;
+
+unsigned char bfr [20];
+unsigned char store [20];
+unsigned char adcData [16];
+
+unsigned char * pbfr = 0;
+unsigned char * pstore = 0;
+unsigned char * bfrBoundary = 0;
 
 
 #define MOSI  BIT7 
@@ -84,24 +90,16 @@ void checkDAC() {
     readValue = ADC10MEM; // Assigns the value held in ADC10MEM to the integer called ADC_value
 
     //P2OUT |= BIT5;
-    if (readValue < 700) {
-      int len = 4;
-      bfr[0] = PACKET_DAC | len;
-      bfr[3] = 0x2;    
-      bfr[2] = readValue >> 8;
-      bfr[1] = readValue & 0xFF;
-      bfr[4] = 0xff; //readValue & 0xFF;
-      bfrBoundary = &(bfr[5]);    
+    if (readValue < 750) {
+      adcData[0] = 0xAB;
+      adcData[3] = 0xcd;    
+      adcData[2] = readValue >> 8;
+      adcData[1] = readValue & 0xFF;
 
       if ((readValue > (lastValue+15)) || (readValue < (lastValue-15)))
       {
           P3OUT |= CS_NOTIFY_MASTER;
-         //P1OUT ^= (BIT0 + BIT1);   
-          bfr[1] = readValue / 4 ;
-
-
-        pbfr = bfr;
-        lastValue = readValue;
+          lastValue = readValue;
       }
    }
     
@@ -204,18 +202,24 @@ interrupt(ADC10_VECTOR) ADC10_ISR (void) {
  
 interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
-    UCB0TXBUF = bfr[1]; // *pbfr++;      
-    
-    /* if (pbfr == bfrBoundary) {
-        IE2 &= ~UCB0RXIE;   // Disable SPI interrupt     
-        pbfr = bfr;
-    } */
-    
-    if (UCB0RXBUF)  { 
-      P1OUT |= BIT0 + BIT1; 
-    } else {
-      P1OUT &= 0; 
-    }
+    if (pbfr) { UCB0TXBUF = *pbfr++; }
+    if (pstore) { *pstore++ = UCB0RXBUF; }
+
+    if (inHeader) {
+          //check action.
+         if (UCB0RXBUF == 0x01) {
+            // master wants to interact with IOs
+            //pbfr = bfr; // just send garbage to node
+            //bfrBoundary = pbfr + 6; // 3x IOs &| mask 
+         }  else {
+        
+            // we need to push data from adc.
+            pbfr = adcData;
+            //bfrBoundary = pbfr + 4; 
+         }
+         inHeader --;
+    } 
+
 
     IFG2 &= ~UCB0RXIFG;   // clear current interrupt flag
     return;
@@ -224,34 +228,28 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
 interrupt(PORT2_VECTOR) P2_ISR(void) {
 
-//   return;
    if(P2IFG & CS_INCOMING_PACKET) {         // slave is ready to transmit, enable the SPI interrupt
-    //if (P2OUT & CS_NOTIFY_MASTER) {   // did we notify master in the first place ?
        if (!(P2IES & CS_INCOMING_PACKET)) { // check raising edge
               
-
-                IE2 |= UCB0RXIE;              // enable spi interrupt
-                UCB0TXBUF = *pbfr;           // prepare first byte
-            
-                IFG2 &= ~UCB0RXIFG;
-
-                P2IES |= CS_INCOMING_PACKET; // switch to falling edge
+            UCB0TXBUF = 0x33;           // prepare first byte
+            IE2 |= UCB0RXIE;              // enable spi interrupt
+            inHeader = 1;
+            IFG2 &= ~UCB0RXIFG;
+            P2IES |= CS_INCOMING_PACKET; // switch to falling edge
+            pstore = store;
           }
          else {
+
+            if (store[0] == 0x01) {
+                P1OUT &= (store[2] & (BIT0 + BIT1));
+                P1OUT |= (store[1] & (BIT0 + BIT1));
+            }
  
             IE2 &= ~UCB0RXIE;              // Disable SPI interrupt     
             IFG2 &= ~UCB0RXIFG;
-            
-           // pbfr = bfr;
-           // bfrBoundary = bfr;
             P2IES &= ~CS_INCOMING_PACKET;  // switch to raising edge
-            // P2OUT &= ~CS_NOTIFY_MASTER;    // Bring notify line low
-
-           // TA0CTL = TASSEL_1 | MC_1;  // enable timer.
-           // TA0CCTL1 = CCIE;
 
        }
-      //}
     }
 
    P2IFG &= ~CS_INCOMING_PACKET;   // clear master notification interrupt flag        
