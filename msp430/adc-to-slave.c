@@ -100,6 +100,7 @@ void checkDAC() {
       {
           P3OUT |= CS_NOTIFY_MASTER;
           lastValue = readValue;
+          return;
       }
    }
     
