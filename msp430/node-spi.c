@@ -567,7 +567,7 @@ void checkADC() {
     
     *p = transfer(2);               // Get Packet length from ADCE
     
-    int len = 5;
+    int len = 5 ;
 
 
     __delay_cycles(10000);
@@ -585,6 +585,11 @@ void checkADC() {
     outBuffer[4] = c[4];
     outBuffer[5] = 0x55;
     outBuffer[6] = 0x11;    
+    outBuffer[7] = c[1];
+    outBuffer[8] = c[2];
+    outBuffer[9] = c[3];
+    outBuffer[10] = c[4];
+    outBuffer[11] = 0x99;
 
 
     //lastresp[16] = c[0];            // Temporarily set the response somewhere (FIX)
