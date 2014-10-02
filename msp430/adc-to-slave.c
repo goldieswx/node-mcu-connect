@@ -120,7 +120,7 @@ int main(void)
     BCSCTL2 &= ~(DIVS_3);            // SMCLK/DCO @ 1MHz
     
     P1DIR = BIT0 + BIT1 + BIT5 + BIT7;
-    P1OUT = 0;
+   // P1OUT = 0;
 
     P1SEL = BIT2;
        //P1SEL |= BIT1;                   // ADC input pin P1.2
@@ -162,11 +162,11 @@ int main(void)
      UCB0CTL1 &= ~UCSWRST;                     // **Initialize USCI state machine**
 
      while(IFG2 & UCB0RXIFG);                  // Wait ifg2 flag on rx  (no idea what it does)
-    //IE2 |= UCB0RXIE;                          // Enable USCI0 RX interrupt
+    IE2 |= UCB0RXIE;                          // Enable USCI0 RX interrupt
     UCB0TXBUF = 0x13;                         // We do not want to ouput anything on the line
 
     TA0R = 0;
-    TA0CCR0 = 500;              // Count to this, then interrupt;  0 to stop counting
+    TA0CCR0 = 50;              // Count to this, then interrupt;  0 to stop counting
     TA0CTL = TASSEL_1 | MC_1 ;             // Clock source ACLK
     TA0CCTL1 = CCIE ;                     // Timer A interrupt enable
 
@@ -235,7 +235,7 @@ interrupt(PORT2_VECTOR) P2_ISR(void) {
        if (!(P2IES & CS_INCOMING_PACKET)) { // check raising edge
               
             UCB0TXBUF = 0x33;           // prepare first byte
-            IE2 |= UCB0RXIE;              // enable spi interrupt
+           // IE2 |= UCB0RXIE;              // enable spi interrupt
             inHeader = 1;
             IFG2 &= ~UCB0RXIFG;
             P2IES |= CS_INCOMING_PACKET; // switch to falling edge
@@ -246,11 +246,16 @@ interrupt(PORT2_VECTOR) P2_ISR(void) {
             if (store[0] == 0x01) {
                 P1OUT &= (store[2] & (BIT0 + BIT1));
                 P1OUT |= (store[1] & (BIT0 + BIT1));
+            } else {
+               TA0CTL = TASSEL_1 | MC_1; 
+               TA0CCTL1 = CCIE;
+               P3OUT &= ~CS_NOTIFY_MASTER;
             }
  
-            IE2 &= ~UCB0RXIE;              // Disable SPI interrupt     
+            // IE2 &= ~UCB0RXIE;              // Disable SPI interrupt     
             IFG2 &= ~UCB0RXIFG;
             P2IES &= ~CS_INCOMING_PACKET;  // switch to raising edge
+
 
        }
     }
@@ -265,7 +270,7 @@ interrupt(TIMER0_A1_VECTOR) ta1_isr(void) {
   TA0CTL = TACLR;  // stop & clear timer
   TA0CCTL1 &= 0;   // also disable timer interrupt & clear flag
 
-  P3OUT &= ~CS_NOTIFY_MASTER;
+ 
 
 /*  P3OUT ^= CS_NOTIFY_MASTER;
   P1OUT ^= (BIT0 + BIT1);   

@@ -589,7 +589,7 @@ void checkADC() {
     outBuffer[8] = c[2];
     outBuffer[9] = c[3];
     outBuffer[10] = c[4];
-    outBuffer[11] = 0x99;
+    outBuffer[11] = c[4];
 
 
     //lastresp[16] = c[0];            // Temporarily set the response somewhere (FIX)
