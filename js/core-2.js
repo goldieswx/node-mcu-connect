@@ -1,5 +1,53 @@
 var dgram = require('dgram');
 
+
+/* core-2 draft
+var ext = $('node/7').find('ext/1').alias('room');
+
+    ext.find('io/1.1')
+       .alias('ambiance')
+       .io('out','triac')
+       .tag(['out','lightning','ambiance'])
+       .map("2m 18m 2.5m, 4m 19m 2.5m"); // bbox or dot
+       
+
+    ext.find('io/1.2')
+	.alias('entrance-sensor')
+	.io('in','analog')
+	.tag(['in','analog','lightning','sensor','low'])
+	.map("south-east 1.5m");
+
+
+   $('entrance-sensor').on('tap',function(value){
+	
+	$('ambiance').toggle();
+
+   })
+
+
+   $('entrance-sensor').on('any',function(value){
+	// logData
+   });
+
+ 
+   $('entrance-sensor').on('touch',function(value){
+	 var light = ext.find('[lighting,out]'); 
+
+	 if (value.greater(.5)) {	
+		light.find('[mid|high]').enable();
+		light.find('[night]').disable();
+	 }  else {
+		light.find('[mid|low]').enable();
+		light.find('[night]').disable();
+	 }
+
+   });
+
+
+
+*/
+
+
 var MCUInterface = function(settings) {
 
         var messages = [];
