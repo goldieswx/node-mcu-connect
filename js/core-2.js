@@ -1,4 +1,52 @@
+var util  = require('util');
 var dgram = require('dgram');
+var _ = require('lodash-node');
+
+var MCUObject = function(key) {
+
+  this.children = [];
+  this.key = key; 
+  this.aliases = [];
+  this.childType = "child";
+
+};
+
+
+MCUObject.prototype.find = function(selector) {
+
+  var expression = selector.split('/');
+  var selectorKey = expression[1];
+
+  return _.filter(this.children,{key:selectorKey});
+
+};
+
+MCUObject.prototype.alias = function(alias) {
+
+  this.aliases.push(alias);
+
+};
+
+
+var MCUNode = function() {
+
+};
+
+util.inherits(MCUNode,MCUObject);
+
+var MCUInterface = function() {
+
+};
+
+
+util.inherits(MCUInterface,MCUObject);
+
+
+var MCUIo = function() {
+
+};
+
+util.inherits(MCUIo,MCUObject);
 
 
 /* core-2 draft

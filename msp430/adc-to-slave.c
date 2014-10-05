@@ -85,6 +85,8 @@ void beginSampleDac() {
 
 void checkDAC() {
     action &= ~CHECK_DAC;
+    __enable_interrupt();
+
     static int lastValue;
 
     readValue = ADC10MEM; // Assigns the value held in ADC10MEM to the integer called ADC_value
@@ -102,7 +104,7 @@ void checkDAC() {
           lastValue = readValue;
           return;
       }
-   }
+    }
     
    TA0CTL = TASSEL_1 | MC_1; 
    TA0CCTL1 = CCIE;
