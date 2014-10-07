@@ -1,4 +1,4 @@
-var util  = require('util');
+var util = require('util');
 var dgram = require('dgram');
 var _ = require('lodash-node');
 
@@ -11,30 +11,46 @@ var MCUObject = function(key) {
 
 };
 
-
 MCUObject.prototype.find = function(selector) {
 
-  var expression = selector.split('/');
+  var expression  = selector.split('/');
   var selectorKey = expression[1];
-
   return _.filter(this.children,{key:selectorKey});
 
 };
 
 MCUObject.prototype.alias = function(alias) {
-
   this.aliases.push(alias);
+};
 
+MCUObject.prototype.add  = function(child) {
+   this.children.push(child);
+   return child;
+};
+
+var MCUNetwork = function() {
+};
+util.inherits(MCUNetwork,MCUNetwork);
+
+MCUNetwork.prototype.add = function(child) {
+   if( _.isUndefined(child)) {
+   	child = new MCUNode();	
+   }
+   return this._super.add(child);
 };
 
 
 var MCUNode = function() {
+
+   this.childType = "node";
 
 };
 
 util.inherits(MCUNode,MCUObject);
 
 var MCUInterface = function() {
+
+   this.childType = "interface";
 
 };
 
@@ -43,6 +59,8 @@ util.inherits(MCUInterface,MCUObject);
 
 
 var MCUIo = function() {
+	
+   this.childType = "io";
 
 };
 
@@ -50,6 +68,18 @@ util.inherits(MCUIo,MCUObject);
 
 
 /* core-2 draft
+
+ var net = new MCUNetwork('NETWORK-ID');
+ 
+ var node = net.add('1','room');
+ var iface = node.add('1');
+ var io = node.add('1.5'); 
+ 
+ net.find('room/1/1.5');
+ net.find('room//1.5'); // often there is just one extension.
+ net.find('room//top-spotlights');
+
+
 var ext = $('node/7').find('ext/1').alias('room');
 
     ext.find('io/1.1')
