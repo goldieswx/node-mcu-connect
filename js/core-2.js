@@ -76,9 +76,20 @@ util.inherits(MCUIo,MCUObject);
  var io = node.add('1.5'); 
  
  net.find('room/1/1.5');
- net.find('room//1.5'); // often there is just one extension.
- net.find('room//top-spotlights');
-
+ net.find('room//1.5','bed-sensor-left'); // often there is just one extension.
+ net.find('room//bed-sensor-left');
+ 
+ net.find('room//bed-sensor-left').setup('1.2p adc 15dx 15s 3.3v 10bit','5v 10k 10k'); // 15s retransmit value is unchanged
+ net.find('room//bed-sensor-left').setup('1.3p out','5v 10k 10k'); // 15s retransmit value is unchanged
+ 
+ 
+ (function ($) {
+ 	
+ 	$('room//bed-sensor-left').on('touch',function() {
+              $('room//[lighting,out,low|mid]').toggle();
+ 	});
+ 	
+ } (net.find));
 
 var ext = $('node/7').find('ext/1').alias('room');
 
