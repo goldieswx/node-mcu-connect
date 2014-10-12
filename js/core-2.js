@@ -4,6 +4,10 @@ var _ = require('lodash-node');
 
 var MCUObject = function(key) {
 
+
+console.log('mcuO,cons');
+   
+
   this.children = [];
   this.key = key; 
   this.aliases = [];
@@ -24,38 +28,63 @@ MCUObject.prototype.alias = function(alias) {
 };
 
 MCUObject.prototype.add  = function(child) {
+   
    this.children.push(child);
    return child;
 };
 
 var MCUNetwork = function() {
-};
-util.inherits(MCUNetwork,MCUNetwork);
 
-MCUNetwork.prototype.add = function(child) {
-   if( _.isUndefined(child)) {
-   	child = new MCUNode();	
-   }
-   return this._super.add(child);
+  this.superClass = MCUObject.prototype;
+  MCUNetwork.super_.call(this);
+
+};
+util.inherits(MCUNetwork,MCUObject);
+
+
+MCUNetwork.prototype.add = function(key) {
+
+   var child = new MCUNode();
+   child.key = key;
+   return (this.superClass.add.bind(this))(child);
+
 };
 
 
 var MCUNode = function() {
 
    this.childType = "node";
+   this.superClass = MCUObject.prototype;
+   MCUNode.super_.call(this);
 
 };
 
 util.inherits(MCUNode,MCUObject);
+MCUNode.prototype.add = function(key) {
 
-var MCUInterface = function() {
-
-   this.childType = "interface";
+   var child = new MCUInterface();
+   child.key = key;
+   return (this.superClass.add.bind(this))(child);
 
 };
 
 
+var MCUInterface = function() {
+
+   this.childType = "interface";
+   this.superClass = MCUObject.prototype;
+   MCUNode.super_.call(this);
+
+};
 util.inherits(MCUInterface,MCUObject);
+
+MCUInterface.prototype.add = function(key) {
+
+   var child = new MCUInterface();
+   child.key = key;
+   return (this.superClass.add.bind(this))(child);
+
+};
 
 
 var MCUIo = function() {
@@ -66,6 +95,20 @@ var MCUIo = function() {
 
 util.inherits(MCUIo,MCUObject);
 
+
+var net = new MCUNetwork();
+var node = net.add(1);
+var iface = node.add(1);
+var io = iface.add('1.5');
+
+iface.find('1.6').on('touch',function(e) {
+
+      e.addTag('lighting-button','night');
+      e.cancelBubble(); // bubble up to iface/node/net by deft.
+
+});
+
+console.log(io.key);
 
 /* core-2 draft
 
@@ -197,4 +240,4 @@ MCUInterface.prototype._callback = function(msg,rinfo) {
 
 };
 
-var mi = new MCUInterface();
+//var mi = new MCUInterface();
