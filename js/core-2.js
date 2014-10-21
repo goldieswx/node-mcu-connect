@@ -4,10 +4,6 @@ var _ = require('lodash-node');
 
 var MCUObject = function(key) {
 
-
-console.log('mcuO,cons');
-   
-
   this.children = [];
   this.key = key; 
   this.aliases = [];
@@ -17,9 +13,14 @@ console.log('mcuO,cons');
 
 MCUObject.prototype.find = function(selector) {
 
-  var expression  = selector.split('/');
-  var selectorKey = expression[1];
-  return _.filter(this.children,{key:selectorKey});
+  //var expression  = selector.split('/');
+  //var selectorKey = expression[1];
+  var ret = new MCUObject();
+  ret.children = _.filter(this.children,{key:selector});
+  ret.childType = "mixed";
+
+  console.log(ret.children,selector);
+  return ret;
 
 };
 
@@ -32,6 +33,8 @@ MCUObject.prototype.add  = function(child) {
    this.children.push(child);
    return child;
 };
+
+
 
 var MCUNetwork = function() {
 
@@ -49,6 +52,20 @@ MCUNetwork.prototype.add = function(key) {
    return (this.superClass.add.bind(this))(child);
 
 };
+
+MCUNetwork.prototype._callback = function(value) {
+
+  // value is received in binary form from udp.
+  // extract node number, interface id and io.
+  // dispatch right away to io and bubble up if necessary to net.
+  var nodeId = 5;
+  var interfaceId = 2;
+  var ioId = "1.5";
+
+
+  console.log(this.find(nodeId).find(interfaceId).find(ioId).key);
+
+}
 
 
 var MCUNode = function() {
@@ -88,27 +105,33 @@ MCUInterface.prototype.add = function(key) {
 
 
 var MCUIo = function() {
-	
    this.childType = "io";
+};
+
+MCUIo.prototype.on = function(eventType,fn) {
+
+
 
 };
+
 
 util.inherits(MCUIo,MCUObject);
 
 
 var net = new MCUNetwork();
-var node = net.add(1);
-var iface = node.add(1);
+var node = net.add(5);
+var iface = node.add(2);
 var io = iface.add('1.5');
 
-iface.find('1.6').on('touch',function(e) {
+/*iface.find('1.6').on('touch',function(e) {
 
       e.addTag('lighting-button','night');
       e.cancelBubble(); // bubble up to iface/node/net by deft.
 
-});
+});*/
 
-console.log(io.key);
+net._callback();
+//console.log(net.find(5)[0].find(2)[0].find('1.5'));
 
 /* core-2 draft
 
