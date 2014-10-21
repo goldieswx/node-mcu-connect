@@ -13,13 +13,36 @@ var MCUObject = function(key) {
 
 MCUObject.prototype.find = function(selector) {
 
-  //var expression  = selector.split('/');
-  //var selectorKey = expression[1];
-  var ret = new MCUObject();
-  ret.children = _.filter(this.children,{key:selector});
-  ret.childType = "mixed";
+  var expression  = selector.split(' ');
+  if (expression.length > 1) {
+     var tmp = this;
+     _.each(expression,function(item){
+        tmp = tmp.find(item);
+     });
+     return tmp;
+  }
 
-  console.log(ret.children,selector);
+  var ret,children = [];
+  var parseChildren = function(obj,filter,result) {
+       if (obj.children && obj.children.length) {
+          result.push  (_.filter(obj.children,filter));
+          _.each(obj.children,function(child) {
+            parseChildren(child,filter,result);
+          });
+       } 
+  }
+  
+  parseChildren(this,{key:selector},children);
+  children = _.flatten(children);
+
+  if (children.length != 1) {
+     ret = new MCUObject();
+     ret.childType = "mixed-multiple";
+     ret.children = children;
+  } else {
+     ret = children[0];
+  }
+  
   return ret;
 
 };
@@ -58,12 +81,17 @@ MCUNetwork.prototype._callback = function(value) {
   // value is received in binary form from udp.
   // extract node number, interface id and io.
   // dispatch right away to io and bubble up if necessary to net.
-  var nodeId = 5;
-  var interfaceId = 2;
+  var nodeId = "node-5";
+  var interfaceId = "iface-2";
   var ioId = "1.5";
 
+  //console.log(this.find(nodeId).find(interfaceId).find(ioId));
+  console.log(this.find("iface-2 1.5:tag-1:tag-2"));
+  console.log(this.find("iface-2 :tag-1:tag-2"));
+  console.log(this.find("node-5 :tag-1:tag-2"));
 
-  console.log(this.find(nodeId).find(interfaceId).find(ioId).key);
+  console.log(this.find(":tag-1:tag-2"));
+
 
 }
 
@@ -119,9 +147,10 @@ util.inherits(MCUIo,MCUObject);
 
 
 var net = new MCUNetwork();
-var node = net.add(5);
-var iface = node.add(2);
+var node = net.add('node-5');
+var iface = node.add('iface-2');
 var io = iface.add('1.5');
+io = iface.add('1.5');
 
 /*iface.find('1.6').on('touch',function(e) {
 
