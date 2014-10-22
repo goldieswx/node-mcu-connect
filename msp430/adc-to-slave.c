@@ -98,13 +98,15 @@ void checkDAC() {
       adcData[2] = readValue >> 8;
       adcData[1] = readValue & 0xFF;
 
+      readValue += 15;
+
       if ((readValue > (lastValue+15)) || (readValue < (lastValue-15)))
       {
           P3OUT |= CS_NOTIFY_MASTER;
           lastValue = readValue;
           return;
       }
-    }
+   }
     
    TA0CTL = TASSEL_1 | MC_1; 
    TA0CCTL1 = CCIE;
@@ -112,6 +114,17 @@ void checkDAC() {
    return;
 }
 
+void resync() {
+
+     UCA0CTL1 = UCSWRST;   
+     UCB0CTL1 = UCSWRST;                       // **Put state machine in reset**
+     __delay_cycles(100);
+     UCB0CTL0 |= UCCKPH   + UCCKPL + UCMSB + UCSYNC;     // 3-pin, 8-bit SPI slave
+     UCB0CTL1 &= ~UCSWRST;                     // **Initialize USCI state machine**
+
+     while(IFG2 & UCB0RXIFG);                  // Wait ifg2 flag on rx  (no idea what it does)
+    IE2 |= UCB0RXIE;                          // Enable USCI0 RX interrupt
+}
 
 int main(void)
 {
@@ -122,12 +135,12 @@ int main(void)
     P1DIR = BIT0 + BIT1 + BIT5 + BIT7;
    // P1OUT = 0;
 
-    P1SEL = BIT2;
+    P1SEL = BIT3;
        //P1SEL |= BIT1;                   // ADC input pin P1.2
 
-    ADC10CTL1 = INCH_2 + ADC10DIV_0 ;         // Channel 3, ADC10CLK/3
+    ADC10CTL1 = INCH_3 + ADC10DIV_0 ;         // Channel 3, ADC10CLK/3
     ADC10CTL0 = SREF_0 + ADC10SHT_0 + ADC10ON + ADC10IE;  // Vcc,Vss as ref. Sample and hold 64 cycles
-    ADC10AE0 |= BIT2;    
+    ADC10AE0 |= BIT3;    
 
 
     P2DIR &= ~CS_INCOMING_PACKET;
@@ -155,7 +168,8 @@ int main(void)
 
   
     BCSCTL3 = LFXT1S_2; 
-
+ 
+     UCA0CTL1 = UCSWRST;   
      UCB0CTL1 = UCSWRST;                       // **Put state machine in reset**
      __delay_cycles(10);
      UCB0CTL0 |= UCCKPH   + UCCKPL + UCMSB + UCSYNC;     // 3-pin, 8-bit SPI slave
@@ -166,7 +180,7 @@ int main(void)
     UCB0TXBUF = 0x13;                         // We do not want to ouput anything on the line
 
     TA0R = 0;
-    TA0CCR0 = 50;              // Count to this, then interrupt;  0 to stop counting
+    TA0CCR0 = 500;              // Count to this, then interrupt;  0 to stop counting
     TA0CTL = TASSEL_1 | MC_1 ;             // Clock source ACLK
     TA0CCTL1 = CCIE ;                     // Timer A interrupt enable
 
@@ -205,6 +219,13 @@ interrupt(ADC10_VECTOR) ADC10_ISR (void) {
  
 interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
+    if (UCB0STAT & UCOE) {
+      resync();
+      IFG2 &= ~UCB0RXIFG;   // clear current interrupt flag
+      return;
+    }
+
+
     if (pbfr) { UCB0TXBUF = *pbfr++; }
     if (pstore) { *pstore++ = UCB0RXBUF; }
 
@@ -231,6 +252,7 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
 interrupt(PORT2_VECTOR) P2_ISR(void) {
 
+
    if(P2IFG & CS_INCOMING_PACKET) {         // slave is ready to transmit, enable the SPI interrupt
        if (!(P2IES & CS_INCOMING_PACKET)) { // check raising edge
               
@@ -247,9 +269,12 @@ interrupt(PORT2_VECTOR) P2_ISR(void) {
                 P1OUT &= (store[2] & (BIT0 + BIT1));
                 P1OUT |= (store[1] & (BIT0 + BIT1));
             } else {
-               TA0CTL = TASSEL_1 | MC_1; 
-               TA0CCTL1 = CCIE;
-               P3OUT &= ~CS_NOTIFY_MASTER;
+              if (store[0] != 0x02) {
+                resync();              
+              }
+              TA0CTL = TASSEL_1 | MC_1; 
+              TA0CCTL1 = CCIE;
+              P3OUT &= ~CS_NOTIFY_MASTER;
             }
  
             // IE2 &= ~UCB0RXIE;              // Disable SPI interrupt     

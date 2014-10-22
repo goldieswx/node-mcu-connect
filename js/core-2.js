@@ -8,11 +8,14 @@ var MCUObject = function(key) {
   this.key = key; 
   this.aliases = [];
   this.childType = "child";
+  this.tags = [];
 
 };
 
 MCUObject.prototype.find = function(selector) {
 
+  // split expression by spaces and recursively call ourselves
+  // to reduce the result subset by subset
   var expression  = selector.split(' ');
   if (expression.length > 1) {
      var tmp = this;
@@ -22,17 +25,27 @@ MCUObject.prototype.find = function(selector) {
      return tmp;
   }
 
+  // treat simpler case where selector is just one string ([key]:[[tag]:[tag2]])
   var ret,children = [];
   var parseChildren = function(obj,filter,result) {
-       if (obj.children && obj.children.length) {
-          result.push  (_.filter(obj.children,filter));
-          _.each(obj.children,function(child) {
-            parseChildren(child,filter,result);
-          });
-       } 
+     // check if the object matches, check also its children recursively
+     // when match, push result by reference
+     if (obj.children && obj.children.length) {
+        result.push  (_.filter(obj.children,function(child){
+            return  ((filter.key.length)?(child.key == filter.key):1)
+                    && _.intersection(child.tags,filter.tags).length == filter.tags.length;
+        }));
+        _.each(obj.children,function(child) {
+          parseChildren(child,filter,result);
+        });
+     } 
   }
   
-  parseChildren(this,{key:selector},children);
+  var selector = selector.split(":");
+  tags = selector.splice(1);
+  var key = selector;
+
+  parseChildren(this,{"key":key[0],"tags":tags},children);
   children = _.flatten(children);
 
   if (children.length != 1) {
@@ -57,12 +70,20 @@ MCUObject.prototype.add  = function(child) {
    return child;
 };
 
+MCUObject.prototype.tag  = function(tags) {
+   
+   this.tags = _.union(this.tags,tags.split(' '));
+   return this;
+};
+
+
 
 
 var MCUNetwork = function() {
 
   this.superClass = MCUObject.prototype;
   MCUNetwork.super_.call(this);
+  this.childType = "network";
 
 };
 util.inherits(MCUNetwork,MCUObject);
@@ -86,11 +107,8 @@ MCUNetwork.prototype._callback = function(value) {
   var ioId = "1.5";
 
   //console.log(this.find(nodeId).find(interfaceId).find(ioId));
-  console.log(this.find("iface-2 1.5:tag-1:tag-2"));
-  console.log(this.find("iface-2 :tag-1:tag-2"));
-  console.log(this.find("node-5 :tag-1:tag-2"));
+  console.log(this.find(":tag-1"));
 
-  console.log(this.find(":tag-1:tag-2"));
 
 
 }
@@ -98,9 +116,9 @@ MCUNetwork.prototype._callback = function(value) {
 
 var MCUNode = function() {
 
-   this.childType = "node";
    this.superClass = MCUObject.prototype;
    MCUNode.super_.call(this);
+   this.childType = "node";
 
 };
 
@@ -116,16 +134,16 @@ MCUNode.prototype.add = function(key) {
 
 var MCUInterface = function() {
 
-   this.childType = "interface";
    this.superClass = MCUObject.prototype;
    MCUNode.super_.call(this);
+   this.childType = "interface";
 
 };
 util.inherits(MCUInterface,MCUObject);
 
 MCUInterface.prototype.add = function(key) {
 
-   var child = new MCUInterface();
+   var child = new MCUIo();
    child.key = key;
    return (this.superClass.add.bind(this))(child);
 
@@ -133,7 +151,10 @@ MCUInterface.prototype.add = function(key) {
 
 
 var MCUIo = function() {
-   this.childType = "io";
+
+   this.superClass = MCUObject.prototype;
+   MCUNode.super_.call(this);
+   this.childType = "io"
 };
 
 MCUIo.prototype.on = function(eventType,fn) {
@@ -147,10 +168,10 @@ util.inherits(MCUIo,MCUObject);
 
 
 var net = new MCUNetwork();
-var node = net.add('node-5');
-var iface = node.add('iface-2');
-var io = iface.add('1.5');
-io = iface.add('1.5');
+var node = net.add('node-5',5);
+var iface = node.add('iface-2',1);
+var io = iface.add('1.5',"P1.5").tag("tag-1");
+io = iface.add('1.5').tag("tag-1 tag-2");
 
 /*iface.find('1.6').on('touch',function(e) {
 

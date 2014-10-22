@@ -26,7 +26,7 @@
 // global declarations
 
 int action;
-#define currentNodeId   5
+#define currentNodeId   3
   // id of this node
 
 #define PROCESS_BUFFER 0x01
@@ -341,9 +341,10 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
   		      if (inPacket.destinationCmd == currentNodeId) { // there was a mi cmd
               if (inPacket.chkSum == outPacket.chkSum) {
                    #ifdef node2_0  
-                    //  P2OUT &= inPacket.data[0];
-                    //  P2OUT |= inPacket.data[1];
-                      //action |= ADC_CHECK;    
+                      P2OUT &= inPacket.data[0];
+                      P2OUT |= inPacket.data[1];
+                      action |= ADC_CHECK;    
+                      //_signalMaster();
                     #else
                       P1OUT ^= BIT3;
                     #endif
