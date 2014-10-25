@@ -343,7 +343,7 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
                    #ifdef node2_0  
                       P2OUT &= inPacket.data[0];
                       P2OUT |= inPacket.data[1];
-                      action |= ADC_CHECK;    
+                      //action |= ADC_CHECK;    
                       //_signalMaster();
                     #else
                       P1OUT ^= BIT3;
@@ -521,10 +521,12 @@ void ioMSG() {
     //*p = transfer(inPacket.data[0]);               // Get Packet length from ADCE
 
     transfer(1);
-    __delay_cycles(1000);
-    transfer(inPacket.data[1]);
-    __delay_cycles(1000);
-    transfer(inPacket.data[2]);
+
+    int i = 0;
+    for(i=0;i<10;i++) {
+       __delay_cycles(1000);
+        transfer(inPacket.data[i]);
+    }
     __delay_cycles(1000);
 
     //outBuffer[0] = inPacket.data[0];

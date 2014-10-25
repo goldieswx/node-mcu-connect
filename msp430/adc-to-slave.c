@@ -69,11 +69,61 @@ unsigned char * bfrBoundary = 0;
 #define BEGIN_SAMPLE_DAC 0x02
 #define CHECK_DAC 0x01
 
+
+typedef struct _ioConfig {
+   unsigned char P1DIR;
+   unsigned char P1ADC;
+   unsigned char P1REN;
+   unsigned char P1OUT;
+   unsigned char P2DIR;
+   unsigned char P2REN;
+   unsigned char P2OUT;
+   unsigned char P3DIR;
+   unsigned char P3REN;
+   unsigned char P3OUT;
+   unsigned char pcTimerCount; 
+ } ioConfig;
+
 char transfer(char s) {
     while (!(IFG2 & UCB0TXIFG));
     UCB0TXBUF = s;
     return UCB0RXBUF;
 }
+
+ioConfig ioConfig;
+
+
+
+void initConfig() {
+
+   char availP1 = (BIT0|BIT1|BIT2|BIT3|BIT4);
+   char availP2 = (BIT3|BIT4|BIT5|BIT6|BIT7);
+   char availP3 = (BIT3|BIT4|BIT5|BIT6|BIT7);
+   
+   ioConfig.P1DIR &= availP1;
+   ioConfig.P1ADC &= availP1;
+   ioConfig.P1REN &= (availP1 & ~ioConfig.P1ADC);
+   ioConfig.P1OUT &= (availP1 & ~ioConfig.P1ADC);
+   ioConfig.P2DIR &= availP2;
+   ioConfig.P2REN &= availP2;
+   ioConfig.P2OUT &= availP2;
+   ioConfig.P3DIR &= availP3;
+   ioConfig.P3REN &= availP3;
+   ioConfig.P3OUT &= availP3;
+   
+   P1DIR = (P1DIR & (~availP1)) | ioConfig.P1DIR;
+   P1SEL = (P1DIR & (~availP1)) | ioConfig.P1ADC;
+   P1REN = (P1REN & (~availP1)) | ioConfig.P1REN;
+   P1OUT = (P1OUT & (~availP1)) | ioConfig.P1OUT;
+   P2DIR = (P2DIR & (~availP2)) | ioConfig.P2DIR;
+   P2REN = (P2REN & (~availP2)) | ioConfig.P2REN;
+   P2OUT = (P2OUT & (~availP2)) | ioConfig.P2OUT;
+   P3DIR = (P3DIR & (~availP3)) | ioConfig.P3DIR;
+   P3REN = (P3REN & (~availP3)) | ioConfig.P3REN;
+   P3OUT = (P3OUT & (~availP3)) | ioConfig.P3OUT;
+
+}
+
 
 void beginSampleDac() {
 
@@ -123,7 +173,7 @@ void resync() {
      UCB0CTL1 &= ~UCSWRST;                     // **Initialize USCI state machine**
 
      while(IFG2 & UCB0RXIFG);                  // Wait ifg2 flag on rx  (no idea what it does)
-    IE2 |= UCB0RXIE;                          // Enable USCI0 RX interrupt
+     IE2 |= UCB0RXIE;                          // Enable USCI0 RX interrupt
 }
 
 int main(void)
