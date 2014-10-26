@@ -50,7 +50,6 @@ unsigned int inHeader=0;
 
 unsigned char bfr [20];
 unsigned char store [20];
-unsigned char adcData [16];
 
 unsigned char * pbfr = 0;
 unsigned char * pstore = 0;
@@ -91,6 +90,10 @@ char transfer(char s) {
 }
 
 #define MAX_ADC_CHANNELS 5
+#define NUM_PORTS_AVAIL  3
+
+int adcData [MAX_ADC_CHANNELS+NUM_PORTS_AVAIL];
+
 ioConfig ioConfig;
 char ioADCRead[MAX_ADC_CHANNELS]; 
 
@@ -113,7 +116,9 @@ void initConfig() {
    ioConfig.P3OUT &= availP3;
    
    P1DIR = (P1DIR & (~availP1)) | ioConfig.P1DIR;
-   P1SEL = (P1DIR & (~availP1)) | ioConfig.P1ADC;
+   P1SEL = (P1SEL & (~availP1)) | ioConfig.P1ADC;
+   P1SEL2 = (P1SEL2 & (~availP1));
+   ADC10AE0 = ioConfig.P1ADC;
    P1REN = (P1REN & (~availP1)) | ioConfig.P1REN;
    P1OUT = (P1OUT & (~availP1)) | ioConfig.P1OUT;
    P2DIR = (P2DIR & (~availP2)) | ioConfig.P2DIR;
@@ -149,31 +154,40 @@ void checkDAC() {
     __enable_interrupt();
 
     static int lastValues[5];
+    static char lastP1;
+    static char lastP2;
+    static char lastP3;
 
-    int * readValues;
+    char newP1,newP2,newP3;
+
     int readValue;
     char dataTrigger = 0;
-    //readValue = ADC10MEM; // Assigns the value held in ADC10MEM to the integer called ADC_value
 
     for (i=0;i<MAX_ADC_CHANNELS;i++) {
-         readValue = readValues[i];
-         //adcData[2] = readValue >> 8;
-         //adcData[1] = readValue & 0xFF;
+      if (ioADCRead[i]) {
+         readValue = adcData[i];
          if (readValue < 750) {
-
-            readValue += 15;
-
             if ((readValue > (lastValue+15)) || (readValue < (lastValue-15)))
             {
-                
                 lastValues[i] = readValue;
-                return;
+                dataTrigger|= 0x01;
             }
          }
+      }
     }
 
+   newP1 = (P1IN & ~ioConfig.P1DIR & ~ioConfig.P1ADC);
+   newP2 = (P2IN & ~ioConfig.P2DIR);
+   newP3 = (P3IN & ~ioConfig.P3DIR);
+
+   if (lastP1 ^ newP1) { dataTrigger|= 0x02; lastP1 = newP1; }
+   if (lastP2 ^ newP2) { dataTrigger|= 0x04; lastP2 = newP2; }
+   if (lastP3 ^ newP3) { dataTrigger|= 0x08; lastP3 = newP3; }
 
   if (dataTrigger) {
+    adcData[MAX_ADC_CHANNELS+1] = newP1;
+    adcData[MAX_ADC_CHANNELS+2] = newP2;
+    adcData[MAX_ADC_CHANNELS+3] = newP3;
      P3OUT |= CS_NOTIFY_MASTER;
   } else {
      TA0CTL = TASSEL_1 | MC_1; 
@@ -202,15 +216,13 @@ int main(void)
     BCSCTL2 &= ~(DIVS_3);            // SMCLK/DCO @ 1MHz
     
     P1DIR = BIT0 + BIT1 + BIT5 + BIT7;
-   // P1OUT = 0;
 
-    P1SEL = BIT3;
-       //P1SEL |= BIT1;                   // ADC input pin P1.2
+    ADC10CTL1 = INCH_4 + ADC10DIV_0 + CONSEQ_1 ;         // Channel (BIT4) highest channel, ADC10CLK/3
+    ADC10CTL0 = SREF_0 + ADC10SHT_0 + MSC +  ADC10ON + ADC10IE;  // Vcc,Vss as ref. Sample and hold 64 cycles
+    ADC10AE0 = availP1;    //11111100
 
-    ADC10CTL1 = INCH_3 + ADC10DIV_0 ;         // Channel 3, ADC10CLK/3
-    ADC10CTL0 = SREF_0 + ADC10SHT_0 + ADC10ON + ADC10IE;  // Vcc,Vss as ref. Sample and hold 64 cycles
-    ADC10AE0 |= BIT3;    
-
+    ADC10DTC1 = MAX_ADC_CHANNELS;                         // 5 conversions
+    ADC10SA = adcData; 
 
     P2DIR &= ~CS_INCOMING_PACKET;
     P2OUT &= 0;
