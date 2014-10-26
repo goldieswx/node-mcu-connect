@@ -90,8 +90,9 @@ char transfer(char s) {
     return UCB0RXBUF;
 }
 
+#define MAX_ADC_CHANNELS 5
 ioConfig ioConfig;
-
+char ioADCRead[MAX_ADC_CHANNELS]; 
 
 
 void initConfig() {
@@ -122,6 +123,16 @@ void initConfig() {
    P3REN = (P3REN & (~availP3)) | ioConfig.P3REN;
    P3OUT = (P3OUT & (~availP3)) | ioConfig.P3OUT;
 
+    int i;
+    char toRead;
+    char ioCfg = ioConfig.P1ADC;
+
+    for (i=0;i<MAX_ADC_CHANNELS;i++) {
+        ioADCRead[i] = ioCfg & 1; 
+        ioCfg >>=1;  
+    }
+
+
 }
 
 
@@ -137,29 +148,37 @@ void checkDAC() {
     action &= ~CHECK_DAC;
     __enable_interrupt();
 
-    static int lastValue;
+    static int lastValues[5];
 
-    readValue = ADC10MEM; // Assigns the value held in ADC10MEM to the integer called ADC_value
+    int * readValues;
+    int readValue;
+    char dataTrigger = 0;
+    //readValue = ADC10MEM; // Assigns the value held in ADC10MEM to the integer called ADC_value
 
-    //P2OUT |= BIT5;
-    if (readValue < 750) {
-      adcData[0] = 0xAB;
-      adcData[3] = 0xcd;    
-      adcData[2] = readValue >> 8;
-      adcData[1] = readValue & 0xFF;
+    for (i=0;i<MAX_ADC_CHANNELS;i++) {
+         readValue = readValues[i];
+         //adcData[2] = readValue >> 8;
+         //adcData[1] = readValue & 0xFF;
+         if (readValue < 750) {
 
-      readValue += 15;
+            readValue += 15;
 
-      if ((readValue > (lastValue+15)) || (readValue < (lastValue-15)))
-      {
-          P3OUT |= CS_NOTIFY_MASTER;
-          lastValue = readValue;
-          return;
-      }
-   }
-    
-   TA0CTL = TASSEL_1 | MC_1; 
-   TA0CCTL1 = CCIE;
+            if ((readValue > (lastValue+15)) || (readValue < (lastValue-15)))
+            {
+                
+                lastValues[i] = readValue;
+                return;
+            }
+         }
+    }
+
+
+  if (dataTrigger) {
+     P3OUT |= CS_NOTIFY_MASTER;
+  } else {
+     TA0CTL = TASSEL_1 | MC_1; 
+     TA0CCTL1 = CCIE;
+  }
 
    return;
 }
