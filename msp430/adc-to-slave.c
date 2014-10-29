@@ -1,4 +1,6 @@
 /*
+
+almost there
     node-mcu-connect . node.js UDP Interface for embedded devices.
     Copyright (C) 2013-4 David Jakubowski
 
@@ -17,13 +19,12 @@
 */
 
 
+
 #include "msp430g2553.h"
 #include <legacymsp430.h>
 
-volatile unsigned int action=0; // use volatile when dealing with variables globally (& within interrupts)
+volatile unsigned int action=0;
 volatile unsigned int inHeader=0;
-volatile unsigned char * pbfr=0;
-volatile unsigned char * pstore=0;
 
 unsigned char bfr [20];
 unsigned char store [20];
@@ -43,12 +44,6 @@ unsigned char store [20];
 #define MAX_ADC_CHANNELS 5
 #define NUM_PORTS_AVAIL  3
 
-const char availP1 = (BIT0|BIT1|BIT2|BIT3|BIT4);
-const char availP2 = (BIT3|BIT4|BIT5|BIT6|BIT7);
-const char availP3 = (BIT3|BIT4|BIT5|BIT6|BIT7);
-
-int adcData [MAX_ADC_CHANNELS+NUM_PORTS_AVAIL];
-
 
 struct ioConfig {
    unsigned char P1DIR;
@@ -64,14 +59,25 @@ struct ioConfig {
    unsigned char pcTimerCount; 
  };
 
+char availP1 = (BIT0|BIT1|BIT2|BIT3|BIT4);
+char availP2 = (BIT3|BIT4|BIT5|BIT6|BIT7);
+char availP3 = (BIT3|BIT4|BIT5|BIT6|BIT7);
+
+int adcData [MAX_ADC_CHANNELS+NUM_PORTS_AVAIL];
+
 struct ioConfig ioConfig;
 char ioADCRead[MAX_ADC_CHANNELS]; 
 
-void checkDAC();
+inline void _memcpy( void* dest, void*src, int len) {
+
+  while (len--) {
+     *(char*)dest++ = *(char*)src++;
+  }
+}
 
 void initIOConfig() {
 
-   ioConfig.P1DIR = 0x00;
+   /*ioConfig.P1DIR = 0x00;
    ioConfig.P1ADC = BIT2;
    ioConfig.P1REN = 0xFF;
    ioConfig.P1OUT = 0;
@@ -80,17 +86,17 @@ void initIOConfig() {
    ioConfig.P2OUT = 0;
    ioConfig.P3DIR = 0;
    ioConfig.P3REN = 0xFF;
-   ioConfig.P3OUT = 0;
+   ioConfig.P3OUT = 0;*/
 
    ioConfig.P1DIR &= availP1 & ~ioConfig.P1ADC;
    ioConfig.P1ADC &= availP1;
-   ioConfig.P1REN &= (availP1 & ~ioConfig.P1ADC);
+   ioConfig.P1REN &= (availP1 & ~ioConfig.P1ADC & ~ioConfig.P1DIR);
    ioConfig.P1OUT &= (availP1 & ~ioConfig.P1ADC);
    ioConfig.P2DIR &= availP2;
-   ioConfig.P2REN &= availP2;
+   ioConfig.P2REN &= availP2 & ~ioConfig.P2DIR;
    ioConfig.P2OUT &= availP2;
    ioConfig.P3DIR &= availP3;
-   ioConfig.P3REN &= availP3;
+   ioConfig.P3REN &= availP3 & ~ioConfig.P3DIR;
    ioConfig.P3OUT &= availP3;
    
    P1DIR    = (P1DIR & (~availP1)) | ioConfig.P1DIR;
@@ -116,19 +122,6 @@ void initIOConfig() {
 
 }
 
-
-void resync() {
-
-     UCA0CTL1 = UCSWRST;   
-     UCB0CTL1 = UCSWRST;        // State machine in reset
-     __delay_cycles(100);
-     UCB0CTL0 |=  UCCKPH |  UCCKPL |  UCMSB |  UCSYNC; // 3-pin, 8-bit SPI slave
-     UCB0CTL1 &= ~UCSWRST;      // Initialize USCI
-
-     while(IFG2 & UCB0RXIFG);   // Wait ifg2 flag cleared on RX
-     IE2 |= UCB0RXIE;           // Enable USCI0 RX interrupt
-}
-
 void beginSampleDac() {
 
     action &= ~BEGIN_SAMPLE_DAC;
@@ -139,11 +132,21 @@ void beginSampleDac() {
     ADC10SA = (unsigned int)adcData;      // Copies data in ADC10SA to unsigned int adc array
     ADC10CTL0 |= ENC + ADC10SC;           // Sampling and conversion start
 
-    // Then wait for results in the interrupt.   
+    // Now wait for interrupt.   
+}
+
+inline void startTimerSequence() {
+    TA0CTL = TASSEL_1 | MC_1 ;             // Clock source ACLK
+    TA0CCTL1 = CCIE ;                      // Timer A interrupt enable
 }
 
 
-void initADC(){
+void checkDAC() {
+    action &= ~CHECK_DAC;
+    __enable_interrupt();
+
+    static int lastValues[5];
+    static char lastP1, lastP2, lastP3;
 
     ADC10AE0  = 0;
     ADC10CTL0 = 0;
@@ -152,97 +155,144 @@ void initADC(){
     ADC10DTC0 = 0;
     ADC10DTC1 = 0;
 
-    ADC10CTL0 = SREF_0 | ADC10SHT_2 | MSC | ADC10ON | ADC10IE;  // Vcc,Vss as ref. Sample and hold 64 cycles
-    ADC10CTL1 = INCH_4 | CONSEQ_1 ;                             // Channel 3, ADC10CLK/3
-    ADC10AE0  = ioConfig.P1ADC;
+    int readValue;
+    unsigned int i;
+    char dataTrigger = 0;
 
-    ADC10DTC1 = 5;                         // 5 conversions
+    for (i=0;i<MAX_ADC_CHANNELS;i++) {
+      if (ioADCRead[i]) {
+         readValue = adcData[i];
+         if (readValue < 750) {
+            if ((readValue > (lastValues[i]+15)) || (readValue < (lastValues[i]-15))) {
+                lastValues[i] = readValue;
+                dataTrigger|= 0x01;
+            }
+         }
+      }
+    }
 
 }
 
 void initUSCI(){
 
-    P1DIR |= BIT5 | BIT7;
-    P1DIR &= ~BIT6;
-    P1SEL |=  BIT5 | BIT6 | BIT7; 
-    P1SEL2 =  BIT5 | BIT6 | BIT7;
+  int * pAdcData = &adcData[MAX_ADC_CHANNELS];
+  if (dataTrigger) {
+      *pAdcData++ = newP1;
+      *pAdcData++ = newP2;
+      *pAdcData++ = newP3;
+      P3OUT |= CS_NOTIFY_MASTER;
+  } else {
+      startTimerSequence();
+  }
 
-    UCA0CTL1 = UCSWRST;   
-    UCB0CTL1 = UCSWRST;                       // **Put state machine in reset**
-    __delay_cycles(10);
-    UCB0CTL0 |= UCCKPH   + UCCKPL + UCMSB + UCSYNC;     // 3-pin, 8-bit SPI slave
-    UCB0CTL1 &= ~UCSWRST;                     // **Initialize USCI state machine**
-
-    while(IFG2 & UCB0RXIFG);                  // Wait ifg2 flag on rx  
-    IE2 |= UCB0RXIE;                          // Enable USCI0 RX interrupt
-    UCB0TXBUF = 0x0;                         // We do not want to ouput anything on the line
-
-    // init flow control Pins
-    P2DIR   &= ~CS_INCOMING_PACKET;
-    P2OUT   &= ~CS_INCOMING_PACKET;
-    P2REN   &= ~CS_INCOMING_PACKET;
-    P2SEL   &= ~CS_INCOMING_PACKET;
-    P2SEL2  &= ~CS_INCOMING_PACKET;
-    P2IES   &= ~CS_INCOMING_PACKET;
-    P2IE    = CS_INCOMING_PACKET;
-    P2IFG   = 0;
-
-    P3DIR   |= CS_NOTIFY_MASTER;
-    P3OUT   &= ~CS_NOTIFY_MASTER;
-    P3REN   = ~CS_NOTIFY_MASTER;
-    P3SEL   = ~CS_NOTIFY_MASTER;
-    P3SEL2  = ~CS_NOTIFY_MASTER;
-
+  return;
 }
 
 void initTimer() {
 
-    TA0R = 0;
-    TA0CCR0 = 250;              // Count to this, then interrupt;  0 to stop counting
-    TA0CTL = TASSEL_1 | MC_1 ;             // Clock source ACLK
-    TA0CCTL1 = CCIE ;                     // Timer A interrupt enable
+  UCA0CTL1 = UCSWRST;   
+  UCB0CTL1 = UCSWRST;                       // **Put state machine in reset**
+  __delay_cycles(100);
+  UCB0CTL0 |= UCCKPH   + UCCKPL + UCMSB + UCSYNC;     // 3-pin, 8-bit SPI slave
+  UCB0CTL1 &= ~UCSWRST;                     // **Initialize USCI state machine**
+
+  while(IFG2 & UCB0RXIFG);                  // Wait ifg2 flag on rx  (no idea what it does)
+  IE2 |= UCB0RXIE;                          // Enable USCI0 RX interrupt
 }
 
-inline void startDelayedSamplingSequence() {
 
-    TA0CTL = TASSEL_1 | MC_1;  // Enable timera (then start sampling)
-    TA0CCTL1 = CCIE;
+void initUSCI() {
 
+  P1DIR   =    BIT5 + BIT6 + BIT7;
+  P1SEL  |=    BIT5 + BIT6 + BIT7; 
+  P1SEL2 |=    BIT5 + BIT6 + BIT7;
+
+  P2DIR  &= ~CS_INCOMING_PACKET;
+  P2OUT  &= ~CS_INCOMING_PACKET;
+  P2REN  &= ~CS_INCOMING_PACKET;
+  P2SEL  &= ~CS_INCOMING_PACKET;
+  P2SEL2 &= ~CS_INCOMING_PACKET;
+
+  P2IE  = CS_INCOMING_PACKET;
+  P2IES = 0;
+  P2IFG = 0;
+
+  P3DIR  |= CS_NOTIFY_MASTER;
+  P3OUT  &= ~CS_NOTIFY_MASTER;
+  P3REN  &= ~CS_NOTIFY_MASTER;
+  P3SEL  &= ~CS_NOTIFY_MASTER;
+  P3SEL2 &= ~CS_NOTIFY_MASTER; 
+
+  UCA0CTL1 = UCSWRST;   
+  UCB0CTL1 = UCSWRST;                       // **Put state machine in reset**
+  __delay_cycles(10);
+  UCB0CTL0 |= UCCKPH   + UCCKPL + UCMSB + UCSYNC;     // 3-pin, 8-bit SPI slave
+  UCB0CTL1 &= ~UCSWRST;                     // **Initialize USCI state machine**
+
+  while(IFG2 & UCB0RXIFG);                  // Wait ifg2 flag on rx  (no idea what it does)
+  IE2 |= UCB0RXIE;                          // Enable USCI0 RX interrupt
+  UCB0TXBUF = 0x0;                         // We do not want to ouput anything on the line
+
+}
+
+
+void initADC() {
+
+  ADC10AE0    = 0;
+  ADC10CTL0   = 0;
+  ADC10CTL1   = 0;
+  ADC10MEM    = 0;
+  ADC10DTC0   = 0;
+  ADC10DTC1   = 0;
+
+  ADC10CTL0 = SREF_0 + ADC10SHT_2 + MSC + ADC10ON + ADC10IE;  // Vcc,Vss as ref. Sample and hold 64 cycles
+  ADC10CTL1 = INCH_4 + CONSEQ_1 ;         // Channel 3, ADC10CLK/3
+  ADC10AE0 = ioConfig.P1ADC;
+  ADC10DTC1 = 5;                         // 5 conversions
+}
+
+void initTimer() {
+
+  TA0R = 0;
+  TA0CCR0 = 250;                         // Count to this, then interrupt;  
+
+  startTimerSequence();
 }
 
 
 int main(void)
 {
-    WDTCTL =  WDT_ARST_1000;         // WDTPW + WDTHOLD;        
-    BCSCTL1 = CALBC1_1MHZ;           // DCOCTL = CALDCO_1MHZ;
-    BCSCTL2 &= ~(DIVS_3);            // SMCLK/DCO @ 1MHz
-    BCSCTL3 = LFXT1S_2; 
+  WDTCTL =  WDT_ARST_1000;         // WDTPW + WDTHOLD;        
+  BCSCTL1 = CALBC1_1MHZ;           // DCOCTL = CALDCO_1MHZ;
+  BCSCTL2 &= ~(DIVS_3);            // SMCLK/DCO @ 1MHz
+  BCSCTL3 = LFXT1S_2; 
 
-    initIOConfig();
-    initUSCI();
-    initADC();
-    initTimer();
+  initConfig();
+  initUSCI();
+  initADC();
+  initTimer();
 
-    action=0;
-    pbfr=bfr;
+  action = 0;
+  bfrBoundary = bfr;
+  pbfr = bfr;
 
-    while(1)    {
-        if (!action) {
-            __bis_SR_register(LPM3_bits + GIE);
-        }
-        __enable_interrupt(); // process pending interrupts (between actions)
-        __delay_cycles(100);
-        __disable_interrupt(); 
-        
-        if(action & BEGIN_SAMPLE_DAC) {
-            beginSampleDac();
-            continue;
-        }
-        if(action & CHECK_DAC) {
-            checkDAC();
-            continue;
-        }
-    }
+  while(1)    {
+      if (!action) {
+          __bis_SR_register(LPM3_bits + GIE);
+      }
+      __enable_interrupt(); // process pending interrupts (between actions)
+      __delay_cycles(100);
+      __disable_interrupt(); 
+      
+      if(action & BEGIN_SAMPLE_DAC) {
+          beginSampleDac();
+          continue;
+      }
+      if(action & CHECK_DAC) {
+          checkDAC();
+          continue;
+      }
+  }
 }
  
 
@@ -299,67 +349,80 @@ void checkDAC() {
 
 interrupt(ADC10_VECTOR) ADC10_ISR (void) { 
    
-    action |= CHECK_DAC;
-    ADC10CTL0 &= ~ADC10IFG;
-    __bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM   
-    return;
+  action |= CHECK_DAC;
+  ADC10CTL0 &= ~ADC10IFG;
+  __bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM   
+  return;
 
 }
  
 interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
 
-    if (pstore) { *pstore++ = UCB0RXBUF; }
-    if (pbfr) { UCB0TXBUF = *pbfr++; }  
+  if (pstore) { *pstore++ = UCB0RXBUF; }
+  if (pbfr) { UCB0TXBUF = *pbfr++; }  else { UCB0TXBUF = store[0]; }
 
-    if (inHeader) {
-          //check action.
-         if (UCB0RXBUF == 0x01) {
-            // master asks interact with IOs
-            pbfr = 0;
-         }  else {
-            // master asks our adc data 
-            pbfr = (unsigned char *) adcData;
-         }
-         inHeader --;
-    } 
+  if (inHeader) {
+        //check action.
+       if (UCB0RXBUF == 0x01) {
+          // master wants to interact with IOs
+          pbfr = 0;
+       }  else {
+          // we need to push data from adc.
+          pbfr = (unsigned char*)adcData;
+       }
+       inHeader --;
+  } 
 
-    IFG2 &= ~UCB0RXIFG;   // clear current interrupt flag
-    if (UCB0STAT & UCOE) {
-      resync();
-      IFG2 &= ~UCB0RXIFG;   // clear current interrupt flag
-    }
+  IFG2 &= ~UCB0RXIFG;   // clear current interrupt flag
+  if (UCB0STAT & UCOE) {
+    resync();
+    IFG2 &= ~UCB0RXIFG;   
+  }
 
-    return;
+  return;
+
 }
 
 interrupt(PORT2_VECTOR) P2_ISR(void) {
 
+  P2IFG &= ~CS_INCOMING_PACKET;   // clear master notification interrupt flag        
+  P2IES ^= CS_INCOMING_PACKET; 
 
-   P2IFG &= ~CS_INCOMING_PACKET;   // clear master notification interrupt flag        
-   P2IES ^= CS_INCOMING_PACKET;    // invert edge select on csi
+  if (P2IES & CS_INCOMING_PACKET) { // check raising edge (xored)
+      UCB0TXBUF = 0x00;           // prepare first byte
+      inHeader = 1;
+      pstore = store;
+    }
+   else {
 
-   if (P2IES & CS_INCOMING_PACKET) {  // check raising edge (xored)
-        UCB0TXBUF = 0x00;           // prepare first byte
-        inHeader = 1;
-        pstore = store;
-   } else {
       if (store[0] == 0x01) {
-            // P1OUT &= (store[2] & (BIT0 + BIT1));
-            // P1OUT |= (store[1] & (BIT0 + BIT1));
+         if (store[1] == 0x55) {
+            _memcpy (&ioConfig,&store[2],sizeof(struct ioConfig));
+            ioConfig.P3OUT = 0x00;
+            initConfig();
+         } else if (store[1] == 0x66) {
+           P1OUT |= (store[2] & ioConfig.P1DIR);
+           P2OUT |= (store[3] & ioConfig.P2DIR);
+           P3OUT |= (store[4] & ioConfig.P3DIR);
+           P1OUT &= (store[5] | ~ioConfig.P1DIR);
+           P2OUT &= (store[6] | ~ioConfig.P2DIR);
+           P3OUT &= (store[7] | ~ioConfig.P3DIR);
+         }
+         // P1OUT &= (store[2] & (BIT0 + BIT1));
+         // P1OUT |= (store[1] & (BIT0 + BIT1));
       } else {
         if (store[0] != 0x02) {
           resync();              
           pbfr = 0;
         }
-
-        WDTCTL = WDTPW + WDTCNTCL; // Watchdog in countdown mode
-        startDelayedSamplingSequence();
-        P3OUT &= ~CS_NOTIFY_MASTER; // Clear master notification flag
+   
+        WDTCTL = WDTPW + WDTCNTCL;
+        startTimerSequence();  
+        P3OUT &= ~CS_NOTIFY_MASTER;
       }
-   }
-
-   return;
+  }
+  return;
 }
 
 
