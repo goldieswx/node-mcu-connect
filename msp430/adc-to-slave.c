@@ -68,8 +68,10 @@ unsigned char * bfrBoundary = 0;
 #define BEGIN_SAMPLE_DAC 0x02
 #define CHECK_DAC 0x01
 
+int timerCheck;
 
-typedef struct _ioConfig {
+
+struct ioConfig {
    unsigned char P1DIR;
    unsigned char P1ADC;
    unsigned char P1REN;
@@ -81,7 +83,7 @@ typedef struct _ioConfig {
    unsigned char P3REN;
    unsigned char P3OUT;
    unsigned char pcTimerCount; 
- } ioConfig;
+ };
 
 char transfer(char s) {
     while (!(IFG2 & UCB0TXIFG));
@@ -92,19 +94,31 @@ char transfer(char s) {
 #define MAX_ADC_CHANNELS 5
 #define NUM_PORTS_AVAIL  3
 
+char availP1 = (BIT0|BIT1|BIT2|BIT3|BIT4);
+char availP2 = (BIT3|BIT4|BIT5|BIT6|BIT7);
+char availP3 = (BIT3|BIT4|BIT5|BIT6|BIT7);
+
 int adcData [MAX_ADC_CHANNELS+NUM_PORTS_AVAIL];
 
-ioConfig ioConfig;
+struct ioConfig ioConfig;
 char ioADCRead[MAX_ADC_CHANNELS]; 
 
 
 void initConfig() {
 
-   char availP1 = (BIT0|BIT1|BIT2|BIT3|BIT4);
-   char availP2 = (BIT3|BIT4|BIT5|BIT6|BIT7);
-   char availP3 = (BIT3|BIT4|BIT5|BIT6|BIT7);
-   
-   ioConfig.P1DIR &= availP1;
+   ioConfig.P1DIR = 0x00;
+   ioConfig.P1ADC = BIT2;
+   ioConfig.P1REN = 0xFF;
+   ioConfig.P1OUT = 0;
+   ioConfig.P2DIR = 0x00;
+   ioConfig.P2REN = 0xFF;
+   ioConfig.P2OUT = 0;
+   ioConfig.P3DIR = 0;
+   ioConfig.P3REN = 0xFF;
+   ioConfig.P3OUT = 0;
+
+
+   ioConfig.P1DIR &= availP1 & ~ioConfig.P1ADC;
    ioConfig.P1ADC &= availP1;
    ioConfig.P1REN &= (availP1 & ~ioConfig.P1ADC);
    ioConfig.P1OUT &= (availP1 & ~ioConfig.P1ADC);
@@ -115,6 +129,8 @@ void initConfig() {
    ioConfig.P3REN &= availP3;
    ioConfig.P3OUT &= availP3;
    
+
+
    P1DIR = (P1DIR & (~availP1)) | ioConfig.P1DIR;
    P1SEL = (P1SEL & (~availP1)) | ioConfig.P1ADC;
    P1SEL2 = (P1SEL2 & (~availP1));
@@ -128,8 +144,7 @@ void initConfig() {
    P3REN = (P3REN & (~availP3)) | ioConfig.P3REN;
    P3OUT = (P3OUT & (~availP3)) | ioConfig.P3OUT;
 
-    int i;
-    char toRead;
+   int i;
     char ioCfg = ioConfig.P1ADC;
 
     for (i=0;i<MAX_ADC_CHANNELS;i++) {
@@ -143,9 +158,17 @@ void initConfig() {
 
 void beginSampleDac() {
 
-      action &= ~BEGIN_SAMPLE_DAC;
-      ADC10CTL0 |= ENC + ADC10SC;          // Sampling and conversion start
-  
+    action &= ~BEGIN_SAMPLE_DAC;
+    __enable_interrupt();
+
+
+    ADC10CTL0 &= ~ENC;
+    while (ADC10CTL1 & BUSY);               // Wait if ADC10 core is active
+    ADC10SA = (unsigned int)adcData;      // Copies data in ADC10SA to unsigned int adc array
+    ADC10CTL0 |= ENC + ADC10SC;             // Sampling and conversion start
+
+      //action |= CHECK_DAC;
+
       // wait for interrupt.   
 }
 
@@ -160,14 +183,14 @@ void checkDAC() {
 
     char newP1,newP2,newP3;
 
-    int readValue;
+    int readValue,i;
     char dataTrigger = 0;
 
     for (i=0;i<MAX_ADC_CHANNELS;i++) {
       if (ioADCRead[i]) {
          readValue = adcData[i];
          if (readValue < 750) {
-            if ((readValue > (lastValue+15)) || (readValue < (lastValue-15)))
+            if ((readValue > (lastValues[i]+15)) || (readValue < (lastValues[i]-15)))
             {
                 lastValues[i] = readValue;
                 dataTrigger|= 0x01;
@@ -176,22 +199,23 @@ void checkDAC() {
       }
     }
 
-   newP1 = (P1IN & ~ioConfig.P1DIR & ~ioConfig.P1ADC);
-   newP2 = (P2IN & ~ioConfig.P2DIR);
-   newP3 = (P3IN & ~ioConfig.P3DIR);
+   newP1 = availP1 & (P1IN & ~ioConfig.P1DIR & ~ioConfig.P1ADC);
+   newP2 = availP2 & (P2IN & ~ioConfig.P2DIR);
+   newP3 = availP3 & (P3IN & ~ioConfig.P3DIR);
 
-   if (lastP1 ^ newP1) { dataTrigger|= 0x02; lastP1 = newP1; }
-   if (lastP2 ^ newP2) { dataTrigger|= 0x04; lastP2 = newP2; }
-   if (lastP3 ^ newP3) { dataTrigger|= 0x08; lastP3 = newP3; }
+   if (lastP1 != newP1) { dataTrigger|= 0x02; lastP1 = newP1; }
+   if (lastP2 != newP2) { dataTrigger|= 0x04; lastP2 = newP2; }
+   if (lastP3 != newP3) { dataTrigger|= 0x08; lastP3 = newP3; }
 
   if (dataTrigger) {
-    adcData[MAX_ADC_CHANNELS+1] = newP1;
-    adcData[MAX_ADC_CHANNELS+2] = newP2;
-    adcData[MAX_ADC_CHANNELS+3] = newP3;
-     P3OUT |= CS_NOTIFY_MASTER;
+    adcData[MAX_ADC_CHANNELS] = newP1;
+    adcData[MAX_ADC_CHANNELS+1] = newP2;
+    adcData[MAX_ADC_CHANNELS+2] = newP3;
+    P3OUT |= CS_NOTIFY_MASTER;
+
   } else {
-     TA0CTL = TASSEL_1 | MC_1; 
-     TA0CCTL1 = CCIE;
+    TA0CTL = TASSEL_1 | MC_1; 
+    TA0CCTL1 = CCIE;
   }
 
    return;
@@ -211,18 +235,13 @@ void resync() {
 
 int main(void)
 {
-    WDTCTL = WDTPW + WDTHOLD;        
+    WDTCTL =  WDT_ARST_1000; // WDTPW + WDTHOLD;        
     BCSCTL1 = CALBC1_1MHZ;           // DCOCTL = CALDCO_1MHZ;
     BCSCTL2 &= ~(DIVS_3);            // SMCLK/DCO @ 1MHz
     
+    timerCheck =  0;
+
     P1DIR = BIT0 + BIT1 + BIT5 + BIT7;
-
-    ADC10CTL1 = INCH_4 + ADC10DIV_0 + CONSEQ_1 ;         // Channel (BIT4) highest channel, ADC10CLK/3
-    ADC10CTL0 = SREF_0 + ADC10SHT_0 + MSC +  ADC10ON + ADC10IE;  // Vcc,Vss as ref. Sample and hold 64 cycles
-    ADC10AE0 = availP1;    //11111100
-
-    ADC10DTC1 = MAX_ADC_CHANNELS;                         // 5 conversions
-    ADC10SA = adcData; 
 
     P2DIR &= ~CS_INCOMING_PACKET;
     P2OUT &= 0;
@@ -247,8 +266,39 @@ int main(void)
     P1SEL |=    BIT5 + BIT6 + BIT7 ; 
     P1SEL2 =   BIT5 + BIT6 + BIT7 ;
 
-  
+   
+
     BCSCTL3 = LFXT1S_2; 
+
+    initConfig();
+
+    /*ADC10CTL1 = INCH_1 + ADC10DIV_0 + CONSEQ_1 ;         // Channel (BIT4) highest channel, ADC10CLK/3
+    ADC10CTL0 = SREF_0 + ADC10SHT_0 + MSC  +  ADC10ON + ADC10IE;  // Vcc,Vss as ref. Sample and hold 64 cycles
+    ADC10AE0 = 0x03;    //11111100
+    ADC10CTL0 &= ~ADC10IFG;
+
+    ADC10DTC1 = 2;//MAX_ADC_CHANNELS;                         // 5 conversions
+    ADC10SA = (unsigned int) adcData; 
+*/
+       P1SEL |= BIT3 | BIT2 | BIT1 | BIT0;   
+       P1DIR &= ~(BIT3 | BIT2 | BIT1 | BIT0);
+       P1OUT &= ~(BIT3 | BIT2 | BIT1 | BIT0);
+
+       //P1SEL |= BIT1;                   // ADC input pin P1.2
+  ADC10AE0 = 0;
+  ADC10CTL0 = 0;
+  ADC10CTL1 = 0;
+  ADC10MEM = 0;
+  ADC10DTC0 = 0;
+  ADC10DTC1 = 0;
+
+    ADC10CTL0 = SREF_0 + ADC10SHT_2 + MSC + ADC10ON + ADC10IE;  // Vcc,Vss as ref. Sample and hold 64 cycles
+    ADC10CTL1 = INCH_4 + CONSEQ_1 ;         // Channel 3, ADC10CLK/3
+    ADC10AE0 = ioConfig.P1ADC;
+
+    ADC10DTC1 = 4;//MAX_ADC_CHANNELS;                         // 5 conversions
+    //ADC10SA = (unsigned int) adcData; 
+
  
      UCA0CTL1 = UCSWRST;   
      UCB0CTL1 = UCSWRST;                       // **Put state machine in reset**
@@ -261,7 +311,7 @@ int main(void)
     UCB0TXBUF = 0x13;                         // We do not want to ouput anything on the line
 
     TA0R = 0;
-    TA0CCR0 = 500;              // Count to this, then interrupt;  0 to stop counting
+    TA0CCR0 = 250;              // Count to this, then interrupt;  0 to stop counting
     TA0CTL = TASSEL_1 | MC_1 ;             // Clock source ACLK
     TA0CCTL1 = CCIE ;                     // Timer A interrupt enable
 
@@ -300,21 +350,15 @@ interrupt(ADC10_VECTOR) ADC10_ISR (void) {
  
 interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
-    if (UCB0STAT & UCOE) {
-      resync();
-      IFG2 &= ~UCB0RXIFG;   // clear current interrupt flag
-      return;
-    }
 
-
-    if (pbfr) { UCB0TXBUF = *pbfr++; }
     if (pstore) { *pstore++ = UCB0RXBUF; }
+    if (pbfr) { UCB0TXBUF = *pbfr++; }  else { UCB0TXBUF = store[0]; }
 
     if (inHeader) {
           //check action.
          if (UCB0RXBUF == 0x01) {
             // master wants to interact with IOs
-            //pbfr = bfr; // just send garbage to node
+            pbfr = 0;
             //bfrBoundary = pbfr + 6; // 3x IOs &| mask 
          }  else {
         
@@ -327,6 +371,12 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
 
     IFG2 &= ~UCB0RXIFG;   // clear current interrupt flag
+    if (UCB0STAT & UCOE) {
+      resync();
+      IFG2 &= ~UCB0RXIFG;   // clear current interrupt flag
+      return;
+    }
+
     return;
 
 }
@@ -334,39 +384,45 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 interrupt(PORT2_VECTOR) P2_ISR(void) {
 
 
-   if(P2IFG & CS_INCOMING_PACKET) {         // slave is ready to transmit, enable the SPI interrupt
-       if (!(P2IES & CS_INCOMING_PACKET)) { // check raising edge
+   //if(P2IFG & CS_INCOMING_PACKET) {         // slave is ready to transmit, enable the SPI interrupt
+       P2IFG &= ~CS_INCOMING_PACKET;   // clear master notification interrupt flag        
+       P2IES ^= CS_INCOMING_PACKET; 
+
+       if (P2IES & CS_INCOMING_PACKET) { // check raising edge (xored)
               
             UCB0TXBUF = 0x33;           // prepare first byte
            // IE2 |= UCB0RXIE;              // enable spi interrupt
             inHeader = 1;
-            IFG2 &= ~UCB0RXIFG;
-            P2IES |= CS_INCOMING_PACKET; // switch to falling edge
+            //IFG2 &= ~UCB0RXIFG;
+            //P2IES |= CS_INCOMING_PACKET; // switch to falling edge
             pstore = store;
           }
          else {
 
             if (store[0] == 0x01) {
-                P1OUT &= (store[2] & (BIT0 + BIT1));
-                P1OUT |= (store[1] & (BIT0 + BIT1));
+               // P1OUT &= (store[2] & (BIT0 + BIT1));
+               // P1OUT |= (store[1] & (BIT0 + BIT1));
             } else {
               if (store[0] != 0x02) {
                 resync();              
+                pbfr = 0;
               }
+
+         
+              WDTCTL = WDTPW + WDTCNTCL;
               TA0CTL = TASSEL_1 | MC_1; 
               TA0CCTL1 = CCIE;
               P3OUT &= ~CS_NOTIFY_MASTER;
             }
  
             // IE2 &= ~UCB0RXIE;              // Disable SPI interrupt     
-            IFG2 &= ~UCB0RXIFG;
-            P2IES &= ~CS_INCOMING_PACKET;  // switch to raising edge
+            //IFG2 &= ~UCB0RXIFG;
+            //P2IES &= ~CS_INCOMING_PACKET;  // switch to raising edge
 
 
        }
-    }
+    //}
 
-   P2IFG &= ~CS_INCOMING_PACKET;   // clear master notification interrupt flag        
    return;
 }
 
@@ -376,16 +432,10 @@ interrupt(TIMER0_A1_VECTOR) ta1_isr(void) {
   TA0CTL = TACLR;  // stop & clear timer
   TA0CCTL1 &= 0;   // also disable timer interrupt & clear flag
 
- 
-
-/*  P3OUT ^= CS_NOTIFY_MASTER;
-  P1OUT ^= (BIT0 + BIT1);   
-
-  TA0CTL = TASSEL_1 | MC_1; 
-  TA0CCTL1 = CCIE;
-  return;
-*/
+  WDTCTL = WDTPW + WDTCNTCL;
+  P3OUT &= ~CS_NOTIFY_MASTER;
   action |= BEGIN_SAMPLE_DAC;
+
   __bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM
   return;
 } 

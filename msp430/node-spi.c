@@ -506,11 +506,9 @@ void initADCE() {
 void ioMSG() {
   
     _CIP_POUT |= CS_INCOMING_PACKET;    // Warn ADCE that we are about to start an spi transfer.
-    __delay_cycles(1000);
+    __delay_cycles(10000);
     
     // delayCyclesProcessBuffer(20); // Give some time to ADCE to react
-    unsigned char c[16];
-    unsigned char * p = c;
     
                     //P2OUT &= (inPacket.data[0] & (BIT6 | BIT7));
                     //P2OUT |= inPacket.data[1];
@@ -525,9 +523,9 @@ void ioMSG() {
     int i = 0;
     for(i=0;i<10;i++) {
        __delay_cycles(1000);
-        transfer(inPacket.data[i]);
+       transfer(inPacket.data[i]);
     }
-    __delay_cycles(1000);
+    __delay_cycles(10000);
 
     //outBuffer[0] = inPacket.data[0];
     //outBuffer[1] = inPacket.data[1];
@@ -543,6 +541,7 @@ void ioMSG() {
     }*/   //__delay_cycles(100000);
 
     _CIP_POUT &= ~CS_INCOMING_PACKET;   // release extension signal
+    __delay_cycles(1000);
 
 }
 
@@ -558,42 +557,27 @@ void checkADC() {
     
    // P2OUT ^= BIT6;  // debug        // ADC Extension (ADCE) is a module ocnnected thru USCI-B and two GPIO pins
   
-    __delay_cycles(10000);
     _CIP_POUT |= CS_INCOMING_PACKET;    // Warn ADCE that we are about to start an spi transfer.
     
     // delayCyclesProcessBuffer(20); // Give some time to ADCE to react
     __delay_cycles(10000);
 
 
-    unsigned char c[16];
-    unsigned char * p = c;
+    unsigned char * p = outBuffer;
     
-    *p = transfer(2);               // Get Packet length from ADCE
+    transfer(2);               // Get Packet length from ADCE
     
-    int len = 5 ;
+    int len = 16 ;
 
 
     __delay_cycles(10000);
 
     while (len--) {
         *p++ = transfer(0);
-        __delay_cycles(10000);
+        __delay_cycles(1000);
+
        // P2OUT ^= BIT7;
     }
-
-    outBuffer[0] = 0x15;
-    outBuffer[1] = c[1];
-    outBuffer[2] = c[2];
-    outBuffer[3] = c[3];
-    outBuffer[4] = c[4];
-    outBuffer[5] = 0x55;
-    outBuffer[6] = 0x11;    
-    outBuffer[7] = c[1];
-    outBuffer[8] = c[2];
-    outBuffer[9] = c[3];
-    outBuffer[10] = c[4];
-    outBuffer[11] = c[4];
-
 
     //lastresp[16] = c[0];            // Temporarily set the response somewhere (FIX)
     //lastresp[17] = c[1];
@@ -601,13 +585,16 @@ void checkADC() {
     //lastresp[19] = 0x07;
 
     // action |= SIGNAL_MASTER;        // Inform master we have some data to transmit.
-    __delay_cycles(10000);
+    __delay_cycles(1000);
  
     _signalMaster();
 
     _CNM_PIFG &= ~CS_NOTIFY_MASTER;        
     _CNM_PIE |= CS_NOTIFY_MASTER;
     _CIP_POUT &= ~CS_INCOMING_PACKET;   // release extension signal
+
+     __enable_interrupt();   
+    __delay_cycles(1000); // give some time to treat the incoming packet update
 
 
 }
@@ -633,7 +620,7 @@ char transfer(char s) {
         // Pulse the clock low and wait to send the bit.  According to
          // the data sheet, data is transferred on the rising edge.
         P1OUT &= ~SCK;
-        __delay_cycles( 200 );
+        __delay_cycles( 500 );
 
         // Send the clock back high and wait to set the next bit.  
         if (P1IN & MISO) {
