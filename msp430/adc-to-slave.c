@@ -1,6 +1,4 @@
 /*
-
-almost there
     node-mcu-connect . node.js UDP Interface for embedded devices.
     Copyright (C) 2013-4 David Jakubowski
 
@@ -19,7 +17,6 @@ almost there
 */
 
 
-
 #include "msp430g2553.h"
 #include <legacymsp430.h>
 
@@ -28,6 +25,11 @@ volatile unsigned int inHeader=0;
 
 unsigned char bfr [20];
 unsigned char store [20];
+
+unsigned char * pbfr = 0;
+unsigned char * pstore = 0;
+unsigned char * bfrBoundary = 0;
+
 
 #define MOSI  BIT7 
 #define MISO  BIT6
@@ -38,12 +40,14 @@ unsigned char store [20];
 
 #define PACKET_DAC 0b10010000
 
+#define PROCESS_MSG 0x04
 #define BEGIN_SAMPLE_DAC 0x02
 #define CHECK_DAC 0x01
 
 #define MAX_ADC_CHANNELS 5
 #define NUM_PORTS_AVAIL  3
 
+void processMsg();
 
 struct ioConfig {
    unsigned char P1DIR;
@@ -75,7 +79,7 @@ inline void _memcpy( void* dest, void*src, int len) {
   }
 }
 
-void initIOConfig() {
+void initConfig() {
 
    /*ioConfig.P1DIR = 0x00;
    ioConfig.P1ADC = BIT2;
@@ -148,12 +152,7 @@ void checkDAC() {
     static int lastValues[5];
     static char lastP1, lastP2, lastP3;
 
-    ADC10AE0  = 0;
-    ADC10CTL0 = 0;
-    ADC10CTL1 = 0;
-    ADC10MEM  = 0;
-    ADC10DTC0 = 0;
-    ADC10DTC1 = 0;
+    char newP1,newP2,newP3;
 
     int readValue;
     unsigned int i;
@@ -171,9 +170,13 @@ void checkDAC() {
       }
     }
 
-}
+   newP1 = availP1 & (P1IN & ~ioConfig.P1DIR & ~ioConfig.P1ADC);
+   newP2 = availP2 & (P2IN & ~ioConfig.P2DIR);
+   newP3 = availP3 & (P3IN & ~ioConfig.P3DIR);
 
-void initUSCI(){
+   if (lastP1 != newP1) { dataTrigger|= 0x02; lastP1 = newP1; }
+   if (lastP2 != newP2) { dataTrigger|= 0x04; lastP2 = newP2; }
+   if (lastP3 != newP3) { dataTrigger|= 0x08; lastP3 = newP3; }
 
   int * pAdcData = &adcData[MAX_ADC_CHANNELS];
   if (dataTrigger) {
@@ -188,7 +191,7 @@ void initUSCI(){
   return;
 }
 
-void initTimer() {
+void resync() {
 
   UCA0CTL1 = UCSWRST;   
   UCB0CTL1 = UCSWRST;                       // **Put state machine in reset**
@@ -292,61 +295,15 @@ int main(void)
           checkDAC();
           continue;
       }
+      if(action & PROCESS_MSG) {
+          processMsg();
+          continue;
+      }
+
+
   }
 }
  
-
-void checkDAC() {
-
-    action &= ~CHECK_DAC;
-    __enable_interrupt();
-
-    static int lastValues[5];
-    static unsigned char lastP1, lastP2, lastP3;
-
-    unsigned char newP1,newP2,newP3;
-    int readValue;
-    unsigned int i;
-    unsigned char dataTrigger = 0;
-
-    for (i=0;i<MAX_ADC_CHANNELS;i++) {
-      if (ioADCRead[i]) {
-         readValue = adcData[i];
-         if (readValue < 750) {
-            if ((readValue > (lastValues[i]+15)) || (readValue < (lastValues[i]-15)))
-            {
-                lastValues[i] = readValue;
-                dataTrigger|= 0x01;
-            }
-         }
-      }
-    }
-
-   newP1 = availP1 & (P1IN & ~ioConfig.P1DIR & ~ioConfig.P1ADC);
-   newP2 = availP2 & (P2IN & ~ioConfig.P2DIR);
-   newP3 = availP3 & (P3IN & ~ioConfig.P3DIR);
-
-   if (lastP1 != newP1) { dataTrigger|= 0x02; lastP1 = newP1; }
-   if (lastP2 != newP2) { dataTrigger|= 0x04; lastP2 = newP2; }
-   if (lastP3 != newP3) { dataTrigger|= 0x08; lastP3 = newP3; }
-
-  if (dataTrigger) {
-    // write iodata at the end of the buffer.
-    int * pAdc = &adcData[MAX_ADC_CHANNELS];
-    *pAdc++ = newP1;
-    *pAdc++ = newP2;
-    *pAdc++ = newP3;
-    P3OUT |= CS_NOTIFY_MASTER;
-  } else {
-    // Restart timer and sampling();
-    startDelayedSamplingSequence();
-  }
-
-   return;
-}
-
-
-
 interrupt(ADC10_VECTOR) ADC10_ISR (void) { 
    
   action |= CHECK_DAC;
@@ -384,17 +341,9 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
 }
 
-interrupt(PORT2_VECTOR) P2_ISR(void) {
+void processMsg () {
 
-  P2IFG &= ~CS_INCOMING_PACKET;   // clear master notification interrupt flag        
-  P2IES ^= CS_INCOMING_PACKET; 
-
-  if (P2IES & CS_INCOMING_PACKET) { // check raising edge (xored)
-      UCB0TXBUF = 0x00;           // prepare first byte
-      inHeader = 1;
-      pstore = store;
-    }
-   else {
+      __enable_interrupt();
 
       if (store[0] == 0x01) {
          if (store[1] == 0x55) {
@@ -421,6 +370,28 @@ interrupt(PORT2_VECTOR) P2_ISR(void) {
         startTimerSequence();  
         P3OUT &= ~CS_NOTIFY_MASTER;
       }
+
+      action &= ~PROCESS_MSG;
+
+}
+
+interrupt(PORT2_VECTOR) P2_ISR(void) {
+
+  P2IFG &= ~CS_INCOMING_PACKET;   // clear master notification interrupt flag        
+  P2IES ^= CS_INCOMING_PACKET; 
+
+  if (P2IES & CS_INCOMING_PACKET) { // check raising edge (xored)
+      UCB0TXBUF = 0x00;           // prepare first byte
+       if (action & PROCESS_MSG) {
+        pstore = 0;
+       } else {
+        inHeader = 1;
+        pstore = store;
+       }
+    }
+   else {
+      action |= PROCESS_MSG;
+       __bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM
   }
   return;
 }

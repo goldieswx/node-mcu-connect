@@ -525,6 +525,9 @@ void ioMSG() {
        __delay_cycles(1000);
        transfer(inPacket.data[i]);
     }
+
+    __delay_cycles(1000);
+    _CIP_POUT &= ~CS_INCOMING_PACKET;   // release extension signal
     __delay_cycles(10000);
 
     //outBuffer[0] = inPacket.data[0];
@@ -540,8 +543,7 @@ void ioMSG() {
        // P2OUT ^= BIT7;
     }*/   //__delay_cycles(100000);
 
-    _CIP_POUT &= ~CS_INCOMING_PACKET;   // release extension signal
-    __delay_cycles(1000);
+
 
 }
 
