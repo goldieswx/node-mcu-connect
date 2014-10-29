@@ -606,7 +606,7 @@ char transfer(char s) {
 
     for(i=0;i<8;i++) {
         P1OUT |= SCK;
-        __delay_cycles( 200 );
+        __delay_cycles( 500 );
 
         ret <<= 1;
         // Put bits on the line, most significant bit first.
