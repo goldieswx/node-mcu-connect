@@ -1,17 +1,15 @@
+
 /*
     node-mcu-connect . node.js UDP Interface for embedded devices.
     Copyright (C) 2013-4 David Jakubowski
-
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
-
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
-
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <http://www.gnu.org/licenses/>. 
 */
@@ -139,31 +137,20 @@ int main() {
  */
 void mcomProcessBuffer() {
 
-//     __disable_interrupt();
      __enable_interrupt();
 
-     ioMSG();
-     action &= ~PROCESS_BUFFER; 
-     // when we release the action, we will stop being busy and
+     transfer(1); // dummy transfer to io/ but register calls on io side, w8 for callback.
+     
+     // when we release the action (process_buffer), we will stop being busy and
      // contents of inBuffer must be ready to reuse
      // (and will be destroyed)
-  
-
-     return;
+    return;
 
 }
 
 
 void _signalMaster() {
 	
- /* outBuffer[0] = 0xab;
-  outBuffer[1] = 0xcd;
-  outBuffer[2] = 0xef;
-  outBuffer[3] = 0x99;
-  outBuffer[19] = 0xff;
-  outBuffer[20] = 0xff; 
-  outBufferCheckSum = 0x3ff; */
-
     int i;
     unsigned int chk = 0;
     for (i=0;i<20;i++) {
@@ -289,7 +276,6 @@ void initGlobal() {
   => (sync)
   => [bfr micmd to 2] -> b1in send 0x00s 
   => [bfr micmd to 2] -> b2in send 0x00s (process b1in)
-
 (signal/ack)
   => [bfr micmd to 2] -> cmd will be ignored (won't happen, maybe node could send flag busy) ack b1 (or signal b1)
   => [bfr micmd to 2] -> cmd will be ignored (won't happen, maybe node could send flag busy) ack b2 , signal b1 (and or b2)
@@ -341,8 +327,8 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
   		      if (inPacket.destinationCmd == currentNodeId) { // there was a mi cmd
               if (inPacket.chkSum == outPacket.chkSum) {
                    #ifdef node2_0  
-                      P2OUT &= inPacket.data[0];
-                      P2OUT |= inPacket.data[1];
+                     // P2OUT &= inPacket.data[0];
+                     // P2OUT |= inPacket.data[1];
                       //action |= ADC_CHECK;    
                       //_signalMaster();
                     #else
@@ -447,7 +433,7 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 #define MISO  BIT6
 #define SCK   BIT5
 
-#define CS_NOTIFY_MASTER  BIT3   // External Interrupt 
+#define CS_NOTIFY_MASTER    BIT3   // External Interrupt 
 #define CS_INCOMING_PACKET  BIT0   // Master enable the line before sending
 
 #define _CNM_PIE          P1IE
@@ -467,7 +453,7 @@ interrupt(_CNM_PORT_VECTOR) p2_isr(void) { //PORT2_VECTOR
   //__enable_interrupt();
 
   if (_CNM_PIFG & CS_NOTIFY_MASTER) {
-    _CNM_PIE &= ~CS_NOTIFY_MASTER;
+    //_CNM_PIE &= ~CS_NOTIFY_MASTER;
     action |= ADC_CHECK;
     __bic_SR_register_on_exit(LPM3_bits /*+ GIE*/); // exit LPM     
   }
@@ -500,105 +486,45 @@ void initADCE() {
   //power the extension
   //P1DIR |= BIT3;
   //P1OUT |= BIT3;
-
 }
-
-void ioMSG() {
-  
-    _CIP_POUT |= CS_INCOMING_PACKET;    // Warn ADCE that we are about to start an spi transfer.
-    __delay_cycles(10000);
-    
-    // delayCyclesProcessBuffer(20); // Give some time to ADCE to react
-    
-                    //P2OUT &= (inPacket.data[0] & (BIT6 | BIT7));
-                    //P2OUT |= inPacket.data[1];
-
-
-    //*p = transfer(inPacket.data[0]);               // Get Packet length from ADCE
-    //*p = transfer(inPacket.data[0]);               // Get Packet length from ADCE
-    //*p = transfer(inPacket.data[0]);               // Get Packet length from ADCE
-
-    transfer(1);
-
-    int i = 0;
-    for(i=0;i<10;i++) {
-       __delay_cycles(1000);
-       transfer(inPacket.data[i]);
-    }
-
-    __delay_cycles(1000);
-    _CIP_POUT &= ~CS_INCOMING_PACKET;   // release extension signal
-    __delay_cycles(10000);
-
-    //outBuffer[0] = inPacket.data[0];
-    //outBuffer[1] = inPacket.data[1];
-
-    //_signalMaster();
-
-    /*int len = 2;
-
-    while (len--) {
-        *p++ = transfer(0);
-        __delay_cycles(10000);
-       // P2OUT ^= BIT7;
-    }*/   //__delay_cycles(100000);
-
-
-
-}
-
 
 void checkADC() {
-    
 
     _CNM_PIE &= ~CS_NOTIFY_MASTER;
-    _CNM_PIFG |= CS_NOTIFY_MASTER;    // Just preacaution, we will soon enable interrupts, make sure we don't allow reenty.
+    _CNM_PIFG &= ~CS_NOTIFY_MASTER;    
     __enable_interrupt();         // Our process is low priority, only listenning to master spi is the priority.
-    
-    action &= ~ADC_CHECK;         // Clear current action flag.
-    
-   // P2OUT ^= BIT6;  // debug        // ADC Extension (ADCE) is a module ocnnected thru USCI-B and two GPIO pins
   
     _CIP_POUT |= CS_INCOMING_PACKET;    // Warn ADCE that we are about to start an spi transfer.
     
-    // delayCyclesProcessBuffer(20); // Give some time to ADCE to react
-    __delay_cycles(10000);
+    __delay_cycles(4000);  // Give some time to ADCE to react
 
+    unsigned char header;
+    if (action & PROCESS_BUFFER) {
+        header = inPacket.data[0];
+    } else {
+        header = 0x0;
+    }
+    transfer(header);
 
-    unsigned char * p = outBuffer;
-    
-    transfer(2);               // Get Packet length from ADCE
-    
-    int len = 16 ;
-
-
-    __delay_cycles(10000);
-
-    while (len--) {
-        *p++ = transfer(0);
-        __delay_cycles(1000);
-
-       // P2OUT ^= BIT7;
+    unsigned int i;
+    for (i=0;i<16;i++) {
+        outBuffer[i] = transfer(inPacket.data[i]);
     }
 
-    //lastresp[16] = c[0];            // Temporarily set the response somewhere (FIX)
-    //lastresp[17] = c[1];
-    //lastresp[18] = c[2];
-    //lastresp[19] = 0x07;
-
-    // action |= SIGNAL_MASTER;        // Inform master we have some data to transmit.
-    __delay_cycles(1000);
- 
-    _signalMaster();
-
-    _CNM_PIFG &= ~CS_NOTIFY_MASTER;        
-    _CNM_PIE |= CS_NOTIFY_MASTER;
     _CIP_POUT &= ~CS_INCOMING_PACKET;   // release extension signal
+    
+    if (!(outBuffer[0] & 0x80)) { 
+      _signalMaster(); 
+    } 
 
-     __enable_interrupt();   
-    __delay_cycles(1000); // give some time to treat the incoming packet update
+    action &= ~ADC_CHECK;            // Clear current action flag.
+    action &= ~PROCESS_BUFFER;         // Clear current action flag.
 
+    __disable_interrupt();
+    _CNM_PIFG &= ~CS_NOTIFY_MASTER;       
+    _CNM_PIE &= ~CS_NOTIFY_MASTER;    
 
+    return;
 }
 
 char transfer(char s) {
@@ -607,8 +533,6 @@ char transfer(char s) {
     int i;
 
     for(i=0;i<8;i++) {
-        P1OUT |= SCK;
-        __delay_cycles( 500 );
 
         ret <<= 1;
         // Put bits on the line, most significant bit first.
@@ -617,12 +541,13 @@ char transfer(char s) {
         } else {
               P1OUT &= ~MOSI;
         }
-        s <<= 1;
+        P1OUT |= SCK;
+        __delay_cycles( 250 );
 
+        s <<= 1;
         // Pulse the clock low and wait to send the bit.  According to
          // the data sheet, data is transferred on the rising edge.
         P1OUT &= ~SCK;
-        __delay_cycles( 500 );
 
         // Send the clock back high and wait to set the next bit.  
         if (P1IN & MISO) {
@@ -630,6 +555,8 @@ char transfer(char s) {
         } else {
           ret &= 0xFE;
         }
+        __delay_cycles( 250 );
+
     }
     return ret; 
 

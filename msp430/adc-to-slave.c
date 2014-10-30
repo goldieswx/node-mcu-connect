@@ -20,17 +20,6 @@
 #include "msp430g2553.h"
 #include <legacymsp430.h>
 
-volatile unsigned int action=0;
-volatile unsigned int inHeader=0;
-
-unsigned char bfr [20];
-unsigned char store [20];
-
-unsigned char * pbfr = 0;
-unsigned char * pstore = 0;
-unsigned char * bfrBoundary = 0;
-
-
 #define MOSI  BIT7 
 #define MISO  BIT6
 #define SCK   BIT5
@@ -47,7 +36,18 @@ unsigned char * bfrBoundary = 0;
 #define MAX_ADC_CHANNELS 5
 #define NUM_PORTS_AVAIL  3
 
+volatile unsigned int action=0;
+volatile unsigned int busy=0;
+volatile unsigned int registerNodeCall=0;
+volatile unsigned int pulseNodeInterrupt=0;
+
+int  adcData [MAX_ADC_CHANNELS+NUM_PORTS_AVAIL];
+char *  pExchangeBuff=0;
+
 void processMsg();
+inline void setBusy();
+inline void setBusy();	
+void checkDAC();
 
 struct ioConfig {
    unsigned char P1DIR;
@@ -67,7 +67,6 @@ char availP1 = (BIT0|BIT1|BIT2|BIT3|BIT4);
 char availP2 = (BIT3|BIT4|BIT5|BIT6|BIT7);
 char availP3 = (BIT3|BIT4|BIT5|BIT6|BIT7);
 
-int adcData [MAX_ADC_CHANNELS+NUM_PORTS_AVAIL];
 
 struct ioConfig ioConfig;
 char ioADCRead[MAX_ADC_CHANNELS]; 
@@ -81,7 +80,7 @@ inline void _memcpy( void* dest, void*src, int len) {
 
 void initConfig() {
 
-   /*ioConfig.P1DIR = 0x00;
+   ioConfig.P1DIR = 0x00;
    ioConfig.P1ADC = BIT2;
    ioConfig.P1REN = 0xFF;
    ioConfig.P1OUT = 0;
@@ -90,7 +89,7 @@ void initConfig() {
    ioConfig.P2OUT = 0;
    ioConfig.P3DIR = 0;
    ioConfig.P3REN = 0xFF;
-   ioConfig.P3OUT = 0;*/
+   ioConfig.P3OUT = 0;
 
    ioConfig.P1DIR &= availP1 & ~ioConfig.P1ADC;
    ioConfig.P1ADC &= availP1;
@@ -140,56 +139,26 @@ void beginSampleDac() {
 }
 
 inline void startTimerSequence() {
+
+    if (!pulseNodeInterrupt) { setBusy(); }
     TA0CTL = TASSEL_1 | MC_1 ;             // Clock source ACLK
     TA0CCTL1 = CCIE ;                      // Timer A interrupt enable
 }
 
-
-void checkDAC() {
-    action &= ~CHECK_DAC;
-    __enable_interrupt();
-
-    static int lastValues[5];
-    static char lastP1, lastP2, lastP3;
-
-    char newP1,newP2,newP3;
-
-    int readValue;
-    unsigned int i;
-    char dataTrigger = 0;
-
-    for (i=0;i<MAX_ADC_CHANNELS;i++) {
-      if (ioADCRead[i]) {
-         readValue = adcData[i];
-         if (readValue < 750) {
-            if ((readValue > (lastValues[i]+15)) || (readValue < (lastValues[i]-15))) {
-                lastValues[i] = readValue;
-                dataTrigger|= 0x01;
-            }
-         }
-      }
-    }
-
-   newP1 = availP1 & (P1IN & ~ioConfig.P1DIR & ~ioConfig.P1ADC);
-   newP2 = availP2 & (P2IN & ~ioConfig.P2DIR);
-   newP3 = availP3 & (P3IN & ~ioConfig.P3DIR);
-
-   if (lastP1 != newP1) { dataTrigger|= 0x02; lastP1 = newP1; }
-   if (lastP2 != newP2) { dataTrigger|= 0x04; lastP2 = newP2; }
-   if (lastP3 != newP3) { dataTrigger|= 0x08; lastP3 = newP3; }
-
-  int * pAdcData = &adcData[MAX_ADC_CHANNELS];
-  if (dataTrigger) {
-      *pAdcData++ = newP1;
-      *pAdcData++ = newP2;
-      *pAdcData++ = newP3;
-      P3OUT |= CS_NOTIFY_MASTER;
-  } else {
-      startTimerSequence();
-  }
-
-  return;
+inline void setBusy() {
+	if (!busy) {
+		UCB0TXBUF = 0b01010001;
+		busy++;
+	}
 }
+
+inline void clearBusy() {
+	if (busy) {
+		UCB0TXBUF = 0b01010000;
+		busy = 0;
+	}
+}
+
 
 void resync() {
 
@@ -255,17 +224,15 @@ void initADC() {
 }
 
 void initTimer() {
-
   TA0R = 0;
   TA0CCR0 = 250;                         // Count to this, then interrupt;  
-
-  startTimerSequence();
 }
 
 
 int main(void)
 {
-  WDTCTL =  WDT_ARST_1000;         // WDTPW + WDTHOLD;        
+
+  WDTCTL = WDTPW + WDTHOLD; /*WDT_ARST_1000*/
   BCSCTL1 = CALBC1_1MHZ;           // DCOCTL = CALDCO_1MHZ;
   BCSCTL2 &= ~(DIVS_3);            // SMCLK/DCO @ 1MHz
   BCSCTL3 = LFXT1S_2; 
@@ -273,11 +240,12 @@ int main(void)
   initConfig();
   initUSCI();
   initADC();
+
+  /* Timer */
   initTimer();
+  startTimerSequence();  
 
   action = 0;
-  bfrBoundary = bfr;
-  pbfr = bfr;
 
   while(1)    {
       if (!action) {
@@ -299,11 +267,90 @@ int main(void)
           processMsg();
           continue;
       }
-
-
   }
 }
  
+
+void checkDAC() {
+
+    __enable_interrupt();
+    action &= ~CHECK_DAC;  
+
+    static int lastValues[5];
+    static char lastP1, lastP2, lastP3;
+
+    char newP1,newP2,newP3;
+
+    int readValue;
+    unsigned int i;
+    char dataTrigger = 0;
+
+    for (i=0;i<MAX_ADC_CHANNELS;i++) {
+      if (ioADCRead[i]) {
+         readValue = adcData[i];
+         if (readValue < 750) {
+            if ((readValue > (lastValues[i]+15)) || (readValue < (lastValues[i]-15))) {
+                lastValues[i] = readValue;
+                dataTrigger|= 0x01;
+            }
+         }
+      }
+    }
+
+   newP1 = availP1 & (P1IN & ~ioConfig.P1DIR & ~ioConfig.P1ADC);
+   newP2 = availP2 & (P2IN & ~ioConfig.P2DIR);
+   newP3 = availP3 & (P3IN & ~ioConfig.P3DIR);
+
+   if (lastP1 != newP1) { dataTrigger|= 0x02; lastP1 = newP1; }
+   if (lastP2 != newP2) { dataTrigger|= 0x04; lastP2 = newP2; }
+   if (lastP3 != newP3) { dataTrigger|= 0x08; lastP3 = newP3; }
+
+  int * pAdcData = &adcData[MAX_ADC_CHANNELS];
+
+  if (dataTrigger) {
+      *pAdcData++ = newP1;
+      *pAdcData++ = newP2;
+      *pAdcData++ = newP3;
+  } else if (registerNodeCall) {
+      pAdcData[0] |= 0x80; // buffer contains data to discard
+  }
+
+  if (registerNodeCall || dataTrigger) {
+      clearBusy();
+      pulseNodeInterrupt = 1;
+  }
+
+  startTimerSequence();
+  return;
+}
+
+
+/* PROCESS RECEIVED MSG */
+void processMsg () {
+
+      __enable_interrupt();
+	  action &= ~PROCESS_MSG;
+
+      char * pXchBuf = (char*)adcData;
+      switch (*pXchBuf++) {
+	      case  0x55 :
+            _memcpy (&ioConfig,pXchBuf,sizeof(struct ioConfig));
+            initConfig();
+            break;
+    	
+    	  case 0x66 :
+			P1OUT |= (*pXchBuf++ & ioConfig.P1DIR);
+			P2OUT |= (*pXchBuf++ & ioConfig.P2DIR);
+			P3OUT |= (*pXchBuf++ & ioConfig.P3DIR);
+			P1OUT &= (*pXchBuf++ | ~ioConfig.P1DIR);
+			P2OUT &= (*pXchBuf++ | ~ioConfig.P2DIR);
+			P3OUT &= (*pXchBuf++ | ~ioConfig.P3DIR);
+			break;
+  	}
+    startTimerSequence();
+
+}
+
 interrupt(ADC10_VECTOR) ADC10_ISR (void) { 
    
   action |= CHECK_DAC;
@@ -315,82 +362,41 @@ interrupt(ADC10_VECTOR) ADC10_ISR (void) {
  
 interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
-
-  if (pstore) { *pstore++ = UCB0RXBUF; }
-  if (pbfr) { UCB0TXBUF = *pbfr++; }  else { UCB0TXBUF = store[0]; }
-
-  if (inHeader) {
-        //check action.
-       if (UCB0RXBUF == 0x01) {
-          // master wants to interact with IOs
-          pbfr = 0;
-       }  else {
-          // we need to push data from adc.
-          pbfr = (unsigned char*)adcData;
-       }
-       inHeader --;
-  } 
-
-  IFG2 &= ~UCB0RXIFG;   // clear current interrupt flag
-  if (UCB0STAT & UCOE) {
-    resync();
-    IFG2 &= ~UCB0RXIFG;   
+  if (busy) { 
+  	UCB0TXBUF = 0b10010001;   // Keep sending we're busy but we registered the call
+  	pExchangeBuff = (char*)adcData;     // while we're at it reset the exchange buffer pointer
+  	registerNodeCall++;
+    IFG2 &= ~UCB0RXIFG;   // clear current interrupt flag
+  } else {
+    *pExchangeBuff++ = UCB0RXBUF;
+    UCB0TXBUF = *pExchangeBuff;
   }
 
   return;
-
 }
 
-void processMsg () {
-
-      __enable_interrupt();
-
-      if (store[0] == 0x01) {
-         if (store[1] == 0x55) {
-            _memcpy (&ioConfig,&store[2],sizeof(struct ioConfig));
-            ioConfig.P3OUT = 0x00;
-            initConfig();
-         } else if (store[1] == 0x66) {
-           P1OUT |= (store[2] & ioConfig.P1DIR);
-           P2OUT |= (store[3] & ioConfig.P2DIR);
-           P3OUT |= (store[4] & ioConfig.P3DIR);
-           P1OUT &= (store[5] | ~ioConfig.P1DIR);
-           P2OUT &= (store[6] | ~ioConfig.P2DIR);
-           P3OUT &= (store[7] | ~ioConfig.P3DIR);
-         }
-         // P1OUT &= (store[2] & (BIT0 + BIT1));
-         // P1OUT |= (store[1] & (BIT0 + BIT1));
-      } else {
-        if (store[0] != 0x02) {
-          resync();              
-          pbfr = 0;
-        }
-   
-        WDTCTL = WDTPW + WDTCNTCL;
-        startTimerSequence();  
-        P3OUT &= ~CS_NOTIFY_MASTER;
-      }
-
-      action &= ~PROCESS_MSG;
-
-}
 
 interrupt(PORT2_VECTOR) P2_ISR(void) {
 
+  // when this is triggered, the user must have checked we are not busy (through 1b spi calls)
   P2IFG &= ~CS_INCOMING_PACKET;   // clear master notification interrupt flag        
   P2IES ^= CS_INCOMING_PACKET; 
 
-  if (P2IES & CS_INCOMING_PACKET) { // check raising edge (xored)
-      UCB0TXBUF = 0x00;           // prepare first byte
-       if (action & PROCESS_MSG) {
-        pstore = 0;
-       } else {
-        inHeader = 1;
-        pstore = store;
-       }
-    }
-   else {
-      action |= PROCESS_MSG;
+  if (P2IES & CS_INCOMING_PACKET) { // check raising edge (xored just before)
+       UCB0TXBUF = 0b01010000;    // fine, continue with sending data
+
+       /* clear notification system */
+  	   TA0CTL = TACLR;  // stop & clear timer    
+  	   TA0CCTL1 &= 0;   // also disable timer interrupt & clear flag
+       pulseNodeInterrupt = 0;
+       registerNodeCall = 0;  	   
+       P3OUT &= ~CS_NOTIFY_MASTER; // bring down cs notify line so that next pulse is faster
+       								// (master checks only raising edge)
+
+  } else {
+
+  	   setBusy();
+       action |= PROCESS_MSG; // process IO action
        __bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM
   }
   return;
@@ -402,10 +408,15 @@ interrupt(TIMER0_A1_VECTOR) ta1_isr(void) {
   TA0CTL = TACLR;  // stop & clear timer
   TA0CCTL1 &= 0;   // also disable timer interrupt & clear flag
 
-  WDTCTL = WDTPW + WDTCNTCL;
-  P3OUT &= ~CS_NOTIFY_MASTER;
-  action |= BEGIN_SAMPLE_DAC;
+  //WDTCTL = WDTPW + WDTCNTCL;
+  
+  if (pulseNodeInterrupt) {
+  	P3OUT ^= CS_NOTIFY_MASTER;
+  	startTimerSequence();
+  } else {
+	action |= BEGIN_SAMPLE_DAC;
+  	__bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM
+  }
 
-  __bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM
   return;
 } 
