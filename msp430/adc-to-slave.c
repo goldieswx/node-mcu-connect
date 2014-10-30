@@ -24,7 +24,7 @@
 #define MISO  BIT6
 #define SCK   BIT5
 
-#define CS_NOTIFY_MASTER  BIT2   // External Interrupt INTR = P2.2
+#define CS_NOTIFY_MASTER  BIT2     // External Interrupt INTR = P2.2
 #define CS_INCOMING_PACKET  BIT2   // Master enable the line before sending  SIG = P3.2
 
 #define PACKET_DAC 0b10010000
@@ -38,11 +38,11 @@
 
 volatile unsigned int action=0;
 volatile unsigned int busy=0;
-volatile unsigned int registerNodeCall=0;
+volatile unsigned int registerNodeCall = 0;
 volatile unsigned int pulseNodeInterrupt=0;
 
 int  adcData [MAX_ADC_CHANNELS+NUM_PORTS_AVAIL];
-char *  pExchangeBuff=0;
+volatile char *  pExchangeBuff=0;
 
 void processMsg();
 inline void setBusy();
@@ -61,7 +61,7 @@ struct ioConfig {
    unsigned char P3REN;
    unsigned char P3OUT;
    unsigned char pcTimerCount; 
- };
+};
 
 char availP1 = (BIT0|BIT1|BIT2|BIT3|BIT4);
 char availP2 = (BIT3|BIT4|BIT5|BIT6|BIT7);
@@ -80,7 +80,7 @@ inline void _memcpy( void* dest, void*src, int len) {
 
 void initConfig() {
 
-   ioConfig.P1DIR = 0x00;
+  /* ioConfig.P1DIR = 0x03;
    ioConfig.P1ADC = BIT2;
    ioConfig.P1REN = 0xFF;
    ioConfig.P1OUT = 0;
@@ -89,7 +89,7 @@ void initConfig() {
    ioConfig.P2OUT = 0;
    ioConfig.P3DIR = 0;
    ioConfig.P3REN = 0xFF;
-   ioConfig.P3OUT = 0;
+   ioConfig.P3OUT = 0; */
 
    ioConfig.P1DIR &= availP1 & ~ioConfig.P1ADC;
    ioConfig.P1ADC &= availP1;
@@ -175,7 +175,7 @@ void resync() {
 
 void initUSCI() {
 
-  P1DIR   =    BIT5 + BIT6 + BIT7;
+  //P1DIR   =    BIT5 + BIT6 + BIT7;
   P1SEL  |=    BIT5 + BIT6 + BIT7; 
   P1SEL2 |=    BIT5 + BIT6 + BIT7;
 
@@ -203,7 +203,7 @@ void initUSCI() {
 
   while(IFG2 & UCB0RXIFG);                  // Wait ifg2 flag on rx  (no idea what it does)
   IE2 |= UCB0RXIE;                          // Enable USCI0 RX interrupt
-  UCB0TXBUF = 0x0;                         // We do not want to ouput anything on the line
+  UCB0TXBUF = 0x17;                         // We do not want to ouput anything on the line
 
 }
 
@@ -228,6 +228,7 @@ void initTimer() {
   TA0CCR0 = 250;                         // Count to this, then interrupt;  
 }
 
+volatile unsigned  int initialTrigger;
 
 int main(void)
 {
@@ -245,6 +246,7 @@ int main(void)
   initTimer();
   startTimerSequence();  
 
+  initialTrigger = 1;
   action = 0;
 
   while(1)    {
@@ -301,6 +303,9 @@ void checkDAC() {
    newP2 = availP2 & (P2IN & ~ioConfig.P2DIR);
    newP3 = availP3 & (P3IN & ~ioConfig.P3DIR);
 
+   dataTrigger |= initialTrigger;
+   initialTrigger = 0;
+
    if (lastP1 != newP1) { dataTrigger|= 0x02; lastP1 = newP1; }
    if (lastP2 != newP2) { dataTrigger|= 0x04; lastP2 = newP2; }
    if (lastP3 != newP3) { dataTrigger|= 0x08; lastP3 = newP3; }
@@ -312,8 +317,9 @@ void checkDAC() {
       *pAdcData++ = newP2;
       *pAdcData++ = newP3;
   } else if (registerNodeCall) {
-      pAdcData[0] |= 0x80; // buffer contains data to discard
+      adcData[0] |= 0x0080; // buffer contains data to discard
   }
+
 
   if (registerNodeCall || dataTrigger) {
       clearBusy();
@@ -328,23 +334,24 @@ void checkDAC() {
 /* PROCESS RECEIVED MSG */
 void processMsg () {
 
-      __enable_interrupt();
+    __enable_interrupt();
 	  action &= ~PROCESS_MSG;
 
       char * pXchBuf = (char*)adcData;
-      switch (*pXchBuf++) {
+      switch (*++pXchBuf) {
 	      case  0x55 :
-            _memcpy (&ioConfig,pXchBuf,sizeof(struct ioConfig));
+            _memcpy (&ioConfig,++pXchBuf,sizeof(struct ioConfig));
             initConfig();
             break;
     	
     	  case 0x66 :
-			P1OUT |= (*pXchBuf++ & ioConfig.P1DIR);
-			P2OUT |= (*pXchBuf++ & ioConfig.P2DIR);
-			P3OUT |= (*pXchBuf++ & ioConfig.P3DIR);
-			P1OUT &= (*pXchBuf++ | ~ioConfig.P1DIR);
-			P2OUT &= (*pXchBuf++ | ~ioConfig.P2DIR);
-			P3OUT &= (*pXchBuf++ | ~ioConfig.P3DIR);
+   
+  			P1OUT |= (*++pXchBuf & ioConfig.P1DIR);
+  			P2OUT |= (*++pXchBuf & ioConfig.P2DIR);
+  			P3OUT |= (*++pXchBuf & ioConfig.P3DIR);
+  			P1OUT &= (*++pXchBuf | ~ioConfig.P1DIR);
+  			P2OUT &= (*++pXchBuf | ~ioConfig.P2DIR);
+  			P3OUT &= (*++pXchBuf | ~ioConfig.P3DIR);
 			break;
   	}
     startTimerSequence();
@@ -367,9 +374,14 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
   	pExchangeBuff = (char*)adcData;     // while we're at it reset the exchange buffer pointer
   	registerNodeCall++;
     IFG2 &= ~UCB0RXIFG;   // clear current interrupt flag
+
+    P2IES &= ~CS_INCOMING_PACKET; 
+    P2IFG &= ~CS_INCOMING_PACKET;   // clear master notification interrupt flag        
+
   } else {
-    *pExchangeBuff++ = UCB0RXBUF;
     UCB0TXBUF = *pExchangeBuff;
+    *pExchangeBuff = UCB0RXBUF;
+    pExchangeBuff++;;
   }
 
   return;
@@ -383,18 +395,22 @@ interrupt(PORT2_VECTOR) P2_ISR(void) {
   P2IES ^= CS_INCOMING_PACKET; 
 
   if (P2IES & CS_INCOMING_PACKET) { // check raising edge (xored just before)
-       UCB0TXBUF = 0b01010000;    // fine, continue with sending data
-
+       UCB0TXBUF = 0x95;    // fine, continue with sending data
+        pExchangeBuff = (char*)adcData;
        /* clear notification system */
   	   TA0CTL = TACLR;  // stop & clear timer    
   	   TA0CCTL1 &= 0;   // also disable timer interrupt & clear flag
+    
+       WDTCTL = WDT_ARST_1000;
+       WDTCTL = WDTPW + WDTCNTCL;  
+
        pulseNodeInterrupt = 0;
        registerNodeCall = 0;  	   
        P3OUT &= ~CS_NOTIFY_MASTER; // bring down cs notify line so that next pulse is faster
        								// (master checks only raising edge)
-
   } else {
 
+       WDTCTL = WDTPW + WDTHOLD;
   	   setBusy();
        action |= PROCESS_MSG; // process IO action
        __bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM
@@ -409,11 +425,15 @@ interrupt(TIMER0_A1_VECTOR) ta1_isr(void) {
   TA0CCTL1 &= 0;   // also disable timer interrupt & clear flag
 
   //WDTCTL = WDTPW + WDTCNTCL;
-  
+
   if (pulseNodeInterrupt) {
+   // P1OUT ^= BIT1;
+
   	P3OUT ^= CS_NOTIFY_MASTER;
   	startTimerSequence();
   } else {
+  //P1OUT ^= BIT0;
+
 	action |= BEGIN_SAMPLE_DAC;
   	__bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM
   }

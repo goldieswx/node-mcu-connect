@@ -68,6 +68,9 @@ typedef struct _McomOutPacket {
   unsigned word chkSum;
 } McomOutPacket;
 
+unsigned char inData2[20];
+
+volatile unsigned int busy;
 
 #define packetLen (sizeof(McomInPacket))
 
@@ -107,6 +110,8 @@ void ioMSG();
 
 int main() {
 
+  busy = 0;
+
 	initGlobal();
 	initMCOM();
   initDebug();
@@ -132,6 +137,14 @@ int main() {
 
 }
 
+inline void _memcpy( void* dest, void*src, int len) {
+
+  while (len--) {
+     *(char*)dest++ = *(char*)src++;
+  }
+}
+
+
 /**
  * MCOM Related
  */
@@ -139,8 +152,12 @@ void mcomProcessBuffer() {
 
      __enable_interrupt();
 
+     busy = 1;
+
      transfer(1); // dummy transfer to io/ but register calls on io side, w8 for callback.
      
+     _memcpy(inData2,inPacket.data,20);
+     action &= ~PROCESS_BUFFER;
      // when we release the action (process_buffer), we will stop being busy and
      // contents of inBuffer must be ready to reuse
      // (and will be destroyed)
@@ -271,6 +288,28 @@ void initGlobal() {
 #endif
 }
 
+/// Extension related stuff
+
+
+#define MOSI  BIT7 
+#define MISO  BIT6
+#define SCK   BIT5
+
+#define CS_NOTIFY_MASTER    BIT3   // External Interrupt 
+#define CS_INCOMING_PACKET  BIT0   // Master enable the line before sending
+
+#define _CNM_PIE          P1IE
+#define _CNM_PIFG         P1IFG
+#define _CNM_PDIR         P1DIR
+#define _CNM_PIES         P1IES
+#define _CNM_PREN         P1REN
+#define _CNM_PORT_VECTOR  PORT1_VECTOR
+
+#define _CIP_POUT         P2OUT
+#define _CIP_PDIR         P2DIR
+
+#define ADC_CHECK      0x02
+
 /*Node (booting up)
  
   => (sync)
@@ -327,10 +366,11 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
   		      if (inPacket.destinationCmd == currentNodeId) { // there was a mi cmd
               if (inPacket.chkSum == outPacket.chkSum) {
                    #ifdef node2_0  
-                     // P2OUT &= inPacket.data[0];
-                     // P2OUT |= inPacket.data[1];
+                      //P2OUT &= inPacket.data[0];
+                      //P2OUT |= inPacket.data[1];
                       //action |= ADC_CHECK;    
                       //_signalMaster();
+                      P2OUT ^= BIT7;
                     #else
                       P1OUT ^= BIT3;
                     #endif
@@ -363,7 +403,7 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
                 pOutPacket = outBuffer; // outBuffer contains sncc data payload
              }
              checkSum = 0; // start checksumming
-             if (action & PROCESS_BUFFER) {  // we are busy, preserve the input buffer, we
+             if ((busy)||(action & PROCESS_BUFFER)) {  // we are busy, preserve the input buffer, we
                                              // are processing it
                 *pInPacket = 0; // normally this is a reserved byte
                                 // force to 0 just so checksum will be correct in any case
@@ -412,6 +452,7 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
         *pInPacket++ = UCA0RXBUF;
       
       	if ((*(long *)&inPacket) == MI_RESCUE) {
+          _CNM_PIE |=  CS_NOTIFY_MASTER ; 
         	mcomPacketSync++;
           // sync out buffer also.
           pOutPacket = ((unsigned char*)&outPacket)+5; // sizeof double preamble, cmd + late byte
@@ -426,27 +467,7 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 }
 
 
-/// Extension related stuff
 
-
-#define MOSI  BIT7 
-#define MISO  BIT6
-#define SCK   BIT5
-
-#define CS_NOTIFY_MASTER    BIT3   // External Interrupt 
-#define CS_INCOMING_PACKET  BIT0   // Master enable the line before sending
-
-#define _CNM_PIE          P1IE
-#define _CNM_PIFG         P1IFG
-#define _CNM_PDIR         P1DIR
-#define _CNM_PIES         P1IES
-#define _CNM_PREN         P1REN
-#define _CNM_PORT_VECTOR  PORT1_VECTOR
-
-#define _CIP_POUT         P2OUT
-#define _CIP_PDIR         P2DIR
-
-#define ADC_CHECK      0x02
 
 interrupt(_CNM_PORT_VECTOR) p2_isr(void) { //PORT2_VECTOR
 
@@ -455,7 +476,7 @@ interrupt(_CNM_PORT_VECTOR) p2_isr(void) { //PORT2_VECTOR
   if (_CNM_PIFG & CS_NOTIFY_MASTER) {
     //_CNM_PIE &= ~CS_NOTIFY_MASTER;
     action |= ADC_CHECK;
-    __bic_SR_register_on_exit(LPM3_bits /*+ GIE*/); // exit LPM     
+    __bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM     
   }
 
   return;
@@ -470,7 +491,8 @@ interrupt(_CNM_PORT_VECTOR) p2_isr(void) { //PORT2_VECTOR
 void initADCE() {
     
   _CNM_PDIR &= ~CS_NOTIFY_MASTER ;
-  _CNM_PIE |=  CS_NOTIFY_MASTER ; 
+ // _CNM_PIE |=  CS_NOTIFY_MASTER ; 
+  _CNM_PIFG &= ~CS_NOTIFY_MASTER;    
   _CNM_PIES &= ~CS_NOTIFY_MASTER ;  
   _CNM_PREN |=  CS_NOTIFY_MASTER;
 
@@ -493,23 +515,24 @@ void checkADC() {
     _CNM_PIE &= ~CS_NOTIFY_MASTER;
     _CNM_PIFG &= ~CS_NOTIFY_MASTER;    
     __enable_interrupt();         // Our process is low priority, only listenning to master spi is the priority.
-  
+
     _CIP_POUT |= CS_INCOMING_PACKET;    // Warn ADCE that we are about to start an spi transfer.
     
     __delay_cycles(4000);  // Give some time to ADCE to react
 
     unsigned char header;
     if (action & PROCESS_BUFFER) {
-        header = inPacket.data[0];
+        header = inData2[0];
     } else {
         header = 0x0;
     }
     transfer(header);
-
+    P1OUT ^= BIT6;
     unsigned int i;
     for (i=0;i<16;i++) {
-        outBuffer[i] = transfer(inPacket.data[i]);
+        outBuffer[i] = transfer(inData2[i]);
     }
+    busy = 0; // we're finished with buffer
 
     _CIP_POUT &= ~CS_INCOMING_PACKET;   // release extension signal
     
@@ -518,11 +541,10 @@ void checkADC() {
     } 
 
     action &= ~ADC_CHECK;            // Clear current action flag.
-    action &= ~PROCESS_BUFFER;         // Clear current action flag.
 
     __disable_interrupt();
     _CNM_PIFG &= ~CS_NOTIFY_MASTER;       
-    _CNM_PIE &= ~CS_NOTIFY_MASTER;    
+    _CNM_PIE |= CS_NOTIFY_MASTER;    
 
     return;
 }
@@ -533,6 +555,8 @@ char transfer(char s) {
     int i;
 
     for(i=0;i<8;i++) {
+        P1OUT |= SCK;
+        __delay_cycles( 500 );
 
         ret <<= 1;
         // Put bits on the line, most significant bit first.
@@ -541,13 +565,12 @@ char transfer(char s) {
         } else {
               P1OUT &= ~MOSI;
         }
-        P1OUT |= SCK;
-        __delay_cycles( 250 );
-
         s <<= 1;
+
         // Pulse the clock low and wait to send the bit.  According to
          // the data sheet, data is transferred on the rising edge.
         P1OUT &= ~SCK;
+        __delay_cycles( 500 );
 
         // Send the clock back high and wait to set the next bit.  
         if (P1IN & MISO) {
@@ -555,8 +578,6 @@ char transfer(char s) {
         } else {
           ret &= 0xFE;
         }
-        __delay_cycles( 250 );
-
     }
     return ret; 
 
