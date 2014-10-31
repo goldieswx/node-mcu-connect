@@ -80,7 +80,7 @@ inline void _memcpy( void* dest, void*src, int len) {
 
 void initConfig() {
 
-  /* ioConfig.P1DIR = 0x03;
+   ioConfig.P1DIR = 0x03;
    ioConfig.P1ADC = BIT2;
    ioConfig.P1REN = 0xFF;
    ioConfig.P1OUT = 0;
@@ -89,7 +89,7 @@ void initConfig() {
    ioConfig.P2OUT = 0;
    ioConfig.P3DIR = 0;
    ioConfig.P3REN = 0xFF;
-   ioConfig.P3OUT = 0; */
+   ioConfig.P3OUT = 0; 
 
    ioConfig.P1DIR &= availP1 & ~ioConfig.P1ADC;
    ioConfig.P1ADC &= availP1;
@@ -278,6 +278,8 @@ void checkDAC() {
     __enable_interrupt();
     action &= ~CHECK_DAC;  
 
+     WDTCTL = WDTPW + WDTHOLD;
+
     static int lastValues[5];
     static char lastP1, lastP2, lastP3;
 
@@ -384,6 +386,9 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
     pExchangeBuff++;;
   }
 
+ /* if (UCB0STAT & UCOE) {
+    WDTCTL = WDTHOLD; //reboot
+  }*/
   return;
 }
 
@@ -433,7 +438,8 @@ interrupt(TIMER0_A1_VECTOR) ta1_isr(void) {
   	startTimerSequence();
   } else {
   //P1OUT ^= BIT0;
-
+   
+  WDTCTL = WDT_ARST_1000; 
 	action |= BEGIN_SAMPLE_DAC;
   	__bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM
   }

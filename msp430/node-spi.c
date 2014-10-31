@@ -520,6 +520,8 @@ void checkADC() {
     
     __delay_cycles(4000);  // Give some time to ADCE to react
 
+    static int debug = 0;
+
     unsigned char header;
     if (action & PROCESS_BUFFER) {
         header = inData2[0];
@@ -532,6 +534,10 @@ void checkADC() {
     for (i=0;i<16;i++) {
         outBuffer[i] = transfer(inData2[i]);
     }
+
+    outBuffer[19] = debug++;
+    debug %= 256;
+    
     busy = 0; // we're finished with buffer
 
     _CIP_POUT &= ~CS_INCOMING_PACKET;   // release extension signal
