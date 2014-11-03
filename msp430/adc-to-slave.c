@@ -80,8 +80,8 @@ inline void _memcpy( void* dest, void*src, int len) {
 
 void initConfig() {
 
-   ioConfig.P1DIR = 0x03;
-   ioConfig.P1ADC = BIT2;
+   ioConfig.P1DIR = 0x00;
+   ioConfig.P1ADC = 0x1C;
    ioConfig.P1REN = 0xFF;
    ioConfig.P1OUT = 0;
    ioConfig.P2DIR = 0x00;
@@ -119,7 +119,7 @@ void initConfig() {
    char ioCfg = ioConfig.P1ADC;
 
     for (i=0;i<MAX_ADC_CHANNELS;i++) {
-        ioADCRead[i] = ioCfg & 1; 
+        ioADCRead[MAX_ADC_CHANNELS-i-1] = ioCfg & 1; 
         ioCfg >>=1;  
     }
 
@@ -318,9 +318,12 @@ void checkDAC() {
       *pAdcData++ = newP1;
       *pAdcData++ = newP2;
       *pAdcData++ = newP3;
+      adcData[0] &= ~0x0080;
   } else if (registerNodeCall) {
-      adcData[0] |= 0x0080; // buffer contains data to discard
+        adcData[0] |= 0x0080; // buffer contains data to discard
   }
+
+
 
 
   if (registerNodeCall || dataTrigger) {
@@ -342,8 +345,8 @@ void processMsg () {
       char * pXchBuf = (char*)adcData;
       switch (*++pXchBuf) {
 	      case  0x55 :
-            _memcpy (&ioConfig,++pXchBuf,sizeof(struct ioConfig));
-            initConfig();
+            //_memcpy (&ioConfig,++pXchBuf,sizeof(struct ioConfig));
+            //initConfig();
             break;
     	
     	  case 0x66 :

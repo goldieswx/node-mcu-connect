@@ -23,7 +23,7 @@
 
 // global declarations
 
-int action;
+volatile unsigned int action;
 #define currentNodeId   3
   // id of this node
 
@@ -71,6 +71,7 @@ typedef struct _McomOutPacket {
 unsigned char inData2[20];
 
 volatile unsigned int busy;
+volatile unsigned int registered;
 
 #define packetLen (sizeof(McomInPacket))
 
@@ -111,6 +112,7 @@ void ioMSG();
 int main() {
 
   busy = 0;
+  registered = 0;
 
 	initGlobal();
 	initMCOM();
@@ -153,8 +155,8 @@ void mcomProcessBuffer() {
      __enable_interrupt();
 
      busy = 1;
-
      transfer(1); // dummy transfer to io/ but register calls on io side, w8 for callback.
+     registered = 1;
      
      _memcpy(inData2,inPacket.data,20);
      action &= ~PROCESS_BUFFER;
@@ -403,7 +405,7 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
                 pOutPacket = outBuffer; // outBuffer contains sncc data payload
              }
              checkSum = 0; // start checksumming
-             if ((busy)||(action & PROCESS_BUFFER)) {  // we are busy, preserve the input buffer, we
+             if (busy || (action & PROCESS_BUFFER)) {  // we are busy, preserve the input buffer, we
                                              // are processing it
                 *pInPacket = 0; // normally this is a reserved byte
                                 // force to 0 just so checksum will be correct in any case
@@ -438,7 +440,7 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
       return;
 
 	} else {
-		  UCA0TXBUF = 0x00;
+		  UCA0TXBUF = 0x77;
 		// scan stream and try to find a preamble start sequence
 		// (Oxac Oxac KNOWN CMD)
 		// we are in the intr and have very few cycles to intervene 
@@ -475,10 +477,12 @@ interrupt(_CNM_PORT_VECTOR) p2_isr(void) { //PORT2_VECTOR
 
   if (_CNM_PIFG & CS_NOTIFY_MASTER) {
     //_CNM_PIE &= ~CS_NOTIFY_MASTER;
-    action |= ADC_CHECK;
-    __bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM     
+    if (registered || ((!busy) && (!signalMaster)))  { 
+        busy = 1;
+   	    action |= ADC_CHECK;
+        __bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM     
+    }
   }
-
   return;
   
 } 
@@ -512,6 +516,7 @@ void initADCE() {
 
 void checkADC() {
 
+    registered = 0;
     _CNM_PIE &= ~CS_NOTIFY_MASTER;
     _CNM_PIFG &= ~CS_NOTIFY_MASTER;    
     __enable_interrupt();         // Our process is low priority, only listenning to master spi is the priority.
@@ -529,22 +534,30 @@ void checkADC() {
         header = 0x0;
     }
     transfer(header);
-    P1OUT ^= BIT6;
+   // P1OUT ^= BIT6;
     unsigned int i;
-    for (i=0;i<16;i++) {
-        outBuffer[i] = transfer(inData2[i]);
+    if (!signalMaster) {   //if nothing is already waiting in the sengind queue.
+      for (i=0;i<16;i++) {
+          outBuffer[i] = transfer(inData2[i]);
+      }
+
+      outBuffer[19] = debug++;
+      debug %= 256;
+      
+      _CIP_POUT &= ~CS_INCOMING_PACKET;   // release extension signal
+      
+      if (!(outBuffer[0] & 0x80)) { 
+        _signalMaster(); 
+      } 
+    } else {
+      for (i=0;i<16;i++) {
+          transfer(inData2[i]);
+      }
+      _CIP_POUT &= ~CS_INCOMING_PACKET;   // release extension signal
     }
 
-    outBuffer[19] = debug++;
-    debug %= 256;
-    
     busy = 0; // we're finished with buffer
 
-    _CIP_POUT &= ~CS_INCOMING_PACKET;   // release extension signal
-    
-    if (!(outBuffer[0] & 0x80)) { 
-      _signalMaster(); 
-    } 
 
     action &= ~ADC_CHECK;            // Clear current action flag.
 
@@ -588,3 +601,4 @@ char transfer(char s) {
     return ret; 
 
 }
+
