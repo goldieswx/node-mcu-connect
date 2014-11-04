@@ -45,8 +45,8 @@ int  adcData [MAX_ADC_CHANNELS+NUM_PORTS_AVAIL];
 volatile char *  pExchangeBuff=0;
 
 void processMsg();
-inline void setBusy();
-inline void setBusy();	
+inline void clearBusy();
+inline void setBusy();  
 void checkDAC();
 
 struct ioConfig {
@@ -60,7 +60,12 @@ struct ioConfig {
    unsigned char P3DIR;
    unsigned char P3REN;
    unsigned char P3OUT;
-   unsigned char pcTimerCount; 
+};
+
+struct flashConfig {
+   unsigned int  magic;
+   struct ioConfig ioConfig;
+   unsigned int  _magic;
 };
 
 char availP1 = (BIT0|BIT1|BIT2|BIT3|BIT4);
@@ -69,6 +74,8 @@ char availP3 = (BIT3|BIT4|BIT5|BIT6|BIT7);
 
 
 struct ioConfig ioConfig;
+struct flashConfig * flashIoConfig = (struct flashConfig*) 0x0E000;
+
 char ioADCRead[MAX_ADC_CHANNELS]; 
 
 inline void _memcpy( void* dest, void*src, int len) {
@@ -80,16 +87,21 @@ inline void _memcpy( void* dest, void*src, int len) {
 
 void initConfig() {
 
-   ioConfig.P1DIR = 0x00;
-   ioConfig.P1ADC = 0x1C;
-   ioConfig.P1REN = 0xFF;
-   ioConfig.P1OUT = 0;
-   ioConfig.P2DIR = 0x00;
-   ioConfig.P2REN = 0xFF;
-   ioConfig.P2OUT = 0;
-   ioConfig.P3DIR = 0;
-   ioConfig.P3REN = 0xFF;
-   ioConfig.P3OUT = 0; 
+
+    if ((flashIoConfig->magic == 0x4573) && (flashIoConfig->_magic = 0x7354)) {
+      _memcpy(&ioConfig,&flashIoConfig->ioConfig,sizeof(struct ioConfig));
+    } else {
+       ioConfig.P1DIR = 0x00;
+       ioConfig.P1ADC = 0x00;
+       ioConfig.P1REN = 0xFF;
+       ioConfig.P1OUT = 0;
+       ioConfig.P2DIR = 0x00;
+       ioConfig.P2REN = 0xFF;
+       ioConfig.P2OUT = 0;
+       ioConfig.P3DIR = 0;
+       ioConfig.P3REN = 0xFF;
+       ioConfig.P3OUT = 0; 
+    }
 
    ioConfig.P1DIR &= availP1 & ~ioConfig.P1ADC;
    ioConfig.P1ADC &= availP1;
@@ -146,17 +158,65 @@ inline void startTimerSequence() {
 }
 
 inline void setBusy() {
-	if (!busy) {
-		UCB0TXBUF = 0b01010001;
-		busy++;
-	}
+  if (!busy) {
+    UCB0TXBUF = 0b01010001;
+    busy++;
+  }
 }
 
 inline void clearBusy() {
-	if (busy) {
-		UCB0TXBUF = 0b01010000;
-		busy = 0;
-	}
+  if (busy) {
+    UCB0TXBUF = 0b01010000;
+    busy = 0;
+  }
+}
+
+
+void flash_erase(int *addr)
+{
+  __disable_interrupt();                             // Disable interrupts. This is important, otherwise,
+                                       // a flash operation in progress while interrupt may
+                                       // crash the system.
+  while(BUSY & FCTL3);                 // Check if Flash being used
+  FCTL2 = FWKEY + FSSEL_1 + FN3;       // Clk = SMCLK/4
+  FCTL1 = FWKEY + ERASE;               // Set Erase bit
+  FCTL3 = FWKEY;                       // Clear Lock bit
+  *addr = 0;                           // Dummy write to erase Flash segment
+  while(BUSY & FCTL3);                 // Check if Flash being used
+  FCTL1 = FWKEY;                       // Clear WRT bit
+  FCTL3 = FWKEY + LOCK;                // Set LOCK bit
+  __enable_interrupt();
+}
+
+void flash_write(int *dest, int *src, unsigned int size)
+{
+  __disable_interrupt();                             // Disable interrupts(IAR workbench).
+  int i = 0;
+  FCTL2 = FWKEY + FSSEL_1 + FN0;       // Clk = SMCLK/4
+  FCTL3 = FWKEY;                       // Clear Lock bit
+  FCTL1 = FWKEY + WRT;                 // Set WRT bit for write operation
+   
+  for (i=0; i< size; i++)
+      *dest++ = *src++;         // copy value to flash
+   
+ 
+  FCTL1 = FWKEY;                        // Clear WRT bit
+  FCTL3 = FWKEY + LOCK;                 // Set LOCK bit
+  __enable_interrupt();
+}
+
+void flashConfig(struct ioConfig * p) {
+
+
+    WDTCTL = WDTPW + WDTHOLD;
+    flash_erase((int*)flashIoConfig);
+    struct flashConfig buffer;
+    buffer.magic = 0x4573;
+    buffer._magic = 0x7354;
+    _memcpy(&buffer.ioConfig,p,sizeof(struct ioConfig));
+
+    flash_write((int*)flashIoConfig,(int*)&buffer,sizeof(struct flashConfig)/sizeof(int));
+    WDTCTL = WDTHOLD; // reboot.
 }
 
 
@@ -278,7 +338,7 @@ void checkDAC() {
     __enable_interrupt();
     action &= ~CHECK_DAC;  
 
-     WDTCTL = WDTPW + WDTHOLD;
+    WDTCTL = WDTPW + WDTHOLD;
 
     static int lastValues[5];
     static char lastP1, lastP2, lastP3;
@@ -340,25 +400,24 @@ void checkDAC() {
 void processMsg () {
 
     __enable_interrupt();
-	  action &= ~PROCESS_MSG;
+    action &= ~PROCESS_MSG;
 
       char * pXchBuf = (char*)adcData;
       switch (*++pXchBuf) {
-	      case  0x55 :
-            //_memcpy (&ioConfig,++pXchBuf,sizeof(struct ioConfig));
-            //initConfig();
+        case  0x55 :
+            flashConfig((struct ioConfig*)++pXchBuf);
             break;
-    	
-    	  case 0x66 :
+      
+        case 0x66 :
    
-  			P1OUT |= (*++pXchBuf & ioConfig.P1DIR);
-  			P2OUT |= (*++pXchBuf & ioConfig.P2DIR);
-  			P3OUT |= (*++pXchBuf & ioConfig.P3DIR);
-  			P1OUT &= (*++pXchBuf | ~ioConfig.P1DIR);
-  			P2OUT &= (*++pXchBuf | ~ioConfig.P2DIR);
-  			P3OUT &= (*++pXchBuf | ~ioConfig.P3DIR);
-			break;
-  	}
+        P1OUT |= (*++pXchBuf & ioConfig.P1DIR);
+        P2OUT |= (*++pXchBuf & ioConfig.P2DIR);
+        P3OUT |= (*++pXchBuf & ioConfig.P3DIR);
+        P1OUT &= (*++pXchBuf | ~ioConfig.P1DIR);
+        P2OUT &= (*++pXchBuf | ~ioConfig.P2DIR);
+        P3OUT &= (*++pXchBuf | ~ioConfig.P3DIR);
+      break;
+    }
     startTimerSequence();
 
 }
@@ -375,9 +434,9 @@ interrupt(ADC10_VECTOR) ADC10_ISR (void) {
 interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
   if (busy) { 
-  	UCB0TXBUF = 0b10010001;   // Keep sending we're busy but we registered the call
-  	pExchangeBuff = (char*)adcData;     // while we're at it reset the exchange buffer pointer
-  	registerNodeCall++;
+    UCB0TXBUF = 0b10010001;   // Keep sending we're busy but we registered the call
+    pExchangeBuff = (char*)adcData;     // while we're at it reset the exchange buffer pointer
+    registerNodeCall++;
     IFG2 &= ~UCB0RXIFG;   // clear current interrupt flag
 
     P2IES &= ~CS_INCOMING_PACKET; 
@@ -406,20 +465,20 @@ interrupt(PORT2_VECTOR) P2_ISR(void) {
        UCB0TXBUF = 0x95;    // fine, continue with sending data
         pExchangeBuff = (char*)adcData;
        /* clear notification system */
-  	   TA0CTL = TACLR;  // stop & clear timer    
-  	   TA0CCTL1 &= 0;   // also disable timer interrupt & clear flag
+       TA0CTL = TACLR;  // stop & clear timer    
+       TA0CCTL1 &= 0;   // also disable timer interrupt & clear flag
     
        WDTCTL = WDT_ARST_1000;
        WDTCTL = WDTPW + WDTCNTCL;  
 
        pulseNodeInterrupt = 0;
-       registerNodeCall = 0;  	   
+       registerNodeCall = 0;       
        P3OUT &= ~CS_NOTIFY_MASTER; // bring down cs notify line so that next pulse is faster
-       								// (master checks only raising edge)
+                      // (master checks only raising edge)
   } else {
 
        WDTCTL = WDTPW + WDTHOLD;
-  	   setBusy();
+       setBusy();
        action |= PROCESS_MSG; // process IO action
        __bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM
   }
@@ -437,14 +496,14 @@ interrupt(TIMER0_A1_VECTOR) ta1_isr(void) {
   if (pulseNodeInterrupt) {
    // P1OUT ^= BIT1;
 
-  	P3OUT ^= CS_NOTIFY_MASTER;
-  	startTimerSequence();
+    P3OUT ^= CS_NOTIFY_MASTER;
+    startTimerSequence();
   } else {
   //P1OUT ^= BIT0;
    
   WDTCTL = WDT_ARST_1000; 
-	action |= BEGIN_SAMPLE_DAC;
-  	__bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM
+  action |= BEGIN_SAMPLE_DAC;
+    __bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM
   }
 
   return;

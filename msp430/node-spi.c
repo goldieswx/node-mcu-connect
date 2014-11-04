@@ -68,23 +68,21 @@ typedef struct _McomOutPacket {
   unsigned word chkSum;
 } McomOutPacket;
 
-unsigned char inData2[20];
-
-volatile unsigned int busy;
 volatile unsigned int registered;
+volatile unsigned int busy;
 
 #define packetLen (sizeof(McomInPacket))
 
-McomInPacket 	 inPacket;
+McomInPacket   inPacket;
 McomOutPacket   outPacket;
 
 unsigned char * pInPacket;
 unsigned char * pOutPacket;
 
 unsigned char  outBuffer[packetLen];
-int            outBufferCheckSum;
-int            signalMaster; 
-int            mcomPacketSync;
+volatile int            outBufferCheckSum;
+volatile int            signalMaster; 
+volatile int            mcomPacketSync;
 
 
 unsigned char * pckBndPacketEnd;
@@ -92,9 +90,9 @@ unsigned char * pckBndHeaderEnd;
 unsigned char * pckBndDestEnd;
 unsigned char * pckBndDataEnd;
 
-int            transmissionErrors;
-int            checkSum; // checksum used in the SPI interrupt
-int            preserveInBuffer; // preserve input buffer (data in InPacket) when
+volatile int            transmissionErrors;
+volatile int            checkSum; // checksum used in the SPI interrupt
+volatile int            preserveInBuffer; // preserve input buffer (data in InPacket) when
                                 // processing buffer and while communicating (after PB acion was set).
 
 void initGlobal();
@@ -109,33 +107,35 @@ void checkADC();
 char transfer(char s); 
 void ioMSG();
 
+char inDataCopy[20];
+
 int main() {
 
   busy = 0;
   registered = 0;
 
-	initGlobal();
-	initMCOM();
+  initGlobal();
+  initMCOM();
   initDebug();
 #ifdef ADCE
   initADCE();
 #endif
 
-	while(1) {
-	     __enable_interrupt();
-	    if (action == 0) {
-		    __bis_SR_register(LPM3_bits + GIE);   // Enter LPM3, enable interrupts // we need ACLK for timeout.
-	    }
-	    __disable_interrupt(); // needed since action must be locked while being compared
-	  	if (action & PROCESS_BUFFER) {
-	        mcomProcessBuffer(); 
-	        continue;
-	    }
+  while(1) {
+       __enable_interrupt();
+      if (action == 0) {
+        __bis_SR_register(LPM3_bits + GIE);   // Enter LPM3, enable interrupts // we need ACLK for timeout.
+      }
+      __disable_interrupt(); // needed since action must be locked while being compared
+      if (action & PROCESS_BUFFER) {
+          mcomProcessBuffer(); 
+          continue;
+      }
       if (action & ADC_CHECK) {
           checkADC(); 
           continue;
       }
-	}
+  }
 
 }
 
@@ -158,7 +158,7 @@ void mcomProcessBuffer() {
      transfer(1); // dummy transfer to io/ but register calls on io side, w8 for callback.
      registered = 1;
      
-     _memcpy(inData2,inPacket.data,20);
+     _memcpy(inDataCopy,inPacket.data,20);
      action &= ~PROCESS_BUFFER;
      // when we release the action (process_buffer), we will stop being busy and
      // contents of inBuffer must be ready to reuse
@@ -169,27 +169,28 @@ void mcomProcessBuffer() {
 
 
 void _signalMaster() {
-	
+  
     int i;
     unsigned int chk = 0;
     for (i=0;i<20;i++) {
       chk += outBuffer[i];
     }
+
     outBuffer[20] = chk & 0xFF;
     outBufferCheckSum = chk;
 
-    __disable_interrupt();	
+    __disable_interrupt();  
 
     signalMaster = 1;
     // in case we are synced (out of a rescue, and not in a middle of a packet, force MISO high to signal master.)
     //__disable_interrupt();
     if (mcomPacketSync && (pInPacket == (unsigned char*)&inPacket)) { // not in receive state, but synced
       if (UCA0TXIFG) {
-      	UCA0TXBUF = 0x80 | currentNodeId;
+        UCA0TXBUF = 0x80 | currentNodeId;
       }
     }
 
-	
+  
 }
 
 
@@ -330,18 +331,19 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
   unsigned char savepInPacket = (*pInPacket); 
 
    if (UCA0STAT & UCOE) {
-	// buffer overrun occured
-	mcomPacketSync = 0;
+  // buffer overrun occured
+  mcomPacketSync = 0;
+   WDTCTL = WDTHOLD;
    }
 
   (*pInPacket) = UCA0RXBUF;
  
       if (mcomPacketSync) {
 
-	     UCA0TXBUF = (*pOutPacket++);
+       UCA0TXBUF = (*pOutPacket++);
 
         /* case pckBndPacketEnd */
-	      if (pInPacket==pckBndPacketEnd) { 
+        if (pInPacket==pckBndPacketEnd) { 
             UCA0TXBUF = 0x00;
             //P2OUT |= BIT7;
             if (inPacket.destinationSncc == currentNodeId) {  // there was a sncc transfer
@@ -365,7 +367,7 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
               UCA0TXBUF = 0x80 | currentNodeId;
             }
 
-  		      if (inPacket.destinationCmd == currentNodeId) { // there was a mi cmd
+            if (inPacket.destinationCmd == currentNodeId) { // there was a mi cmd
               if (inPacket.chkSum == outPacket.chkSum) {
                    #ifdef node2_0  
                       //P2OUT &= inPacket.data[0];
@@ -384,7 +386,7 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
         }
 
         /* case pckBndHeaderEnd */
-	      if (pInPacket==pckBndHeaderEnd) {
+        if (pInPacket==pckBndHeaderEnd) {
               if ((*(long *)&inPacket) == MI_RESCUE) {
                   outPacket.signalMask1 |= (signalMaster << currentNodeId);
                   signalMaster = 0;
@@ -429,21 +431,21 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
              {   // also send cmd chk if it's its turn and if we are not busy 
                 outPacket.chkSum = checkSum + (*pInPacket);
              } else {
-                outPacket.chkSum = 0;
+                outPacket.chkSum = checkSum + (*pInPacket)+1; // send out a bad chksum
              }
              preserveInBuffer = 0;
           }
-	    /* after all error checks */    afterChecks:
+      /* after all error checks */    afterChecks:
       checkSum += (*pInPacket);
       if (preserveInBuffer) { (*pInPacket) = savepInPacket; }
       pInPacket++;
       return;
 
-	} else {
-		  UCA0TXBUF = 0x77;
-		// scan stream and try to find a preamble start sequence
-		// (Oxac Oxac KNOWN CMD)
-		// we are in the intr and have very few cycles to intervene 
+  } else {
+      UCA0TXBUF = 0x00;
+    // scan stream and try to find a preamble start sequence
+    // (Oxac Oxac KNOWN CMD)
+    // we are in the intr and have very few cycles to intervene 
         pInPacket = (unsigned char*)&inPacket;
         unsigned char* rescuePtrSrc = pInPacket;
         rescuePtrSrc++;
@@ -453,9 +455,9 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
         *pInPacket++ = *rescuePtrSrc;
         *pInPacket++ = UCA0RXBUF;
       
-      	if ((*(long *)&inPacket) == MI_RESCUE) {
+        if ((*(long *)&inPacket) == MI_RESCUE) {
           _CNM_PIE |=  CS_NOTIFY_MASTER ; 
-        	mcomPacketSync++;
+          mcomPacketSync++;
           // sync out buffer also.
           pOutPacket = ((unsigned char*)&outPacket)+5; // sizeof double preamble, cmd + late byte
         } else {
@@ -464,7 +466,7 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
           }
         }
 
-	}
+  }
   return;
 }
 
@@ -476,10 +478,9 @@ interrupt(_CNM_PORT_VECTOR) p2_isr(void) { //PORT2_VECTOR
   //__enable_interrupt();
 
   if (_CNM_PIFG & CS_NOTIFY_MASTER) {
-    //_CNM_PIE &= ~CS_NOTIFY_MASTER;
-    if (registered || ((!busy) && (!signalMaster)))  { 
-        busy = 1;
-   	    action |= ADC_CHECK;
+
+    if (!(signalMaster|outPacket.signalMask1))  { 
+        action |= ADC_CHECK;
         __bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM     
     }
   }
@@ -516,7 +517,6 @@ void initADCE() {
 
 void checkADC() {
 
-    registered = 0;
     _CNM_PIE &= ~CS_NOTIFY_MASTER;
     _CNM_PIFG &= ~CS_NOTIFY_MASTER;    
     __enable_interrupt();         // Our process is low priority, only listenning to master spi is the priority.
@@ -528,37 +528,29 @@ void checkADC() {
     static int debug = 0;
 
     unsigned char header;
-    if (action & PROCESS_BUFFER) {
-        header = inData2[0];
+    if (registered) {
+        header = inDataCopy[0];
     } else {
         header = 0x0;
     }
     transfer(header);
-   // P1OUT ^= BIT6;
-    unsigned int i;
-    if (!signalMaster) {   //if nothing is already waiting in the sengind queue.
-      for (i=0;i<16;i++) {
-          outBuffer[i] = transfer(inData2[i]);
-      }
 
-      outBuffer[19] = debug++;
-      debug %= 256;
+    unsigned int i;
+    for (i=0;i<16;i++) {
+         outBuffer[i] = transfer(inDataCopy[i]);
+    }
+
+    outBuffer[19] = debug++;
+    debug %= 256;
       
-      _CIP_POUT &= ~CS_INCOMING_PACKET;   // release extension signal
+    _CIP_POUT &= ~CS_INCOMING_PACKET;   // release extension signal
       
-      if (!(outBuffer[0] & 0x80)) { 
+    if (!(outBuffer[0] & 0x80)) { 
         _signalMaster(); 
-      } 
-    } else {
-      for (i=0;i<16;i++) {
-          transfer(inData2[i]);
-      }
-      _CIP_POUT &= ~CS_INCOMING_PACKET;   // release extension signal
     }
 
     busy = 0; // we're finished with buffer
-
-
+    registered = 0;
     action &= ~ADC_CHECK;            // Clear current action flag.
 
     __disable_interrupt();
