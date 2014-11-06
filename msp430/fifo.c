@@ -50,7 +50,8 @@ fifo_new(void)
 {
 	fifo_t *f;
 
-	f = xcalloc(sizeof (fifo_t));
+	f = malloc(sizeof (fifo_t));
+	memset(f,0,sizeof (fifo_t));
 
 	return (f);
 }
@@ -59,7 +60,7 @@ fifo_new(void)
 void
 fifo_add(fifo_t *f, void *data)
 {
-	fifonode_t *fn = xmalloc(sizeof (fifonode_t));
+	fifonode_t *fn = malloc(sizeof (fifonode_t));
 
 	fn->fn_data = data;
 	fn->fn_next = NULL;

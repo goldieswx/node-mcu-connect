@@ -28,6 +28,7 @@
 #include <string.h>
 #include <sys/time.h>
 #include "fcntl.h"
+#include "fifo.h"
 
 #define word short
 #define latch  RPI_GPIO_P1_22
