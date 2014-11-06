@@ -125,6 +125,7 @@ socklen_t slen=sizeof(cli_addr);
 //// client socket.
 int clientSocket;
 struct sockaddr_in si_other;
+fifo_t * outQueuePool;
 
 
 /* functions */
@@ -143,6 +144,21 @@ int onMessageReceived(message * q) {
 int onMessageSent(message * q) {
 
 //  printf("Transferred\n");
+
+}
+
+fifo_t * initOutQueuePool() {
+
+	fifo_t * pool = fifo_new();
+	int i;
+	for(i=0;i<20;i++) {
+		message * m = (message*)malloc(sizeof(message));
+		m->status = 0;
+    	m->transferError = 0;
+    	m->destination = 0;
+		fifo_add(pool,m);
+	}
+	return pool;
 
 }
 
@@ -185,9 +201,9 @@ int sendMessage(message * outQueue,message * inQueues, int * pNumSNCCRequests) {
 	pck.preamble_1 = MI_PREAMBLE;
 	pck.preamble_2 = MI_PREAMBLE;
 	pck.cmd = MI_CMD;
-
+        printf("HDR:\n");
 	// send preamble and get the first answer
-	printBuffer(ppck,SIZEOF_MCOM_OUT_HEADER);  bcm2835_spi_transfern (ppck,SIZEOF_MCOM_OUT_HEADER); printBuffer(ppck,SIZEOF_MCOM_OUT_HEADER);
+	printBuffer2(ppck,SIZEOF_MCOM_OUT_HEADER);  bcm2835_spi_transfern (ppck,SIZEOF_MCOM_OUT_HEADER); printf("-");  printBuffer2(ppck,SIZEOF_MCOM_OUT_HEADER);
 
 	// send first bytes to preprocess, if no sncc request is pending,
 	// we'll try to insert the request in this signalmask already
@@ -217,8 +233,8 @@ int sendMessage(message * outQueue,message * inQueues, int * pNumSNCCRequests) {
 
 	pck.__reserved_1 = 0;
 	pck.__reserved_2 = 0;
-
-	printBuffer(ppck,SIZEOF_MCOM_OUT_PAYLOAD); bcm2835_spi_transfern (ppck,SIZEOF_MCOM_OUT_PAYLOAD); printBuffer(ppck,SIZEOF_MCOM_OUT_PAYLOAD);
+        printf("PL:\n");
+	printBuffer2(ppck,SIZEOF_MCOM_OUT_PAYLOAD);  printf("-"); bcm2835_spi_transfern (ppck,SIZEOF_MCOM_OUT_PAYLOAD); printBuffer2(ppck,SIZEOF_MCOM_OUT_PAYLOAD);
 	ppck += SIZEOF_MCOM_OUT_PAYLOAD;
 
 	int checkSumSNCC;
@@ -227,7 +243,8 @@ int sendMessage(message * outQueue,message * inQueues, int * pNumSNCCRequests) {
 		pck.snccCheckSum = checkSumSNCC;
 	}
 
-	printBuffer(ppck,SIZEOF_MCOM_OUT_CHK); bcm2835_spi_transfern (ppck,SIZEOF_MCOM_OUT_CHK);  printBuffer(ppck,SIZEOF_MCOM_OUT_CHK);
+        printf("CHK:\n");
+	printBuffer2(ppck,SIZEOF_MCOM_OUT_CHK); printf("-"); bcm2835_spi_transfern (ppck,SIZEOF_MCOM_OUT_CHK);  printBuffer2(ppck,SIZEOF_MCOM_OUT_CHK);
 
 	if(outQueue) {
 		if (pck.chkSum == checkSum) {
@@ -255,6 +272,10 @@ int processNodeQueue(message ** q) {
 	int i;
 	// pop first valid pointer which message has been transferred 
 	if ((*q) && (((*q)->status == MI_STATUS_TRANSFERRED) || ((*q)->status == MI_STATUS_DROPPED))) {
+		
+		fifo_add(outQueuePool,*q);
+		//printf("Adding pool (%d) (%x) -- index %x\n",fifo_len(outQueuePool),*q,q);
+
 		for (i=1;i<MCOM_NODE_QUEUE_LEN;i++) {
 		  *q++ = *(q+1);
 		}
@@ -289,21 +310,35 @@ void dropMessageOnExcessiveErrors (message ** q) {
 int insertNewCmds(message ** outQueues) {
  
 	UDPMessage buf;
-    static message m;
+    //static message m;
+	message * m;
 
     if (recvfrom (sockfd, &buf, sizeof(UDPMessage), 0, (struct sockaddr*)&cli_addr, &slen) == sizeof(UDPMessage)) {
-		_memcpy(m.data,&buf,sizeof(UDPMessage));
-	    m.status = 0;
-    	m.transferError = 0;
-    	m.destination = buf.destination;
-		//printf("%d\n",buf.destination);
-		if (m.destination <= MCOM_MAX_NODES) {
-			outQueues[(MCOM_NODE_QUEUE_LEN*3)] = &m;
+		if (buf.destination <= MCOM_MAX_NODES) {
+			int i,index = (MCOM_NODE_QUEUE_LEN*buf.destination);
+			message * q;
+			for (i=0;i<MCOM_NODE_QUEUE_LEN;i++) {
+				if (outQueues[index]== NULL) {
+				  	m = fifo_remove(outQueuePool);
+		  			//printf("Got from (%d) (%x) index: %x\n",fifo_len(outQueuePool),m,&outQueues[index]);
+					if (!m) { 
+					//	printf("Got empty queue\n");
+						//onMessageDropped(NULL); 
+						return 0; 
+					}
+					_memcpy(m->data,&buf,sizeof(UDPMessage));
+	    			m->status = 0;
+    				m->transferError = 0;
+    				m->destination = buf.destination;
+					outQueues[index] = m;
+					//printf("Got here\n");
+					return 1;
+				}
+				index++;
+			}
 		}
-    	return 1;
  	}
-
-   return 0;
+    return 0;
 }
 
 		
@@ -397,7 +432,7 @@ int main(int argc, char **argv)
   bcm2835_spi_begin();
   bcm2835_spi_setBitOrder(BCM2835_SPI_BIT_ORDER_MSBFIRST);      
   bcm2835_spi_setDataMode(BCM2835_SPI_MODE0);                   
-  bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_1024); 
+  bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_2048); 
   bcm2835_spi_chipSelect(BCM2835_SPI_CS0);                      
   bcm2835_spi_setChipSelectPolarity(BCM2835_SPI_CS0, LOW); 
   
@@ -409,6 +444,10 @@ int main(int argc, char **argv)
 
   message m;
   memset(&m,0,sizeof(message));
+
+  printf("init pool\n");
+  outQueuePool = initOutQueuePool();
+  printf("done init pool\n");
 
 
   int           numSNCCRequests = 0;
