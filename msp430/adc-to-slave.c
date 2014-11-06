@@ -78,6 +78,17 @@ struct flashConfig * flashIoConfig = (struct flashConfig*) 0x0E000;
 
 char ioADCRead[MAX_ADC_CHANNELS]; 
 
+inline unsigned int _memcmp(void* a, void * b, int len) {
+
+  while (len--) {
+     if (*(char*)a++ != *(char*)b++) return 0;
+  }
+
+  return 1;
+
+}
+
+
 inline void _memcpy( void* dest, void*src, int len) {
 
   while (len--) {
@@ -207,15 +218,19 @@ void flash_write(int *dest, int *src, unsigned int size)
 
 void flashConfig(struct ioConfig * p) {
 
-
     WDTCTL = WDTPW + WDTHOLD;
-    flash_erase((int*)flashIoConfig);
     struct flashConfig buffer;
     buffer.magic = 0x4573;
     buffer._magic = 0x7354;
     _memcpy(&buffer.ioConfig,p,sizeof(struct ioConfig));
 
+    if (_memcmp(&buffer,flashIoConfig,sizeof(struct flashConfig))) {
+      return;
+    }
+
+    flash_erase((int*)flashIoConfig);
     flash_write((int*)flashIoConfig,(int*)&buffer,sizeof(struct flashConfig)/sizeof(int));
+
     WDTCTL = WDTHOLD; // reboot.
 }
 
