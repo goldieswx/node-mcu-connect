@@ -431,7 +431,11 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
              {   // also send cmd chk if it's its turn and if we are not busy 
                 outPacket.chkSum = checkSum + (*pInPacket);
              } else {
-                outPacket.chkSum = checkSum + (*pInPacket)+1; // send out a bad chksum
+                if (inPacket.destinationCmd == currentNodeId) {
+                    outPacket.chkSum = checkSum + (*pInPacket)+1; // send out a bad chksum if we can transmi data on the line, otherwise say 0
+                } else {
+                    outPacket.chkSum = 0; // just shut up (not our turn)
+                }
              }
              preserveInBuffer = 0;
           }

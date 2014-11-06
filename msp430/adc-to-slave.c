@@ -45,7 +45,7 @@ int  adcData [MAX_ADC_CHANNELS+NUM_PORTS_AVAIL];
 volatile char *  pExchangeBuff=0;
 
 void processMsg();
-inline void clearBusy();
+inline void setBusy();
 inline void setBusy();  
 void checkDAC();
 
@@ -474,7 +474,7 @@ interrupt(PORT2_VECTOR) P2_ISR(void) {
        pulseNodeInterrupt = 0;
        registerNodeCall = 0;       
        P3OUT &= ~CS_NOTIFY_MASTER; // bring down cs notify line so that next pulse is faster
-                      // (master checks only raising edge)
+                      // (master checks only raising edge) 
   } else {
 
        WDTCTL = WDTPW + WDTHOLD;
