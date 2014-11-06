@@ -285,7 +285,7 @@ void initADC() {
 
 void initTimer() {
   TA0R = 0;
-  TA0CCR0 = 250;                         // Count to this, then interrupt;  
+  TA0CCR0 = 50;                         // Count to this, then interrupt;  
 }
 
 volatile unsigned  int initialTrigger;
