@@ -201,10 +201,11 @@ int sendMessage(message * outQueue,message * inQueues, int * pNumSNCCRequests) {
 	pck.preamble_1 = MI_PREAMBLE;
 	pck.preamble_2 = MI_PREAMBLE;
 	pck.cmd = MI_CMD;
-        printf("HDR:\n");
+
 	// send preamble and get the first answer
 	
 	#ifdef DEBUG_TRANSFER
+	        printf("HDR:\n");
 		printBuffer2(ppck,SIZEOF_MCOM_OUT_HEADER);  
 	#endif
 	bcm2835_spi_transfern (ppck,SIZEOF_MCOM_OUT_HEADER); 
@@ -460,10 +461,7 @@ int main(int argc, char **argv)
   message m;
   memset(&m,0,sizeof(message));
 
-  printf("init pool\n");
   outQueuePool = initOutQueuePool();
-  printf("done init pool\n");
-
 
   int           numSNCCRequests = 0;
   int           allMsgProcessed;
