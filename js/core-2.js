@@ -108,8 +108,24 @@ MCUNetwork.prototype._callback = function(value) {
 
   //console.log(this.find(nodeId).find(interfaceId).find(ioId));
   console.log(this.find(":tag-1"));
-
-
+	/*unsigned char data [MCOM_DATA_LEN] ;
+	int   expectedChecksum;
+	int   receivedChecksum;
+	int   status;
+	int   transferError;
+	int   destination;*/
+  var message = {
+ 	destination : value.readUInt32LE(0x24);
+ 	adcData : [value.readUInt16LE(0x0),
+ 	           value.readUInt16LE(0x2),
+ 	           value.readUInt16LE(0x4),
+ 	           value.readUInt16LE(0x6),
+ 	           value.readUInt16LE(0x8)], 
+ 	portData : [value.readUInt8LE(0x9),
+ 		    value.readUInt8LE(0xa),
+ 		    value.readUInt8LE(0xb)],
+        trigger :  value.readUInt32LE(0xc)
+  }
 
 }
 
