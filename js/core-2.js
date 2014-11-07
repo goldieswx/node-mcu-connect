@@ -115,16 +115,30 @@ MCUNetwork.prototype._callback = function(value) {
 	int   transferError;
 	int   destination;*/
   var message = {
+ 	timestamp : Date().getTime(),
  	destination : value.readUInt32LE(0x24);
+        trigger :  value.readUInt32LE(0xc)
+ 	portData : [value.readUInt8(0x9),
+ 		    value.readUInt8(0xa),
+ 		    value.readUInt8(0xb)],
  	adcData : [value.readUInt16LE(0x0),
  	           value.readUInt16LE(0x2),
  	           value.readUInt16LE(0x4),
  	           value.readUInt16LE(0x6),
  	           value.readUInt16LE(0x8)], 
- 	portData : [value.readUInt8(0x9),
- 		    value.readUInt8(0xa),
- 		    value.readUInt8(0xb)],
-        trigger :  value.readUInt32LE(0xc)
+
+  }
+ 
+  var trigger = message.trigger;
+  var i,j;
+  var IO_PER_PORT = 5, NUM_PORTS = 3;
+  for(j=0;j<NUM_PORTS;j++) {
+	  for(i=0;i<IO_PER_PORT;i++) {
+		     if (trigger & 1) {
+		     	this.find(j+"."+i)._callback(message);
+		     }
+	     trigger <<= 1;	
+	  }
   }
 
 }
