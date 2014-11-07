@@ -121,9 +121,9 @@ MCUNetwork.prototype._callback = function(value) {
  	           value.readUInt16LE(0x4),
  	           value.readUInt16LE(0x6),
  	           value.readUInt16LE(0x8)], 
- 	portData : [value.readUInt8LE(0x9),
- 		    value.readUInt8LE(0xa),
- 		    value.readUInt8LE(0xb)],
+ 	portData : [value.readUInt8(0x9),
+ 		    value.readUInt8(0xa),
+ 		    value.readUInt8(0xb)],
         trigger :  value.readUInt32LE(0xc)
   }
 
