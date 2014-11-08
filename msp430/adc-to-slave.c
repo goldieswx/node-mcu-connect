@@ -399,7 +399,7 @@ void checkDAC() {
   }
 
 
-
+ __disable_interrupts();
 
   if (registerNodeCall || dataTrigger) {
       clearBusy();
