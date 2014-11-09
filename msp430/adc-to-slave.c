@@ -41,7 +41,19 @@ volatile unsigned int busy=0;
 volatile unsigned int registerNodeCall = 0;
 volatile unsigned int pulseNodeInterrupt=0;
 
-int  adcData [MAX_ADC_CHANNELS+NUM_PORTS_AVAIL];
+//int  adcData [MAX_ADC_CHANNELS+NUM_PORTS_AVAIL];
+
+struct responseMessage {
+
+    unsigned int   meta; // align struct on a word basis. 
+    int            adcData[MAX_ADC_CHANNELS];
+    unsigned char  portStates[NUM_PORTS_AVAIL]; 
+
+};
+
+struct responseMessage responseMessage;
+
+
 volatile char *  pExchangeBuff=0;
 
 void processMsg();
@@ -155,7 +167,7 @@ void beginSampleDac() {
 
     ADC10CTL0 &= ~ENC;
     while (ADC10CTL1 & BUSY);             // Wait if ADC10 core is active
-    ADC10SA = (unsigned int)adcData;      // Copies data in ADC10SA to unsigned int adc array
+    ADC10SA = (unsigned int) responseMessage.adcData;      // Copies data in ADC10SA to unsigned int adc array
     ADC10CTL0 |= ENC + ADC10SC;           // Sampling and conversion start
 
     // Now wait for interrupt.   
@@ -366,11 +378,11 @@ void checkDAC() {
 
     for (i=0;i<MAX_ADC_CHANNELS;i++) {
       if (ioADCRead[i]) {
-         readValue = adcData[i];
+         readValue = responseMessage.adcData[i];
          if (readValue < 750) {
             if ((readValue > (lastValues[i]+15)) || (readValue < (lastValues[i]-15))) {
                 lastValues[i] = readValue;
-                dataTrigger|= 0x01;
+                dataTrigger|= (0x01 << i);
             }
          }
       }
@@ -380,26 +392,27 @@ void checkDAC() {
    newP2 = availP2 & (P2IN & ~ioConfig.P2DIR);
    newP3 = availP3 & (P3IN & ~ioConfig.P3DIR);
 
-   dataTrigger |= initialTrigger;
+   dataTrigger |= (initialTrigger << 8);
    initialTrigger = 0;
 
-   if (lastP1 != newP1) { dataTrigger|= 0x02; lastP1 = newP1; }
-   if (lastP2 != newP2) { dataTrigger|= 0x04; lastP2 = newP2; }
-   if (lastP3 != newP3) { dataTrigger|= 0x08; lastP3 = newP3; }
+   if (lastP1 != newP1) { dataTrigger|= 0x01 << 5; lastP1 = newP1; }
+   if (lastP2 != newP2) { dataTrigger|= 0x01 << 6; lastP2 = newP2; }
+   if (lastP3 != newP3) { dataTrigger|= 0x01 << 7; lastP3 = newP3; }
 
-  int * pAdcData = &adcData[MAX_ADC_CHANNELS];
 
   if (dataTrigger) {
-      *pAdcData++ = newP1;
-      *pAdcData++ = newP2;
-      *pAdcData++ = newP3;
-      adcData[0] &= ~0x0080;
+
+      responseMessage.portStates[0] = newP1;
+      responseMessage.portStates[1] = newP2;
+      responseMessage.portStates[2] = newP3;
+      responseMessage.meta = dataTrigger;
+      responseMessage.meta &= ~0x0080; // buffer contains sensor data
   } else if (registerNodeCall) {
-        adcData[0] |= 0x0080; // buffer contains data to discard
+      responseMessage.meta |= 0x0080; // buffer contains data to discard
   }
 
 
- __disable_interrupts();
+  __disable_interrupt();
 
   if (registerNodeCall || dataTrigger) {
       clearBusy();
@@ -417,7 +430,7 @@ void processMsg () {
     __enable_interrupt();
     action &= ~PROCESS_MSG;
 
-      char * pXchBuf = (char*)adcData;
+      char * pXchBuf = (char*)&responseMessage;
       switch (*++pXchBuf) {
         case  0x55 :
             flashConfig((struct ioConfig*)++pXchBuf);
@@ -450,7 +463,7 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
   if (busy) { 
     UCB0TXBUF = 0b10010001;   // Keep sending we're busy but we registered the call
-    pExchangeBuff = (char*)adcData;     // while we're at it reset the exchange buffer pointer
+    pExchangeBuff = (char*)&responseMessage;     // while we're at it reset the exchange buffer pointer
     registerNodeCall++;
     IFG2 &= ~UCB0RXIFG;   // clear current interrupt flag
 
@@ -478,12 +491,12 @@ interrupt(PORT2_VECTOR) P2_ISR(void) {
 
   if (P2IES & CS_INCOMING_PACKET) { // check raising edge (xored just before)
        UCB0TXBUF = 0x95;    // fine, continue with sending data
-        pExchangeBuff = (char*)adcData;
+        pExchangeBuff = (char*)&responseMessage;
        /* clear notification system */
        TA0CTL = TACLR;  // stop & clear timer    
        TA0CCTL1 &= 0;   // also disable timer interrupt & clear flag
     
-       WDTCTL = WDT_ARST_1000;
+       WDTCTL = WDT_ARST_250;
        WDTCTL = WDTPW + WDTCNTCL;  
 
        pulseNodeInterrupt = 0;
@@ -516,7 +529,7 @@ interrupt(TIMER0_A1_VECTOR) ta1_isr(void) {
   } else {
   //P1OUT ^= BIT0;
    
-  WDTCTL = WDT_ARST_1000; 
+  WDTCTL = WDT_ARST_250; 
   action |= BEGIN_SAMPLE_DAC;
     __bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM
   }
