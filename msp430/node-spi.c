@@ -147,6 +147,28 @@ inline void _memcpy( void* dest, void*src, int len) {
 }
 
 
+/// Extension related stuff
+
+
+#define MOSI  BIT7 
+#define MISO  BIT6
+#define SCK   BIT5
+
+#define CS_NOTIFY_MASTER    BIT3   // External Interrupt 
+#define CS_INCOMING_PACKET  BIT0   // Master enable the line before sending
+
+#define _CNM_PIE          P1IE
+#define _CNM_PIFG         P1IFG
+#define _CNM_PDIR         P1DIR
+#define _CNM_PIES         P1IES
+#define _CNM_PREN         P1REN
+#define _CNM_PORT_VECTOR  PORT1_VECTOR
+
+#define _CIP_POUT         P2OUT
+#define _CIP_PDIR         P2DIR
+
+#define ADC_CHECK      0x02
+
 /**
  * MCOM Related
  */
@@ -155,11 +177,24 @@ void mcomProcessBuffer() {
      __enable_interrupt();
 
      busy = 1;
-     transfer(1); // dummy transfer to io/ but register calls on io side, w8 for callback.
+     //transfer(1); // dummy transfer to io/ but register calls on io side, w8 for callback.
+      _CIP_POUT &= ~CS_INCOMING_PACKET;    // Warn ADCE that we are about to start an spi transfer.
+      __delay_cycles(500);
+      _CIP_POUT ^= CS_INCOMING_PACKET;    // Warn ADCE that we are about to start an spi transfer.
+      __delay_cycles(500);
+      _CIP_POUT ^= CS_INCOMING_PACKET;    // Warn ADCE that we are about to start an spi transfer.
+      __delay_cycles(500);
+   
+
      registered = 1;
      
      _memcpy(inDataCopy,inPacket.data,20);
      action &= ~PROCESS_BUFFER;
+
+    TA0CCR0 = 5000;
+    TA0CTL = TASSEL_1 | MC_1 ;             // Clock source ACLK
+    TA0CCTL1 = CCIE ;                      // Timer A interrupt enable
+
      // when we release the action (process_buffer), we will stop being busy and
      // contents of inBuffer must be ready to reuse
      // (and will be destroyed)
@@ -289,29 +324,13 @@ void initGlobal() {
   P1DIR |= BIT0 + BIT3;  // debug;
   P1OUT |= BIT3;
 #endif
+
+  TA0R = 0;
+  TA0CCR0 = 5000;  
+
 }
 
-/// Extension related stuff
 
-
-#define MOSI  BIT7 
-#define MISO  BIT6
-#define SCK   BIT5
-
-#define CS_NOTIFY_MASTER    BIT3   // External Interrupt 
-#define CS_INCOMING_PACKET  BIT0   // Master enable the line before sending
-
-#define _CNM_PIE          P1IE
-#define _CNM_PIFG         P1IFG
-#define _CNM_PDIR         P1DIR
-#define _CNM_PIES         P1IES
-#define _CNM_PREN         P1REN
-#define _CNM_PORT_VECTOR  PORT1_VECTOR
-
-#define _CIP_POUT         P2OUT
-#define _CIP_PDIR         P2DIR
-
-#define ADC_CHECK      0x02
 
 /*Node (booting up)
  
@@ -523,7 +542,13 @@ void checkADC() {
 
     _CNM_PIE &= ~CS_NOTIFY_MASTER;
     _CNM_PIFG &= ~CS_NOTIFY_MASTER;    
+
+    TA0CTL = TACLR;  // stop & clear timer
+    TA0CCTL1 &= 0; 
+
+
     __enable_interrupt();         // Our process is low priority, only listenning to master spi is the priority.
+
 
     _CIP_POUT |= CS_INCOMING_PACKET;    // Warn ADCE that we are about to start an spi transfer.
     
@@ -598,3 +623,13 @@ char transfer(char s) {
 
 }
 
+/* In case adc didn't reply in a timely fasion, resend interrupt */
+
+interrupt(TIMER0_A1_VECTOR) ta1_isr(void) {
+
+  TA0CTL = TACLR;  // stop & clear timer
+  TA0CCTL1 &= 0;   // also disable timer interrupt & clear flag
+  action |= PROCESS_BUFFER;
+ __bic_SR_register_on_exit(LPM3_bits+GIE);
+  return;
+} 

@@ -61,7 +61,7 @@
 #define MCOM_NODE_QUEUE_LEN 10
 #define MCOM_MAX_NODES 16
 
-#define MAX_TRANSFER_ERRORS_MESSAGE  100
+#define MAX_TRANSFER_ERRORS_MESSAGE  5 
 
 typedef struct _UDPMessage {
 
@@ -201,8 +201,9 @@ int sendMessage(message * outQueue,message * inQueues, int * pNumSNCCRequests) {
 	pck.preamble_1 = MI_PREAMBLE;
 	pck.preamble_2 = MI_PREAMBLE;
 	pck.cmd = MI_CMD;
-
+        printf("HDR:\n");
 	// send preamble and get the first answer
+<<<<<<< Updated upstream
 	
 	#ifdef DEBUG_TRANSFER
 	        printf("HDR:\n");
@@ -213,6 +214,9 @@ int sendMessage(message * outQueue,message * inQueues, int * pNumSNCCRequests) {
 		printf("-");  
 		printBuffer2(ppck,SIZEOF_MCOM_OUT_HEADER);
 	#endif
+=======
+	printBuffer2(ppck,SIZEOF_MCOM_OUT_HEADER);  bcm2835_spi_transfern (ppck,SIZEOF_MCOM_OUT_HEADER); printf("-");  printBuffer2(ppck,SIZEOF_MCOM_OUT_HEADER);
+>>>>>>> Stashed changes
 
 	// send first bytes to preprocess, if no sncc request is pending,
 	// we'll try to insert the request in this signalmask already
@@ -242,6 +246,7 @@ int sendMessage(message * outQueue,message * inQueues, int * pNumSNCCRequests) {
 
 	pck.__reserved_1 = 0;
 	pck.__reserved_2 = 0;
+<<<<<<< Updated upstream
 
 	#ifdef DEBUG_TRANSFER
         	printf("PL:\n"); printBuffer2(ppck,SIZEOF_MCOM_OUT_PAYLOAD);  printf("-"); 
@@ -251,6 +256,11 @@ int sendMessage(message * outQueue,message * inQueues, int * pNumSNCCRequests) {
 	        printBuffer2(ppck,SIZEOF_MCOM_OUT_PAYLOAD);
 		ppck += SIZEOF_MCOM_OUT_PAYLOAD;
 	#endif
+=======
+        printf("PL:\n");
+	printBuffer2(ppck,SIZEOF_MCOM_OUT_PAYLOAD);  printf("-"); bcm2835_spi_transfern (ppck,SIZEOF_MCOM_OUT_PAYLOAD); printBuffer2(ppck,SIZEOF_MCOM_OUT_PAYLOAD);
+	ppck += SIZEOF_MCOM_OUT_PAYLOAD;
+>>>>>>> Stashed changes
 
 	int checkSumSNCC;
 	if (inQueue) {
@@ -258,6 +268,7 @@ int sendMessage(message * outQueue,message * inQueues, int * pNumSNCCRequests) {
 		pck.snccCheckSum = checkSumSNCC;
 	}
 
+<<<<<<< Updated upstream
 	#ifdef DEBUG_TRANSFER
         	printf("CHK:\n"); printBuffer2(ppck,SIZEOF_MCOM_OUT_CHK); printf("-"); 
         #endif
@@ -265,6 +276,10 @@ int sendMessage(message * outQueue,message * inQueues, int * pNumSNCCRequests) {
       	#ifdef DEBUG_TRANSFER
 	        printBuffer2(ppck,SIZEOF_MCOM_OUT_CHK);
 	#endif
+=======
+        printf("CHK:\n");
+	printBuffer2(ppck,SIZEOF_MCOM_OUT_CHK); printf("-"); bcm2835_spi_transfern (ppck,SIZEOF_MCOM_OUT_CHK);  printBuffer2(ppck,SIZEOF_MCOM_OUT_CHK);
+>>>>>>> Stashed changes
 
 	if(outQueue) {
 		if (pck.chkSum == checkSum) {
@@ -329,8 +344,14 @@ void dropMessageOnExcessiveErrors (message ** q) {
 // process udp queue.
 int insertNewCmds(message ** outQueues) {
  
+<<<<<<< Updated upstream
     UDPMessage buf;
     message * m;
+=======
+	UDPMessage buf;
+    //static message m;
+	message * m;
+>>>>>>> Stashed changes
 
     if (recvfrom (sockfd, &buf, sizeof(UDPMessage), 0, (struct sockaddr*)&cli_addr, &slen) == sizeof(UDPMessage)) {
 		if (buf.destination <= MCOM_MAX_NODES) {
@@ -341,7 +362,12 @@ int insertNewCmds(message ** outQueues) {
 				  	m = fifo_remove(outQueuePool);
 		  			//printf("Got from (%d) (%x) index: %x\n",fifo_len(outQueuePool),m,&outQueues[index]);
 					if (!m) { 
+<<<<<<< Updated upstream
 						// TODO throw error instead of ignoring the msg
+=======
+					//	printf("Got empty queue\n");
+						//onMessageDropped(NULL); 
+>>>>>>> Stashed changes
 						return 0; 
 					}
 					_memcpy(m->data,&buf,sizeof(UDPMessage));
@@ -461,7 +487,14 @@ int main(int argc, char **argv)
   message m;
   memset(&m,0,sizeof(message));
 
+<<<<<<< Updated upstream
   outQueuePool = initOutQueuePool();
+=======
+  printf("init pool\n");
+  outQueuePool = initOutQueuePool();
+  printf("done init pool\n");
+
+>>>>>>> Stashed changes
 
   int           numSNCCRequests = 0;
   int           allMsgProcessed;

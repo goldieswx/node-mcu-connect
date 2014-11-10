@@ -41,17 +41,7 @@ volatile unsigned int busy=0;
 volatile unsigned int registerNodeCall = 0;
 volatile unsigned int pulseNodeInterrupt=0;
 
-//int  adcData [MAX_ADC_CHANNELS+NUM_PORTS_AVAIL];
-
-struct responseMessage {
-
-    unsigned int   meta; // align struct on a word basis. 
-    int            adcData[MAX_ADC_CHANNELS];
-    unsigned char  portStates[NUM_PORTS_AVAIL]; 
-
-};
-
-struct responseMessage responseMessage;
+int  adcData [MAX_ADC_CHANNELS+NUM_PORTS_AVAIL];
 
 
 volatile char *  pExchangeBuff=0;
@@ -167,7 +157,7 @@ void beginSampleDac() {
 
     ADC10CTL0 &= ~ENC;
     while (ADC10CTL1 & BUSY);             // Wait if ADC10 core is active
-    ADC10SA = (unsigned int) responseMessage.adcData;      // Copies data in ADC10SA to unsigned int adc array
+    ADC10SA = (unsigned int)adcData;      // Copies data in ADC10SA to unsigned int adc array
     ADC10CTL0 |= ENC + ADC10SC;           // Sampling and conversion start
 
     // Now wait for interrupt.   
@@ -312,7 +302,7 @@ void initADC() {
 
 void initTimer() {
   TA0R = 0;
-  TA0CCR0 = 50;                         // Count to this, then interrupt;  
+  TA0CCR0 = 80;                         // Count to this, then interrupt;  
 }
 
 volatile unsigned  int initialTrigger;
@@ -345,14 +335,17 @@ int main(void)
       __disable_interrupt(); 
       
       if(action & BEGIN_SAMPLE_DAC) {
+          WDTCTL = WDTPW + WDTCNTCL;  
           beginSampleDac();
           continue;
       }
       if(action & CHECK_DAC) {
+          WDTCTL = WDTPW + WDTCNTCL;  
           checkDAC();
           continue;
       }
       if(action & PROCESS_MSG) {
+          WDTCTL = WDTPW + WDTCNTCL;  
           processMsg();
           continue;
       }
@@ -365,7 +358,7 @@ void checkDAC() {
     __enable_interrupt();
     action &= ~CHECK_DAC;  
 
-    WDTCTL = WDTPW + WDTHOLD;
+    //WDTCTL = WDTPW + WDTHOLD;
 
     static int lastValues[5];
     static char lastP1, lastP2, lastP3;
@@ -378,11 +371,11 @@ void checkDAC() {
 
     for (i=0;i<MAX_ADC_CHANNELS;i++) {
       if (ioADCRead[i]) {
-         readValue = responseMessage.adcData[i];
+         readValue = adcData[i];
          if (readValue < 750) {
             if ((readValue > (lastValues[i]+15)) || (readValue < (lastValues[i]-15))) {
                 lastValues[i] = readValue;
-                dataTrigger|= (0x01 << i);
+                dataTrigger |= 0x01 << i;
             }
          }
       }
@@ -395,25 +388,25 @@ void checkDAC() {
    dataTrigger |= (initialTrigger << 8);
    initialTrigger = 0;
 
-   if (lastP1 != newP1) { dataTrigger|= 0x01 << 5; lastP1 = newP1; }
-   if (lastP2 != newP2) { dataTrigger|= 0x01 << 6; lastP2 = newP2; }
-   if (lastP3 != newP3) { dataTrigger|= 0x01 << 7; lastP3 = newP3; }
+   if (lastP1 != newP1) { dataTrigger |= 0x01 << 0x05; lastP1 = newP1; }
+   if (lastP2 != newP2) { dataTrigger |= 0x01 << 0x06; lastP2 = newP2; }
+   if (lastP3 != newP3) { dataTrigger |= 0x01 << 0x07; lastP3 = newP3; }
+
+  int * pAdcData = &adcData[MAX_ADC_CHANNELS];
 
 
   if (dataTrigger) {
-
-      responseMessage.portStates[0] = newP1;
-      responseMessage.portStates[1] = newP2;
-      responseMessage.portStates[2] = newP3;
-      responseMessage.meta = dataTrigger;
-      responseMessage.meta &= ~0x0080; // buffer contains sensor data
-  } else if (registerNodeCall) {
-      responseMessage.meta |= 0x0080; // buffer contains data to discard
+      *pAdcData++ = newP1 | newP2 << 0x08;
+      *pAdcData++ = newP3;
+      *pAdcData++ = dataTrigger;
+       adcData[0] &= ~0x0080;
+  } else {
+        adcData[0] |= 0x0080; // buffer contains data to discard
   }
 
 
-  __disable_interrupt();
-
+__disable_interrupt();
+  
   if (registerNodeCall || dataTrigger) {
       clearBusy();
       pulseNodeInterrupt = 1;
@@ -427,10 +420,10 @@ void checkDAC() {
 /* PROCESS RECEIVED MSG */
 void processMsg () {
 
-    __enable_interrupt();
+   // __enable_interrupt();
     action &= ~PROCESS_MSG;
 
-      char * pXchBuf = (char*)&responseMessage;
+      char * pXchBuf = (char*)adcData;
       switch (*++pXchBuf) {
         case  0x55 :
             flashConfig((struct ioConfig*)++pXchBuf);
@@ -446,6 +439,8 @@ void processMsg () {
         P3OUT &= (*++pXchBuf | ~ioConfig.P3DIR);
       break;
     }
+   
+  // TA0CCR0 = 50;
     startTimerSequence();
 
 }
@@ -461,24 +456,10 @@ interrupt(ADC10_VECTOR) ADC10_ISR (void) {
  
 interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
-  if (busy) { 
-    UCB0TXBUF = 0b10010001;   // Keep sending we're busy but we registered the call
-    pExchangeBuff = (char*)&responseMessage;     // while we're at it reset the exchange buffer pointer
-    registerNodeCall++;
-    IFG2 &= ~UCB0RXIFG;   // clear current interrupt flag
+  UCB0TXBUF = *pExchangeBuff;
+  *pExchangeBuff = UCB0RXBUF;
+  pExchangeBuff++;
 
-    P2IES &= ~CS_INCOMING_PACKET; 
-    P2IFG &= ~CS_INCOMING_PACKET;   // clear master notification interrupt flag        
-
-  } else {
-    UCB0TXBUF = *pExchangeBuff;
-    *pExchangeBuff = UCB0RXBUF;
-    pExchangeBuff++;;
-  }
-
- /* if (UCB0STAT & UCOE) {
-    WDTCTL = WDTHOLD; //reboot
-  }*/
   return;
 }
 
@@ -490,25 +471,36 @@ interrupt(PORT2_VECTOR) P2_ISR(void) {
   P2IES ^= CS_INCOMING_PACKET; 
 
   if (P2IES & CS_INCOMING_PACKET) { // check raising edge (xored just before)
-       UCB0TXBUF = 0x95;    // fine, continue with sending data
-        pExchangeBuff = (char*)&responseMessage;
-       /* clear notification system */
-       TA0CTL = TACLR;  // stop & clear timer    
-       TA0CCTL1 &= 0;   // also disable timer interrupt & clear flag
-    
-       WDTCTL = WDT_ARST_250;
-       WDTCTL = WDTPW + WDTCNTCL;  
 
-       pulseNodeInterrupt = 0;
-       registerNodeCall = 0;       
-       P3OUT &= ~CS_NOTIFY_MASTER; // bring down cs notify line so that next pulse is faster
-                      // (master checks only raising edge) 
+         if (!registerNodeCall) { 
+            // node wants to tell us something.
+
+            pExchangeBuff = (char*)adcData;     // while we're at it reset the exchange buffer pointer
+            registerNodeCall++;
+
+            WDTCTL = WDTPW + WDTCNTCL;  
+            P2IES &= ~CS_INCOMING_PACKET; 
+            P2IFG &= ~CS_INCOMING_PACKET;   // clear master notification interrupt flag        
+
+          } else {
+               // timer is pulsing notifications
+                pExchangeBuff = (char*)adcData;
+                adcData[0] |= 0x0080;
+               /* clear notification system */
+               TA0CTL = TACLR;  // stop & clear timer    
+               TA0CCTL1 &= 0;   // also disable timer interrupt & clear flag
+
+               pulseNodeInterrupt = 0;
+               registerNodeCall = 0;  
+          }
   } else {
-
-       WDTCTL = WDTPW + WDTHOLD;
-       setBusy();
-       action |= PROCESS_MSG; // process IO action
-       __bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM
+      // P2IES goes to low from high.
+       if (!busy) {
+         WDTCTL = WDTPW + WDTCNTCL;  
+         setBusy();
+         action |= PROCESS_MSG; // process IO action
+         __bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM
+      }
   }
   return;
 }
@@ -519,17 +511,10 @@ interrupt(TIMER0_A1_VECTOR) ta1_isr(void) {
   TA0CTL = TACLR;  // stop & clear timer
   TA0CCTL1 &= 0;   // also disable timer interrupt & clear flag
 
-  //WDTCTL = WDTPW + WDTCNTCL;
-
   if (pulseNodeInterrupt) {
-   // P1OUT ^= BIT1;
-
     P3OUT ^= CS_NOTIFY_MASTER;
     startTimerSequence();
   } else {
-  //P1OUT ^= BIT0;
-   
-  WDTCTL = WDT_ARST_250; 
   action |= BEGIN_SAMPLE_DAC;
     __bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM
   }
