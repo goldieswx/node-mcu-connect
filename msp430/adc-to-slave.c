@@ -91,7 +91,8 @@ Master side.
 		- delay (delta T/2)
 		- send exchange buffer containing CTS and inbuffer if avail.
 		- SIG to hi
-		- delay (delta T/2) (verify checksums and clear or not CTS/ set SignalMaster and outbuffer)
+		- delay (delta T/2) (verify checksums and clear or not CTS/ set SignalMaster and outbuffer, 
+				if failed to send, start timer method A (again))
 		- SIG to lo.
                 	      
            
