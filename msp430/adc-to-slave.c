@@ -83,7 +83,7 @@ Master side.
    
    INTR interrupt : 
 	if (raising edge)
-		- disable this interrupt	
+		- clear this interrupt flag	
 
 		/// separate action, checkDAC
 		- delay (delta T).  
