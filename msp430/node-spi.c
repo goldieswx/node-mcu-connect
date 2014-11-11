@@ -70,6 +70,7 @@ typedef struct _McomOutPacket {
 
 volatile unsigned int registered;
 volatile unsigned int busy;
+volatile unsigned int processPendingActionUponSNCC;
 
 #define packetLen (sizeof(McomInPacket))
 
@@ -113,6 +114,7 @@ int main() {
 
   busy = 0;
   registered = 0;
+  processPendingActionUponSNCC = 0;
 
   initGlobal();
   initMCOM();
@@ -158,6 +160,7 @@ inline void _memcpy( void* dest, void*src, int len) {
 #define CS_INCOMING_PACKET  BIT0   // Master enable the line before sending
 
 #define _CNM_PIE          P1IE
+#define _CNM_PIN          P1IN
 #define _CNM_PIFG         P1IFG
 #define _CNM_PDIR         P1DIR
 #define _CNM_PIES         P1IES
@@ -176,24 +179,22 @@ void mcomProcessBuffer() {
 
      __enable_interrupt();
 
+     if (!busy) { _memcpy(inDataCopy,inPacket.data,20); }
      busy = 1;
-     //transfer(1); // dummy transfer to io/ but register calls on io side, w8 for callback.
-      _CIP_POUT &= ~CS_INCOMING_PACKET;    // Warn ADCE that we are about to start an spi transfer.
-      __delay_cycles(500);
-      _CIP_POUT ^= CS_INCOMING_PACKET;    // Warn ADCE that we are about to start an spi transfer.
-      __delay_cycles(500);
-      _CIP_POUT ^= CS_INCOMING_PACKET;    // Warn ADCE that we are about to start an spi transfer.
-      __delay_cycles(500);
-   
 
-     registered = 1;
-     
-     _memcpy(inDataCopy,inPacket.data,20);
+     if (_CNM_PIN & CS_NOTIFY_MASTER)  {
+          // adce is currently transferring something, just wait and retry.
+          TA0CCR0 = 500;
+          TA0CTL = TASSEL_1 | MC_1 ;             // Clock source ACLK
+          TA0CCTL1 = CCIE ;                      // Timer A interrupt enable
+     } else {
+         // clear to send to adce, just go.
+          P2OUT ^= BIT7;
+        _CIP_POUT |= CS_INCOMING_PACKET;  // Dear ADCe, We have some data that needs to be transferred.
+        action |= ADC_CHECK;
+     }
+
      action &= ~PROCESS_BUFFER;
-
-    TA0CCR0 = 5000;
-    TA0CTL = TASSEL_1 | MC_1 ;             // Clock source ACLK
-    TA0CCTL1 = CCIE ;                      // Timer A interrupt enable
 
      // when we release the action (process_buffer), we will stop being busy and
      // contents of inBuffer must be ready to reuse
@@ -205,6 +206,8 @@ void mcomProcessBuffer() {
 
 void _signalMaster() {
   
+
+
     int i;
     unsigned int chk = 0;
     for (i=0;i<20;i++) {
@@ -312,7 +315,7 @@ void initGlobal() {
   P1REN &= 0; 
   P1OUT &= 0;
   P2REN &= 0;
-  P2OUT &= 0;
+ // P2OUT &= 0;
 
   P2SEL2 &= 0;
   P2SEL &= 0;
@@ -351,8 +354,8 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
    if (UCA0STAT & UCOE) {
   // buffer overrun occured
-  mcomPacketSync = 0;
-   WDTCTL = WDTHOLD;
+      mcomPacketSync = 0;
+      WDTCTL = WDTHOLD;
    }
 
   (*pInPacket) = UCA0RXBUF;
@@ -368,11 +371,14 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
             if (inPacket.destinationSncc == currentNodeId) {  // there was a sncc transfer
                 if (inPacket.snccCheckSum == outBufferCheckSum) { // successful
                     outPacket.signalMask1 = 0; // clear signal mask meaning master received the sncc buffer.
-
+                    
+                    action |= processPendingActionUponSNCC;
+                    processPendingActionUponSNCC = 0;
+                    if (action) {  __bic_SR_register_on_exit(LPM3_bits); }
                     #ifdef node2_0  
                       // P2OUT ^= BIT6;
                     #else
-                      P1OUT ^= BIT0;
+                       //UT ^= BIT0;
                       //action |= ADC_CHECK;    
                     #endif
                 }
@@ -393,7 +399,7 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
                       //P2OUT |= inPacket.data[1];
                       //action |= ADC_CHECK;    
                       //_signalMaster();
-                      P2OUT ^= BIT7;
+                      //P2OUT ^= BIT7;
                     #else
                       P1OUT ^= BIT3;
                     #endif
@@ -479,7 +485,12 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
         *pInPacket++ = UCA0RXBUF;
       
         if ((*(long *)&inPacket) == MI_RESCUE) {
-          _CNM_PIE |=  CS_NOTIFY_MASTER ; 
+            // On (first) sync:
+            //Enable INTR interrupt on raising edge.
+
+            _CNM_PIE |=  CS_NOTIFY_MASTER ; 
+            _CNM_PIFG |=  _CNM_PIN & CS_NOTIFY_MASTER; // force interrupt to be called if input is already high.
+
           mcomPacketSync++;
           // sync out buffer also.
           pOutPacket = ((unsigned char*)&outPacket)+5; // sizeof double preamble, cmd + late byte
@@ -501,12 +512,15 @@ interrupt(_CNM_PORT_VECTOR) p2_isr(void) { //PORT2_VECTOR
   //__enable_interrupt();
 
   if (_CNM_PIFG & CS_NOTIFY_MASTER) {
-
-    if (!(signalMaster|outPacket.signalMask1))  { 
-        action |= ADC_CHECK;
+     if (signalMaster||outPacket.signalMask1)  { 
+        processPendingActionUponSNCC = ADC_CHECK;
+     } else {
+         action |= ADC_CHECK;
         __bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM     
-    }
+     }
   }
+
+  _CNM_PIFG &= 0;
   return;
   
 } 
@@ -540,52 +554,45 @@ void initADCE() {
 
 void checkADC() {
 
-    _CNM_PIE &= ~CS_NOTIFY_MASTER;
-    _CNM_PIFG &= ~CS_NOTIFY_MASTER;    
-
-    TA0CTL = TACLR;  // stop & clear timer
-    TA0CCTL1 &= 0; 
-
-
     __enable_interrupt();         // Our process is low priority, only listenning to master spi is the priority.
 
 
-    _CIP_POUT |= CS_INCOMING_PACKET;    // Warn ADCE that we are about to start an spi transfer.
-    
+    while (!(_CNM_PIN & CS_NOTIFY_MASTER)) {
+      __delay_cycles(1000);
+    }
+    _CIP_POUT &= ~CS_INCOMING_PACKET;   // release extension signal
+
     __delay_cycles(4000);  // Give some time to ADCE to react
+    __delay_cycles(4000);  // Give some time to ADCE to react
+    __delay_cycles(4000);  // Give some time to ADCE to react
+
 
     static int debug = 0;
 
-    unsigned char header;
-    if (registered) {
-        header = inDataCopy[0];
-    } else {
-        header = 0x0;
-    }
-    transfer(header);
+
+
+    outBuffer[0] = transfer(0xAC);
+    outBuffer[1] = transfer(0xAC);
 
     unsigned int i;
-    for (i=0;i<16;i++) {
-         outBuffer[i] = transfer(inDataCopy[i]);
+    for (i=0;i<15;i++) {
+         outBuffer[2+i] = transfer(inDataCopy[i]);
     }
 
+    _CIP_POUT ^= CS_INCOMING_PACKET;   // pulse signal for last byte.
+    outBuffer[17] = transfer(inDataCopy[15]);
+    _CIP_POUT ^= CS_INCOMING_PACKET;   // pulse signal for last byte.
+  
     outBuffer[19] = debug++;
     debug %= 256;
-      
-    _CIP_POUT &= ~CS_INCOMING_PACKET;   // release extension signal
-      
-    if (!(outBuffer[0] & 0x80)) { 
+     
+
+    if (!(outBuffer[2] & 0x80)) { 
         _signalMaster(); 
     }
 
     busy = 0; // we're finished with buffer
-    registered = 0;
     action &= ~ADC_CHECK;            // Clear current action flag.
-
-    __disable_interrupt();
-    _CNM_PIFG &= ~CS_NOTIFY_MASTER;       
-    _CNM_PIE |= CS_NOTIFY_MASTER;    
-
     return;
 }
 
@@ -595,8 +602,7 @@ char transfer(char s) {
     int i;
 
     for(i=0;i<8;i++) {
-        P1OUT |= SCK;
-        __delay_cycles( 500 );
+
 
         ret <<= 1;
         // Put bits on the line, most significant bit first.
@@ -605,13 +611,15 @@ char transfer(char s) {
         } else {
               P1OUT &= ~MOSI;
         }
+        P1OUT |= SCK;
+        __delay_cycles( 250 );
+
         s <<= 1;
 
         // Pulse the clock low and wait to send the bit.  According to
          // the data sheet, data is transferred on the rising edge.
         P1OUT &= ~SCK;
-        __delay_cycles( 500 );
-
+         __delay_cycles( 250 );
         // Send the clock back high and wait to set the next bit.  
         if (P1IN & MISO) {
           ret |= 0x01;
@@ -629,6 +637,7 @@ interrupt(TIMER0_A1_VECTOR) ta1_isr(void) {
 
   TA0CTL = TACLR;  // stop & clear timer
   TA0CCTL1 &= 0;   // also disable timer interrupt & clear flag
+
   action |= PROCESS_BUFFER;
  __bic_SR_register_on_exit(LPM3_bits+GIE);
   return;
