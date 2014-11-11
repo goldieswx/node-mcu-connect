@@ -14,6 +14,87 @@
 
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <http://www.gnu.org/licenses/>. 
+    
+
+
+
+Slave side.
+
+On Power/Reset, goto 0
+
+
+0  - Reset Watchdog 250ms  
+   - "disable" data spi transfer 
+   - P1IN can be whatever (not that we have any control on this anyway)
+   - set P1OUT low.
+   - Start Timer 500ticks (method A)
+   - Upon Timer interrupt (method A), 
+	run  1. signal = Either (ADC Check or Resend mode).
+             2. sample = Sample P1IN
+             3. transferTrigger = sample || signal
+   - if transferTrigger 
+        1aa. HOLd Watchdog
+        1a. set P1OUT high
+	1b. "reset USCI", prepare exchange buffer
+	    "enable data spi transfer"
+
+	---
+	2. 
+	   on usci interrupt : 
+		if data spi enabled, exchange buffers
+		Reset watchdog 250ms.
+		enable P1IN interrupt
+	   on P1IN raising flag: if data spi enabled:
+				verify checksums (then set Adc check or Resend mode).
+				set P1IN in falling flag
+	   then on P1IN falling flag:  
+				set P1OUT at low.
+				disable this interrupt
+				goto 0
+   - else 
+	
+	goto 0
+
+
+Master side.
+
+   Flags avail.   
+	Clear to Send.  (signalMaster & signalMask) == 0;
+   Actions avail.
+	Signal Master   (signalMaster());
+   Events avail.
+	Process Buffer (from rbi) (mcomProcessBuffer, busy flag)
+
+   On startup
+	SIG to low.
+
+   On (first) sync:
+	
+	Enable INTR interrupt on raising edge.
+	if (INTR (is high) call checkDAC);
+   
+   On Process Buffer:
+	
+	Check INTR, 
+		if low, set SIG high
+			
+		else (if high), start timer method A. .
+		On: Timer method A. re-exec process buffer action.
+   
+   INTR interrupt : 
+	if (raising edge)
+		- disable this interrupt	
+
+		/// separate action, checkDAC
+		- delay (delta T).  
+		- SIG To low
+		- delay (delta T/2)
+		- send exchange buffer containing CTS and inbuffer if avail.
+		- SIG to hi
+		- delay (delta T/2) (verify checksums and clear or not CTS/ set SignalMaster and outbuffer)
+		- SIG to lo.
+                	      
+           
 */
 
 
