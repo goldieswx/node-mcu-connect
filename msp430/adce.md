@@ -18,3 +18,5 @@ Each I/O can be pulled up and/or down directly from the hardware board enabling 
 The ADCE board communicates with the *Node* with a 3-pin SPI connection. And a dual channel interrupt/signal line. Any node can support up to three ADCE modules stacked.
 
 ### Protocol
+
+The communication protocol with the *Node* is illustrated [here](adce-protocol.md)
