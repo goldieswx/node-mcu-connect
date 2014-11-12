@@ -4,8 +4,8 @@ Taken from the point of view of the ADCE
 
                         WDCNT                 WDHOLD                  WDCNT           14ms
                         0                      1                       2          ___  __  __     3
-      SCK                ______________________|_______________________|__________   __  __  _____|____
-                                               |                       |                          |
+   SPI CLK               ______________________|_______________________|__________   __  __  _____|____
+   (data flows)                                |                       |                          |
                              8ms     adcCheck  |       register        |           PRE/DATA-i-o/CHK-i-o
                          ___________ || resend |        period         |                          |
    TIMER            _____           ___________|_______________________|__________________________|
@@ -30,6 +30,7 @@ Taken from the point of view of the ADCE
    ============
    
    Slave side.
+   
 On Power/Reset, goto 0
 0  - Reset Watchdog 250ms  
    - "disable" data spi transfer 
@@ -61,7 +62,11 @@ On Power/Reset, goto 0
    - else 
 	
 	goto 0
+	
+	
 Master side.
+
+
    Flags avail.   
 	Clear to Send.  (signalMaster & signalMask) == 0;
    Actions avail.
