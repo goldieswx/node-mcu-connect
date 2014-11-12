@@ -19,4 +19,4 @@ The ADCE board communicates with the *Node* with a 3-pin SPI connection. And a d
 
 ### Protocol
 
-The communication protocol with the *Node* is illustrated [here](adce-protocol.md)
+The communication protocol with the *Node* is illustrated [here](adce-protocol.txt)
