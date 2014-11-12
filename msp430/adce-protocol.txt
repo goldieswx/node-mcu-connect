@@ -20,7 +20,7 @@ Taken from the point of view of the ADCE
     a gpio pin)                                |                       |                          |
                                                ___________________________________________________
    POUT                  _____________________/ x = (PIN || TRIGGER) @ t = 1                       \___
-   (interrupt           
+   (interrupt                                   x == 0 => back to t=0
    from node pov)                              |                       |                          |
                                                |                       |                          |
    
