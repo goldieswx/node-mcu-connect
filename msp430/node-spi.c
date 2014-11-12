@@ -24,7 +24,7 @@
 // global declarations
 
 volatile unsigned int action;
-#define currentNodeId   4
+#define currentNodeId   3
   // id of this node
 
 #define PROCESS_BUFFER 0x01
@@ -569,25 +569,23 @@ void checkADC() {
 
     static int debug = 0;
 
-
-
-    outBuffer[0] = transfer(0xAC);
-    outBuffer[1] = transfer(0xAC);
+    transfer(0xAC); // we should check preamble received
+    transfer(0xAC);
 
     unsigned int i;
-    for (i=0;i<15;i++) {
-         outBuffer[2+i] = transfer(inDataCopy[i]);
+    for (i=0;i<19;i++) {
+         outBuffer[i] = transfer(inDataCopy[i]);
     }
 
     _CIP_POUT ^= CS_INCOMING_PACKET;   // pulse signal for last byte.
-    outBuffer[17] = transfer(inDataCopy[15]);
+    outBuffer[19] = transfer(inDataCopy[19]);
     _CIP_POUT ^= CS_INCOMING_PACKET;   // pulse signal for last byte.
   
-    outBuffer[19] = debug++;
+    //outBuffer[19] = debug++;
     debug %= 256;
      
 
-    if (!(outBuffer[2] & 0x80)) { 
+    if (outBuffer[12]) { 
         _signalMaster(); 
     }
 

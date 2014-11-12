@@ -6,7 +6,7 @@ Taken from the point of view of the ADCE
                         0                      1                       2          ___  __  __     3
    SPI CLK               ______________________|_______________________|__________   __  __  _____|____
    (data flows)                                |                       |                          |
-                             8ms     adcCheck  |       register        |           PRE/DATA-i-o/CHK-i-o
+   (node drives clk)         8ms     adcCheck  |       register        |           PRE/DATA-i-o/CHK-i-o
                          ___________ || resend |        period         |                          |
    TIMER            _____           ___________|_______________________|__________________________|
                                                |<infin.dly>< +min 8ms> |              pulse last byte = end transfer
@@ -15,7 +15,7 @@ Taken from the point of view of the ADCE
    (signal from
    node pov)                                   |                       |                          |
    
-   TRIGGER               ___________________(__/  ) if node sends cmd      
+   TRIGGER               ___________________(__/  )       
    (trigger from
     a gpio pin)                                |                       |                          |
                                                ___________________________________________________
@@ -83,7 +83,7 @@ Master side.
    On Process Buffer:
 	
 	Check INTR, 
-		if low, set SIG high
+		if (INTR) low, set SIG high
 			
 		else (if high), start timer method A. .
 		On: Timer method A. re-exec process buffer action.

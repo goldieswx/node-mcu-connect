@@ -81,9 +81,20 @@ MCUObject.prototype.tag  = function(tags) {
 
 var MCUNetwork = function() {
 
+
+  var self = this;
+
   this.superClass = MCUObject.prototype;
   MCUNetwork.super_.call(this);
   this.childType = "network";
+
+
+  this._listenntingSocket = dgram.createSocket('udp4');
+  this._listenntingSocket.on("message",function(msg,rinfo){
+      self._callback(msg);
+  });
+
+  this._listenntingSocket.bind(9931);
 
 };
 util.inherits(MCUNetwork,MCUObject);
@@ -97,6 +108,16 @@ MCUNetwork.prototype.add = function(key) {
 
 };
 
+MCUNetwork.prototype._sendMessage = function(buffer) {
+
+  var client = dgram.createSocket("udp4");
+      client.send(buffer, 0, buffer.length, 9930,'localhost', function(err, bytes) {
+      client.close();
+  });
+
+};
+
+
 MCUNetwork.prototype._callback = function(value) {
 
   // value is received in binary form from udp.
@@ -106,41 +127,32 @@ MCUNetwork.prototype._callback = function(value) {
   var interfaceId = "iface-2";
   var ioId = "1.5";
 
-  //console.log(this.find(nodeId).find(interfaceId).find(ioId));
-  console.log(this.find(":tag-1"));
-	/*unsigned char data [MCOM_DATA_LEN] ;
-	int   expectedChecksum;
-	int   receivedChecksum;
-	int   status;
-	int   transferError;
-	int   destination;*/
   var message = {
- 	timestamp : Date().getTime(),
- 	destination : value.readUInt32LE(0x24);
-        trigger :  value.readUInt32LE(0xc)
- 	portData : [value.readUInt8(0x9),
- 		    value.readUInt8(0xa),
- 		    value.readUInt8(0xb)],
+ 	timestamp : (new Date()).getTime(),
+ 	destination : value.readUInt32LE(36),
+        trigger :  value.readUInt16LE(12),
+ 	portData : [value.readUInt8(10),
+ 		    value.readUInt8(11),
+ 		    value.readUInt8(14)],
  	adcData : [value.readUInt16LE(0x0),
  	           value.readUInt16LE(0x2),
  	           value.readUInt16LE(0x4),
  	           value.readUInt16LE(0x6),
  	           value.readUInt16LE(0x8)], 
-
-  }
- 
-  var trigger = message.trigger;
-  var i,j;
-  var IO_PER_PORT = 5, NUM_PORTS = 3;
-  for(j=0;j<NUM_PORTS;j++) {
-	  for(i=0;i<IO_PER_PORT;i++) {
-		     if (trigger & 1) {
-		     	this.find(j+"."+i)._callback(message);
-		     }
-	     trigger <<= 1;	
-	  }
   }
 
+  
+  var dbg = [message.destination], j=1,i;
+
+   for(i=0;i<5;i++) { 
+    if (message.trigger & (j)) {
+        dbg.push(i);
+        dbg.push(message.adcData[i]);
+    }
+    j <<= 1;
+   }
+  console.log(dbg);
+  
 }
 
 
@@ -201,7 +213,7 @@ var net = new MCUNetwork();
 var node = net.add('node-5',5);
 var iface = node.add('iface-2',1);
 var io = iface.add('1.5',"P1.5").tag("tag-1");
-io = iface.add('1.5').tag("tag-1 tag-2");
+//io = iface.add('1.5').tag("tag-1 tag-2");
 
 /*iface.find('1.6').on('touch',function(e) {
 
@@ -210,7 +222,7 @@ io = iface.add('1.5').tag("tag-1 tag-2");
 
 });*/
 
-net._callback();
+//net._callback();
 //console.log(net.find(5)[0].find(2)[0].find('1.5'));
 
 /* core-2 draft
@@ -281,66 +293,3 @@ var ext = $('node/7').find('ext/1').alias('room');
 
 
 */
-
-
-var MCUInterface = function(settings) {
-
-        var messages = [];
-        self = this;
-
-        var BIT6 = 0x40;
-		var BIT7 = 0x80;
-        
-        for (var i=0;i<3;i++) {
-        messages.push( new Buffer("                        "));
-        messages[i].writeUInt32LE(0x00,0);
-        messages[i].writeUInt32LE(0x00,1); 
-     	messages[i].writeUInt32LE(3+i,20);
-        }
-
-        for (var i=0;i<3;i++) {
-        messages.push( new Buffer("                        "));
-        messages[i+3].writeUInt32LE(BIT7,0);
-        messages[i+3].writeUInt32LE(BIT7,1); 
-     	messages[i+3].writeUInt32LE(3+i,20);
-        }
-
-        for (var i=0;i<3;i++) {
-        messages.push( new Buffer("                        "));
-        messages[i+6].writeUInt32LE(BIT6,0);
-        messages[i+6].writeUInt32LE(BIT6,1); 
-     	messages[i+6].writeUInt32LE(3+i,20);
-        }
-
-
-
-  	this._listenntingSocket = dgram.createSocket('udp4');
-
-	this._listenntingSocket.on("message",function(msg,rinfo){
-		 self._callback(msg,rinfo);
-	});
-
-	this._listenntingSocket.bind(9931);
-
-        this.current = 0;
-
-	setInterval(function() {
-	var client = dgram.createSocket("udp4");
-                 self.current %= 9;  
-                var message = messages[self.current++];
-
-                client.send(message, 0, message.length, 9930,'localhost', function(err, bytes) {
-			client.close();
-		});
-	},150);
-
-};
-
-
-MCUInterface.prototype._callback = function(msg,rinfo) {
-
-	console.log(msg);
-
-};
-
-//var mi = new MCUInterface();

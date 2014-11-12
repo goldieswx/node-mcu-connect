@@ -3,7 +3,7 @@ CFLAGS= -Wall -g -mmcu=msp430g2553 -L/usr/msp430/lib/ldscripts/msp430g2553 -T/us
 
 OBJS=node-spi.o
 SLAVE=node-spi.o
-ADC=adc-to-slave.o
+ADC=adce.o msp-utils.o
 TEST=test.o
 
 slave: $(SLAVE)

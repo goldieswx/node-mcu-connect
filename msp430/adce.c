@@ -1,19 +1,19 @@
 /*
-    node-mcu-connect . node.js UDP Interface for embedded devices.
-    Copyright (C) 2013-4 David Jakubowski
+	node-mcu-connect . node.js UDP Interface for embedded devices.
+	Copyright (C) 2013-4 David Jakubowski
 
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
+	This program is free software: you can redistribute it and/or modify
+	it under the terms of the GNU General Public License as published by
+	the Free Software Foundation, either version 3 of the License, or
+	(at your option) any later version.
 
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
+	This program is distributed in the hope that it will be useful,
+	but WITHOUT ANY WARRANTY; without even the implied warranty of
+	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+	GNU General Public License for more details.
 
-    You should have received a copy of the GNU General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>. 
+	You should have received a copy of the GNU General Public License
+	along with this program.  If not, see <http://www.gnu.org/licenses/>. 
 
 Slave side.
 
@@ -27,13 +27,13 @@ On Power/Reset, goto 0
    - Start Timer 500ticks (method A)
    - Upon Timer interrupt (method A), 
 	run  1. signal = Either (ADC Check or Resend mode).
-             2. sample = Sample P1IN
-             3. transferTrigger = sample || signal
+			 2. sample = Sample P1IN
+			 3. transferTrigger = sample || signal
    - if transferTrigger 
-        1aa. HOLd Watchdog
-        1a. set P1OUT high
+		1aa. HOLd Watchdog
+		1a. set P1OUT high
 	1b. "reset USCI", prepare exchange buffer
-	    "enable data spi transfer"
+		"enable data spi transfer"
 
 	---
 	2. 
@@ -148,25 +148,25 @@ int main(void)
   beginCycle();
 
   while(1)    {
-      if (!action) {
-          __bis_SR_register(LPM3_bits + GIE);
-      }
-      __enable_interrupt(); // process pending interrupts (between actions)
-      __delay_cycles(100);
-      __disable_interrupt(); 
-      
-      if(action & CHECK_DAC) {
-          checkDAC();
-          continue;
-      }
-      if(action & BEGIN_SAMPLE_DAC) {
-          beginSampleDac();
-          continue;
-      }
-      if(action & PROCESS_MSG) {
-          processMsg();
-          continue;
-      }
+	  if (!action) {
+		  __bis_SR_register(LPM3_bits + GIE);
+	  }
+	  __enable_interrupt(); // process pending interrupts (between actions)
+	  __delay_cycles(100);
+	  __disable_interrupt(); 
+	  
+	  if(action & CHECK_DAC) {
+		  checkDAC();
+		  continue;
+	  }
+	  if(action & BEGIN_SAMPLE_DAC) {
+		  beginSampleDac();
+		  continue;
+	  }
+	  if(action & PROCESS_MSG) {
+		  processMsg();
+		  continue;
+	  }
   }
 }
  
@@ -197,86 +197,81 @@ void beginCycle() {
 
 void checkDAC() {
 
-    action &= ~CHECK_DAC;  
-    WDTCTL = WDTPW + WDTHOLD;
+	action &= ~CHECK_DAC;  
+	WDTCTL = WDTPW + WDTHOLD;
 
-    static int lastValues[5];
-    static char lastP1, lastP2, lastP3;
+	static int lastValues[5];
+	static char lastP1, lastP2, lastP3;
 
-    char newP1,newP2,newP3;
+	char newP1,newP2,newP3;
 
-    int readValue;
-    unsigned int i;
+	if (resample) {
 
-    if (resample) {
-      
-      dataTrigger = 0;
-      for (i=0;i<MAX_ADC_CHANNELS;i++) {
-        if (ioADCRead[i]) {
-           readValue = adcData[i];
-           if (readValue < 750) {
-              if ((readValue > (lastValues[i]+15)) || (readValue < (lastValues[i]-15))) {
-                  lastValues[i] = readValue;
-                  dataTrigger |= 0x01 << i;
-              }
-           }
-        }
-      }
+		dataTrigger = 0;
+		unsigned int i;
+		int readValue;
 
-     newP1 = availP1 & (P1IN & ~ioConfig.P1DIR & ~ioConfig.P1ADC);
-     newP2 = availP2 & (P2IN & ~ioConfig.P2DIR);
-     newP3 = availP3 & (P3IN & ~ioConfig.P3DIR);
+		for (i=0;i<MAX_ADC_CHANNELS;i++) {
+			if (ioADCRead[i]) {
+			   readValue = adcData[i];
+			   if ((readValue < 750) && ((readValue > (lastValues[i]+15)) || (readValue < (lastValues[i]-15)))) {
+					  lastValues[i] = readValue;
+					  dataTrigger |= 0x01 << i;
+			   }
+			}
+		}
 
-     dataTrigger |= (initialTrigger << 8);
-     initialTrigger = 0;
+		newP1 = availP1 & (P1IN & ~ioConfig.P1DIR & ~ioConfig.P1ADC);
+		newP2 = availP2 & (P2IN & ~ioConfig.P2DIR);
+		newP3 = availP3 & (P3IN & ~ioConfig.P3DIR);
 
-     if (lastP1 != newP1) { dataTrigger |= 0x01 << 0x05; lastP1 = newP1; }
-     if (lastP2 != newP2) { dataTrigger |= 0x01 << 0x06; lastP2 = newP2; }
-     if (lastP3 != newP3) { dataTrigger |= 0x01 << 0x07; lastP3 = newP3; }
+		dataTrigger |= (initialTrigger << 8);
+		initialTrigger = 0;
 
-    int * pAdcData = &adcData[MAX_ADC_CHANNELS];
+		if (lastP1 != newP1) { dataTrigger |= 0x01 << 0x05; lastP1 = newP1; }
+		if (lastP2 != newP2) { dataTrigger |= 0x01 << 0x06; lastP2 = newP2; }
+		if (lastP3 != newP3) { dataTrigger |= 0x01 << 0x07; lastP3 = newP3; }
 
-    if (dataTrigger) {
-        *pAdcData++ = newP1 | newP2 << 0x08;
-        //*pAdcData++ = newP3;
-        *pAdcData++ = dataTrigger;
-         adcData[0] &= ~0x0080;
-    } else {
-          adcData[0] |= 0x0080; // buffer contains data to discard
-    }
-  }
+		int * pAdcData = &adcData[MAX_ADC_CHANNELS];
 
-   transferTrigger = dataTrigger || (P2IN & CS_INCOMING_PACKET);
+		if (dataTrigger) {
+			*pAdcData++ = newP1 | newP2 << 0x08;
+			*pAdcData++ = dataTrigger;
+			*pAdcData++ = newP3;
+		} else {
+			adcData[6] = 0; //// buffer contains data to discard // trigger = 0
+		}
+	}
 
-   if (transferTrigger) {
+	transferTrigger = dataTrigger || (P2IN & CS_INCOMING_PACKET);
 
-     P3OUT |= CS_NOTIFY_MASTER;
+	if (transferTrigger) {
 
-    /* prepare exchangeBuffer for sending */
-        unsigned long int chkSum = 0;
-        for(i=0;i<MAX_ADC_CHANNELS+NUM_PORTS_AVAIL;i++) {
-          chkSum += adcData[i];
-        }
+		P3OUT |= CS_NOTIFY_MASTER;
 
-        _memcpy(exchangeBuffer+1,adcData,(MAX_ADC_CHANNELS+NUM_PORTS_AVAIL)*sizeof(int));
-        exchangeBuffer[0] = PREAMBLE;
-        exchangeBuffer[MAX_ADC_CHANNELS+NUM_PORTS_AVAIL+1] = chkSum & 0xFFFF;
+		/* prepare exchangeBuffer for sending */
+		unsigned long int chkSum = 0;
+		unsigned int i;
+		for(i=0;i<MAX_ADC_CHANNELS+NUM_PORTS_AVAIL;i++) {
+			chkSum += adcData[i];
+		}
 
-    /* prepare usci */
-     WDTCTL = WDT_ARST_16; // release the dog
-     pExchangeBuff = (char*)exchangeBuffer;
-     
-     resetUSCI();
-     UCB0RXBUF;
-     IFG2 &= ~UCB0RXIFG;
-     UCB0TXBUF = * pExchangeBuff++;
+		_memcpy(exchangeBuffer+1,adcData,(MAX_ADC_CHANNELS+NUM_PORTS_AVAIL)*sizeof(int));
+		exchangeBuffer[0] = PREAMBLE;
+		exchangeBuffer[MAX_ADC_CHANNELS+NUM_PORTS_AVAIL+1] = chkSum & 0xFFFF;
 
-     /* wait for usci interrupt */   
+		/* Prepare usci */
+		WDTCTL = WDT_ARST_16;			 // release the dog
+		pExchangeBuff = (char*)exchangeBuffer;
+		resetUSCI();
+		UCB0RXBUF;
+		IFG2 &= ~UCB0RXIFG;
+		UCB0TXBUF = * pExchangeBuff++; // now wait for usci interrupt 
 
-  } else { 
-     WDTCTL = WDTPW + WDTCNTCL;
-     beginCycle();
-  }
+	} else { 
+		WDTCTL = WDTPW + WDTCNTCL;
+		beginCycle();
+	}
   return;
 }
 
@@ -299,7 +294,7 @@ void processMsg () {
 		char * pXchBuf = (char*)&exchangeBuffer[PREAMBLE_SIZE];
 		switch (*++pXchBuf) {
 			case  0x55 :
-			//     flashConfig((struct ioConfig*)++pXchBuf);
+			     flashConfig((struct ioConfig*)++pXchBuf);
 			  break;
 			case 0x66 :
 				P1OUT |= (*++pXchBuf & ioConfig.P1DIR);
@@ -437,43 +432,43 @@ void initConfig() {
 
 void beginSampleDac() {
 
-    action &= ~BEGIN_SAMPLE_DAC;
+	action &= ~BEGIN_SAMPLE_DAC;
 
-    ADC10CTL0 &= ~ENC;
-    while (ADC10CTL1 & BUSY);             // Wait if ADC10 core is active
-    ADC10SA = (unsigned int)adcData;      // Copies data in ADC10SA to unsigned int adc array
-    ADC10CTL0 |= ENC + ADC10SC;           // Sampling and conversion start
+	ADC10CTL0 &= ~ENC;
+	while (ADC10CTL1 & BUSY);             // Wait if ADC10 core is active
+	ADC10SA = (unsigned int)adcData;      // Copies data in ADC10SA to unsigned int adc array
+	ADC10CTL0 |= ENC + ADC10SC;           // Sampling and conversion start
 
-    // Now wait for interrupt.   
+	// Now wait for interrupt.   
 }
 
 inline void startTimerSequence() {
 
-    TA0CTL = TASSEL_1 | MC_1 ;             // Clock source ACLK
-    TA0CCTL1 = CCIE ;                      // Timer A interrupt enable
+	TA0CTL = TASSEL_1 | MC_1 ;             // Clock source ACLK
+	TA0CCTL1 = CCIE ;                      // Timer A interrupt enable
 }
 
 
 void flashConfig(struct ioConfig * p) {
 
-    WDTCTL = WDTPW + WDTHOLD;	// Hold watchdog.
-    struct flashConfig buffer;
-    buffer.magic = 0x4573;		// Surround Buffer with magic number.
-    buffer._magic = 0x7354;      
+	WDTCTL = WDTPW + WDTHOLD;	// Hold watchdog.
+	struct flashConfig buffer;
+	buffer.magic = 0x4573;		// Surround Buffer with magic number.
+	buffer._magic = 0x7354;      
 
-    // Copy config buffer prior to writing it in flash
-    _memcpy(&buffer.ioConfig,p,sizeof(struct ioConfig));
+	// Copy config buffer prior to writing it in flash
+	_memcpy(&buffer.ioConfig,p,sizeof(struct ioConfig));
 
-    // Do not write flash with the same existing buffer.
-    if (_memcmp(&buffer,flashIoConfig,sizeof(struct flashConfig))) {
-      return;
-    }
+	// Do not write flash with the same existing buffer.
+	if (_memcmp(&buffer,flashIoConfig,sizeof(struct flashConfig))) {
+	  return;
+	}
 
-    //Do Update the Flash
-    flash_erase((int*)flashIoConfig);
-    flash_write((int*)flashIoConfig,(int*)&buffer,sizeof(struct flashConfig)/sizeof(int));
+	//Do Update the Flash
+	flash_erase((int*)flashIoConfig);
+	flash_write((int*)flashIoConfig,(int*)&buffer,sizeof(struct flashConfig)/sizeof(int));
 
-    WDTCTL = WDTHOLD; // reboot.
+	WDTCTL = WDTHOLD; // reboot.
 }
 
 
