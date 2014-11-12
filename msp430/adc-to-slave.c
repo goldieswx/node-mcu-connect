@@ -14,9 +14,6 @@
 
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <http://www.gnu.org/licenses/>. 
-    
-
-
 
 Slave side.
 
@@ -94,315 +91,49 @@ Master side.
 		- delay (delta T/2) (verify checksums and clear or not CTS/ set SignalMaster and outbuffer, 
 				if failed to send, start timer method A (again))
 		- SIG to lo.
-                	      
-           
 */
-
 
 #include "msp430g2553.h"
 #include <legacymsp430.h>
 
-#define MOSI  BIT7 
-#define MISO  BIT6
-#define SCK   BIT5
+#include "adce.h"
+#include "msp-utils.h"
 
-#define CS_NOTIFY_MASTER  BIT2     // External Interrupt INTR = P2.2
-#define CS_INCOMING_PACKET  BIT2   // Master enable the line before sending  SIG = P3.2
 
+static 	char	ioADCRead		[MAX_ADC_CHANNELS];  									// user usage of ADC inputs.
+static	int  	adcData 		[MAX_ADC_CHANNELS+NUM_PORTS_AVAIL + CHECKSUM_SIZE ];	// sampling data buffer
+static  int 	exchangeBuffer	[PREAMBLE_SIZE + MAX_ADC_CHANNELS+NUM_PORTS_AVAIL + CHECKSUM_SIZE+5]; //  5*2 security bytes just in case
 
-#define PROCESS_MSG 0x04
-#define BEGIN_SAMPLE_DAC 0x02
-#define CHECK_DAC 0x01
+volatile char *  pExchangeBuff=0;			// exchange buffer used for SPI transfers
 
-#define MAX_ADC_CHANNELS 5
-#define NUM_PORTS_AVAIL  3
+static volatile int action;					// next set of actions to perform in the loop
+static volatile int timerAction;			// action performed upon timer interrupt
+static volatile int resample;				// boolean, whether we need to resample or resend
+static volatile int initialTrigger; 		// intial trigger upon boot
+static volatile unsigned int dataTrigger; 	// data trigger upon ADC Check
+static volatile int transferTrigger; 		// data trigger || incoming_packet (whether a spi transfer must be triggered right now)
 
-#define PREAMBLE_SIZE 0x01
-#define CHECKSUM_SIZE 0x01
 
-#define PREAMBLE 0xACAC
+char availP1 = (BIT0|BIT1|BIT2|BIT3|BIT4);	// max available usage of P1
+char availP2 = (BIT3|BIT4|BIT5|BIT6|BIT7);  // max available usage of P2
+char availP3 = (BIT3|BIT4|BIT5|BIT6|BIT7);  // max available usage of P3
 
-static char ioADCRead[MAX_ADC_CHANNELS]; 
-int  adcData [MAX_ADC_CHANNELS+NUM_PORTS_AVAIL + CHECKSUM_SIZE ];
-int  exchangeBuffer [PREAMBLE_SIZE + MAX_ADC_CHANNELS+NUM_PORTS_AVAIL + CHECKSUM_SIZE+5]; //  5*2 security bytes just in case
-volatile char *  pExchangeBuff=0;
+struct ioConfig ioConfig;					// user usage of all ports.
+struct flashConfig * flashIoConfig = (struct flashConfig*) 0x0E000;  // address in flash rom of usage of all ports.
 
 
-
-void processMsg();
-void checkDAC();
-
-struct ioConfig {
-   unsigned char P1DIR;
-   unsigned char P1ADC;
-   unsigned char P1REN;
-   unsigned char P1OUT;
-   unsigned char P2DIR;
-   unsigned char P2REN;
-   unsigned char P2OUT;
-   unsigned char P3DIR;
-   unsigned char P3REN;
-   unsigned char P3OUT;
-};
-
-struct flashConfig {
-   unsigned int  magic;
-   struct ioConfig ioConfig;
-   unsigned int  _magic;
-};
-
-char availP1 = (BIT0|BIT1|BIT2|BIT3|BIT4);
-char availP2 = (BIT3|BIT4|BIT5|BIT6|BIT7);
-char availP3 = (BIT3|BIT4|BIT5|BIT6|BIT7);
-
-
-struct ioConfig ioConfig;
-struct flashConfig * flashIoConfig = (struct flashConfig*) 0x0E000;
-
-
-static volatile int action;
-static volatile int timerAction;
-static volatile int resample;
-static volatile int initialTrigger; // intial trigger upon boot
-static volatile unsigned int dataTrigger; // data trigger upon ADC Check
-static volatile int transferTrigger; // data trigger || incoming_packet (whether a spi transfer must be triggered right now)
-
-inline unsigned int _memcmp(void* a, void * b, int len) {
-
-  while (len--) {
-     if (*(char*)a++ != *(char*)b++) return 0;
-  }
-
-  return 1;
-
-}
-
-
-inline void _memcpy( void* dest, void*src, int len) {
-
-  while (len--) {
-     *(char*)dest++ = *(char*)src++;
-  }
-}
-
-void initConfig() {
-
-
-    if ((flashIoConfig->magic == 0x4573) && (flashIoConfig->_magic = 0x7354)) {
-      _memcpy(&ioConfig,&flashIoConfig->ioConfig,sizeof(struct ioConfig));
-    } else {
-       ioConfig.P1DIR = 0x03;
-       ioConfig.P1ADC = 0x04;
-       ioConfig.P1REN = 0xFF;
-       ioConfig.P1OUT = 0;
-       ioConfig.P2DIR = 0x00;
-       ioConfig.P2REN = 0xFF;
-       ioConfig.P2OUT = 0;
-       ioConfig.P3DIR = 0;
-       ioConfig.P3REN = 0xFF;
-       ioConfig.P3OUT = 0; 
-    }
-
-   ioConfig.P1DIR &= availP1 & ~ioConfig.P1ADC;
-   ioConfig.P1ADC &= availP1;
-   ioConfig.P1REN &= (availP1 & ~ioConfig.P1ADC & ~ioConfig.P1DIR);
-   ioConfig.P1OUT &= (availP1 & ~ioConfig.P1ADC);
-   ioConfig.P2DIR &= availP2;
-   ioConfig.P2REN &= availP2 & ~ioConfig.P2DIR;
-   ioConfig.P2OUT &= availP2;
-   ioConfig.P3DIR &= availP3;
-   ioConfig.P3REN &= availP3 & ~ioConfig.P3DIR;
-   ioConfig.P3OUT &= availP3;
-   
-   P1DIR    = (P1DIR & (~availP1)) | ioConfig.P1DIR;
-   P1SEL    = (P1SEL & (~availP1)) | ioConfig.P1ADC;
-   P1SEL2   = (P1SEL2 & (~availP1));
-   ADC10AE0 = ioConfig.P1ADC;
-   P1REN    = (P1REN & (~availP1)) | ioConfig.P1REN;
-   P1OUT    = (P1OUT & (~availP1)) | ioConfig.P1OUT;
-   P2DIR    = (P2DIR & (~availP2)) | ioConfig.P2DIR;
-   P2REN    = (P2REN & (~availP2)) | ioConfig.P2REN;
-   P2OUT    = (P2OUT & (~availP2)) | ioConfig.P2OUT;
-   P3DIR    = (P3DIR & (~availP3)) | ioConfig.P3DIR;
-   P3REN    = (P3REN & (~availP3)) | ioConfig.P3REN;
-   P3OUT    = (P3OUT & (~availP3)) | ioConfig.P3OUT;
-
-   unsigned int i;
-   char ioCfg = ioConfig.P1ADC;
-
-    for (i=0;i<MAX_ADC_CHANNELS;i++) {
-        ioADCRead[MAX_ADC_CHANNELS-i-1] = ioCfg & 1; 
-        ioCfg >>=1;  
-    }
-
-}
-
-void beginSampleDac() {
-
-    action &= ~BEGIN_SAMPLE_DAC;
-
-    ADC10CTL0 &= ~ENC;
-    while (ADC10CTL1 & BUSY);             // Wait if ADC10 core is active
-    ADC10SA = (unsigned int)adcData;      // Copies data in ADC10SA to unsigned int adc array
-    ADC10CTL0 |= ENC + ADC10SC;           // Sampling and conversion start
-
-    // Now wait for interrupt.   
-}
-
-inline void startTimerSequence() {
-
-    TA0CTL = TASSEL_1 | MC_1 ;             // Clock source ACLK
-    TA0CCTL1 = CCIE ;                      // Timer A interrupt enable
-}
-
-
-
-
-void flash_erase(int *addr)
-{
-  __disable_interrupt();                             // Disable interrupts. This is important, otherwise,
-                                       // a flash operation in progress while interrupt may
-                                       // crash the system.
-  while(BUSY & FCTL3);                 // Check if Flash being used
-  FCTL2 = FWKEY + FSSEL_1 + FN3;       // Clk = SMCLK/4
-  FCTL1 = FWKEY + ERASE;               // Set Erase bit
-  FCTL3 = FWKEY;                       // Clear Lock bit
-  *addr = 0;                           // Dummy write to erase Flash segment
-  while(BUSY & FCTL3);                 // Check if Flash being used
-  FCTL1 = FWKEY;                       // Clear WRT bit
-  FCTL3 = FWKEY + LOCK;                // Set LOCK bit
-  __enable_interrupt();
-}
-
-void flash_write(int *dest, int *src, unsigned int size)
-{
-  __disable_interrupt();                             // Disable interrupts(IAR workbench).
-  int i = 0;
-  FCTL2 = FWKEY + FSSEL_1 + FN0;       // Clk = SMCLK/4
-  FCTL3 = FWKEY;                       // Clear Lock bit
-  FCTL1 = FWKEY + WRT;                 // Set WRT bit for write operation
-   
-  for (i=0; i< size; i++)
-      *dest++ = *src++;         // copy value to flash
-   
- 
-  FCTL1 = FWKEY;                        // Clear WRT bit
-  FCTL3 = FWKEY + LOCK;                 // Set LOCK bit
-  __enable_interrupt();
-}
-
-void flashConfig(struct ioConfig * p) {
-
-    WDTCTL = WDTPW + WDTHOLD;
-    struct flashConfig buffer;
-    buffer.magic = 0x4573;
-    buffer._magic = 0x7354;
-    _memcpy(&buffer.ioConfig,p,sizeof(struct ioConfig));
-
-    if (_memcmp(&buffer,flashIoConfig,sizeof(struct flashConfig))) {
-      return;
-    }
-
-    flash_erase((int*)flashIoConfig);
-    flash_write((int*)flashIoConfig,(int*)&buffer,sizeof(struct flashConfig)/sizeof(int));
-
-    WDTCTL = WDTHOLD; // reboot.
-}
-
-
-void resetUSCI() {
-
-  UCA0CTL1 = UCSWRST;   
-  UCB0CTL1 = UCSWRST;                       // **Put state machine in reset**
-  __delay_cycles(10);
-  UCB0CTL0 |= UCCKPH   + UCCKPL + UCMSB + UCSYNC;     // 3-pin, 8-bit SPI slave
-  UCB0CTL1 &= ~UCSWRST;                     // **Initialize USCI state machine**
-
-  while(IFG2 & UCB0RXIFG);                  // Wait ifg2 flag on rx 
-  IE2 |= UCB0RXIE;                          // Enable USCI0 RX interrupt
-  UCB0TXBUF = 0x00;                         // We do not want to ouput anything on the line
-
-}
-
-inline void disableUSCI() {
-  
-  //UCA0CTL1 = UCSWRST;   
-  //UCB0CTL1 = UCSWRST;                       // **Put state machine in reset**
-  //IE2 &= ~UCB0RXIE;
-
-}
-
-
-void initUSCI() {
-
-  P1DIR   |=    BIT5 |/*+ BIT6 +*/ BIT7;
-  P1DIR   &= ~BIT6;
-  P1SEL  |=    BIT5 + BIT6 + BIT7; 
-  P1SEL2 |=    BIT5 + BIT6 + BIT7;
-
-  P2DIR  &= ~CS_INCOMING_PACKET;
-  P2OUT  &= ~CS_INCOMING_PACKET;
-  P2REN  &= ~CS_INCOMING_PACKET;
-  P2SEL  &= ~CS_INCOMING_PACKET;
-  P2SEL2 &= ~CS_INCOMING_PACKET;
-
-  //P2IE  = CS_INCOMING_PACKET;
-  P2IES = 0;
-  P2IFG = 0;
-
-  P3DIR  |= CS_NOTIFY_MASTER;
-  P3OUT  &= ~CS_NOTIFY_MASTER;
-  P3REN  &= ~CS_NOTIFY_MASTER;
-  P3SEL  &= ~CS_NOTIFY_MASTER;
-  P3SEL2 &= ~CS_NOTIFY_MASTER; 
-
-
-}
-
-
-void initADC() {
-
-  ADC10AE0    = 0;
-  ADC10CTL0   = 0;
-  ADC10CTL1   = 0;
-  ADC10MEM    = 0;
-  ADC10DTC0   = 0;
-  ADC10DTC1   = 0;
-
-  ADC10CTL0 = SREF_0 + ADC10SHT_2 + MSC + ADC10ON + ADC10IE;  // Vcc,Vss as ref. Sample and hold 64 cycles
-  ADC10CTL1 = INCH_4 + CONSEQ_1 ;         // Channel 3, ADC10CLK/3
-  ADC10AE0 = ioConfig.P1ADC;
-  ADC10DTC1 = 5;                         // 5 conversions
-}
-
-void initTimer() {
-  TA0R = 0;
-  TA0CCR0 = 80;                         // Count to this, then interrupt;  
-
-}
-
-
-void beginCycle() {
-
-
-  initTimer();   //  initializes the timer (80 clicks at 10khz)
-  
-  P3OUT  &= ~CS_NOTIFY_MASTER;
-  timerAction = 0x01; 
-  WDTCTL = WDT_ARST_16; // 16ms*3.2768 = 52ms
-  startTimerSequence();  // start timer and enable interrupt
-
-
-}
-
+/**
+ *  Main routine.
+ *  Initialize default parameters. Then run action loop while processing interrupts.
+ */
 
 int main(void)
 {
 
-  WDTCTL = WDTPW | WDTHOLD; /*WDT_ARST_1000*/
-  BCSCTL1 = CALBC1_8MHZ;           // DCOCTL = CALDCO_1MHZ;
-  BCSCTL2 |= DIVS_3;            // SMCLK/DCO @ 1MHz
-  BCSCTL3 = LFXT1S_2; 
+  WDTCTL 	= WDTPW | WDTHOLD;		// Hold watchdog 		
+  BCSCTL1 	= CALBC1_8MHZ;			// CPU Freq | 8MHz
+  BCSCTL2  |= DIVS_3;				// SMCLK/DCO @ 1MHz
+  BCSCTL3	= LFXT1S_2; 			// ACLK @ 10kHz
 
   initConfig();
   initUSCI();
@@ -415,7 +146,6 @@ int main(void)
   dataTrigger = 0;
   
   beginCycle();
-
 
   while(1)    {
       if (!action) {
@@ -440,6 +170,30 @@ int main(void)
   }
 }
  
+/**
+ * void beginCycle() 
+ * Starts the main cycle.
+ * 
+ * [Wait][Sample/Resend][Register signals][Start Transfer]
+ *
+ */ 
+
+void beginCycle() {
+
+  initTimer();   //  initializes the timer (80 clicks at 10khz)
+  
+  P3OUT  &= ~CS_NOTIFY_MASTER;	// Release Node Interrupt
+  timerAction = 0x01; 
+  WDTCTL = WDT_ARST_16; 		// 16ms*3.2768 = 52ms
+  startTimerSequence();  		// start timer and enable interrupt
+
+}
+
+/**
+ * void checkDAC() 
+ * Resend or resample, detect changes in input, update triggers and pack the buffer for sending.
+ *
+ */
 
 void checkDAC() {
 
@@ -490,8 +244,6 @@ void checkDAC() {
     } else {
           adcData[0] |= 0x0080; // buffer contains data to discard
     }
-
-    
   }
 
    transferTrigger = dataTrigger || (P2IN & CS_INCOMING_PACKET);
@@ -529,97 +281,259 @@ void checkDAC() {
 }
 
 
-/* PROCESS RECEIVED MSG */
+/**
+ * void processMsg () 
+ * Process the message sent by the node and execute the related action
+ */
+
 void processMsg () {
+	action &= ~PROCESS_MSG;
 
-    action &= ~PROCESS_MSG;
+	WDTCTL = WDTPW + WDTCNTCL;
+	if (exchangeBuffer[0] != PREAMBLE) { // just checking this for now. 
+		//resample = 0;
+		//initUSCI()
+		//P1OUT ^= BIT1;
+	} else {
+		resample = 1;
+		char * pXchBuf = (char*)&exchangeBuffer[PREAMBLE_SIZE];
+		switch (*++pXchBuf) {
+			case  0x55 :
+			//     flashConfig((struct ioConfig*)++pXchBuf);
+			  break;
+			case 0x66 :
+				P1OUT |= (*++pXchBuf & ioConfig.P1DIR);
+				P2OUT |= (*++pXchBuf & ioConfig.P2DIR);
+				P3OUT |= (*++pXchBuf & ioConfig.P3DIR);
+				P1OUT &= (*++pXchBuf | ~ioConfig.P1DIR);
+				P2OUT &= (*++pXchBuf | ~ioConfig.P2DIR);
+				P3OUT &= (*++pXchBuf | ~ioConfig.P3DIR);
+			break;
+		}
+	}
 
-    WDTCTL = WDTPW + WDTCNTCL;
-    if (exchangeBuffer[0] != PREAMBLE) { // just checking this for now. 
-       //resample = 0;
-       //initUSCI()
-       //P1OUT ^= BIT1;
-
-    } else {
-      resample = 1;
-      char * pXchBuf = (char*)&exchangeBuffer[PREAMBLE_SIZE];
-      switch (*++pXchBuf) {
-          case  0x55 :
-         //     flashConfig((struct ioConfig*)++pXchBuf);
-         //     break;
-          break;
-        
-          case 0x66 :
-         // P1OUT ^= BIT0;
-     
-          P1OUT |= (*++pXchBuf & ioConfig.P1DIR);
-          P2OUT |= (*++pXchBuf & ioConfig.P2DIR);
-          P3OUT |= (*++pXchBuf & ioConfig.P3DIR);
-          P1OUT &= (*++pXchBuf | ~ioConfig.P1DIR);
-          P2OUT &= (*++pXchBuf | ~ioConfig.P2DIR);
-          P3OUT &= (*++pXchBuf | ~ioConfig.P3DIR);
-        break;
-      }
-    }
-    resample = 1;
-
-    beginCycle();
-
+	resample = 1;
+	beginCycle();
 }
+
+/**
+ * DAC Sampling done.
+ * Interrupt service routine.
+ */
 
 interrupt(ADC10_VECTOR) ADC10_ISR (void) { 
    
-  action |= CHECK_DAC;
-  ADC10CTL0 &= ~ADC10IFG;
-  __bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM   
-  return;
+	action |= CHECK_DAC;
+	ADC10CTL0 &= ~ADC10IFG;
+	__bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM   
+	return;
 
 }
+
+/**
+ * USCI Byte received from SPI
+ * Interrupt service routine.
+ */
  
 interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
-  if (P3OUT & CS_NOTIFY_MASTER) {
-      UCB0TXBUF = *pExchangeBuff;
-      *pExchangeBuff = UCB0RXBUF;
-      pExchangeBuff++;
+	if (P3OUT & CS_NOTIFY_MASTER) {
+		UCB0TXBUF = *pExchangeBuff;
+		*pExchangeBuff = UCB0RXBUF;
+		pExchangeBuff++;
 
-
-
-      // and the last byte...
-      if (P2IN & CS_INCOMING_PACKET) {
-        //P1OUT ^= BIT1;
-        //disableUSCI();
-        P3OUT &= ~CS_NOTIFY_MASTER;
-        action |= PROCESS_MSG;
-        __bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM
-      }
-  } else {
-    UCB0TXBUF = 0x99;
-    IFG2 &= ~UCB0RXIFG;
-  }
-
-  return;
+		// and the last byte...
+		if (P2IN & CS_INCOMING_PACKET) {
+			P3OUT &= ~CS_NOTIFY_MASTER;
+			action |= PROCESS_MSG;
+			__bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM
+		}
+	} else {
+		UCB0TXBUF = 0x99;
+		IFG2 &= ~UCB0RXIFG;
+	}
+	return;
 }
 
 
+/**
+ * Timer overflow
+ * Interrupt service routine.
+ */
 
 interrupt(TIMER0_A1_VECTOR) ta1_isr(void) {
 
-  TA0CTL = TACLR;  // stop & clear timer
-  TA0CCTL1 &= 0;   // also disable timer interrupt & clear flag
+	TA0CTL = TACLR;  // stop & clear timer
+	TA0CCTL1 &= 0;   // also disable timer interrupt & clear flag
 
-  switch(timerAction) {
-    case 0x01:
-      if (resample)  {
-         action |= BEGIN_SAMPLE_DAC; 
-      } else {
-         action |= CHECK_DAC;
-      }
-      break;
+	switch(timerAction) {
+		case 0x01:
+			if (resample)  {
+			 action |= BEGIN_SAMPLE_DAC; 
+			} else {
+			 action |= CHECK_DAC;
+			}
+		break;
+	}
+	__bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM
 
-  }
-    __bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM
 
-
-  return;
+	return;
 } 
+
+
+
+void initConfig() {
+
+	if ((flashIoConfig->magic == 0x4573) && (flashIoConfig->_magic = 0x7354)) {
+		_memcpy(&ioConfig,&flashIoConfig->ioConfig,sizeof(struct ioConfig));
+	} else {
+		ioConfig.P1DIR = 0x03;
+		ioConfig.P1ADC = 0x04;
+		ioConfig.P1REN = 0xFF;
+		ioConfig.P1OUT = 0;
+		ioConfig.P2DIR = 0x00;
+		ioConfig.P2REN = 0xFF;
+		ioConfig.P2OUT = 0;
+		ioConfig.P3DIR = 0;
+		ioConfig.P3REN = 0xFF;
+		ioConfig.P3OUT = 0; 
+	}
+
+	ioConfig.P1DIR &= availP1 & ~ioConfig.P1ADC;
+	ioConfig.P1ADC &= availP1;
+	ioConfig.P1REN &= (availP1 & ~ioConfig.P1ADC & ~ioConfig.P1DIR);
+	ioConfig.P1OUT &= (availP1 & ~ioConfig.P1ADC);
+	ioConfig.P2DIR &= availP2;
+	ioConfig.P2REN &= availP2 & ~ioConfig.P2DIR;
+	ioConfig.P2OUT &= availP2;
+	ioConfig.P3DIR &= availP3;
+	ioConfig.P3REN &= availP3 & ~ioConfig.P3DIR;
+	ioConfig.P3OUT &= availP3;
+
+	P1DIR    = (P1DIR & (~availP1)) | ioConfig.P1DIR;
+	P1SEL    = (P1SEL & (~availP1)) | ioConfig.P1ADC;
+	P1SEL2   = (P1SEL2 & (~availP1));
+	ADC10AE0 = ioConfig.P1ADC;
+	P1REN    = (P1REN & (~availP1)) | ioConfig.P1REN;
+	P1OUT    = (P1OUT & (~availP1)) | ioConfig.P1OUT;
+	P2DIR    = (P2DIR & (~availP2)) | ioConfig.P2DIR;
+	P2REN    = (P2REN & (~availP2)) | ioConfig.P2REN;
+	P2OUT    = (P2OUT & (~availP2)) | ioConfig.P2OUT;
+	P3DIR    = (P3DIR & (~availP3)) | ioConfig.P3DIR;
+	P3REN    = (P3REN & (~availP3)) | ioConfig.P3REN;
+	P3OUT    = (P3OUT & (~availP3)) | ioConfig.P3OUT;
+
+	unsigned int i;
+	char ioCfg = ioConfig.P1ADC;
+
+	/* Mark what input are being used. */
+	for (i=0;i<MAX_ADC_CHANNELS;i++) {
+		ioADCRead[MAX_ADC_CHANNELS-i-1] = ioCfg & 1; 
+		ioCfg >>=1;  
+	}
+
+}
+
+void beginSampleDac() {
+
+    action &= ~BEGIN_SAMPLE_DAC;
+
+    ADC10CTL0 &= ~ENC;
+    while (ADC10CTL1 & BUSY);             // Wait if ADC10 core is active
+    ADC10SA = (unsigned int)adcData;      // Copies data in ADC10SA to unsigned int adc array
+    ADC10CTL0 |= ENC + ADC10SC;           // Sampling and conversion start
+
+    // Now wait for interrupt.   
+}
+
+inline void startTimerSequence() {
+
+    TA0CTL = TASSEL_1 | MC_1 ;             // Clock source ACLK
+    TA0CCTL1 = CCIE ;                      // Timer A interrupt enable
+}
+
+
+void flashConfig(struct ioConfig * p) {
+
+    WDTCTL = WDTPW + WDTHOLD;	// Hold watchdog.
+    struct flashConfig buffer;
+    buffer.magic = 0x4573;		// Surround Buffer with magic number.
+    buffer._magic = 0x7354;      
+
+    // Copy config buffer prior to writing it in flash
+    _memcpy(&buffer.ioConfig,p,sizeof(struct ioConfig));
+
+    // Do not write flash with the same existing buffer.
+    if (_memcmp(&buffer,flashIoConfig,sizeof(struct flashConfig))) {
+      return;
+    }
+
+    //Do Update the Flash
+    flash_erase((int*)flashIoConfig);
+    flash_write((int*)flashIoConfig,(int*)&buffer,sizeof(struct flashConfig)/sizeof(int));
+
+    WDTCTL = WDTHOLD; // reboot.
+}
+
+
+void resetUSCI() {
+
+  UCA0CTL1 = UCSWRST;   
+  UCB0CTL1 = UCSWRST;                       // **Put state machine in reset**
+  __delay_cycles(10);
+  UCB0CTL0 |= UCCKPH  | UCCKPL | UCMSB | UCSYNC;   // 3-pin, 8-bit SPI slave
+  UCB0CTL1 &= ~UCSWRST;                     // **Initialize USCI state machine**
+
+  while(IFG2 & UCB0RXIFG);                  // Wait ifg2 flag on rx 
+  IE2 |= UCB0RXIE;                          // Enable USCI0 RX interrupt
+  UCB0TXBUF = 0x00;                         // Keep MISO silent.
+
+}
+
+
+void initUSCI() {
+
+  P1DIR		|=	BIT5 | BIT7;				// BIT5 is Master Clock. BIT7 is MOSI
+  P1DIR  	&= ~BIT6;						// BIT6 is MISO
+  P1SEL		|=	BIT5 | BIT6 | BIT7; 		// Select BITS5 to 7 for USCI
+  P1SEL2	|=  BIT5 | BIT6 | BIT7;
+
+  P2DIR  &= ~CS_INCOMING_PACKET;			// CS_INCOMING PACKET is the Master signal triggering the SPI transfer.
+  P2OUT  &= ~CS_INCOMING_PACKET;            // Outgoing,and no PullUp/Dn. Interrupt configured for Raising Edge.
+  P2REN  &= ~CS_INCOMING_PACKET;            
+  P2SEL  &= ~CS_INCOMING_PACKET;
+  P2SEL2 &= ~CS_INCOMING_PACKET;
+
+  P2IES = 0;
+  P2IFG = 0;
+
+  P3DIR  |= CS_NOTIFY_MASTER;
+  P3OUT  &= ~CS_NOTIFY_MASTER;
+  P3REN  &= ~CS_NOTIFY_MASTER;
+  P3SEL  &= ~CS_NOTIFY_MASTER;
+  P3SEL2 &= ~CS_NOTIFY_MASTER; 
+
+}
+
+
+void initADC() {
+
+  ADC10AE0    = 0;
+  ADC10CTL0   = 0;
+  ADC10CTL1   = 0;
+  ADC10MEM    = 0;
+  ADC10DTC0   = 0;
+  ADC10DTC1   = 0;
+
+  ADC10CTL0 = SREF_0 + ADC10SHT_2 + MSC + ADC10ON + ADC10IE;  // Vcc,Vss as ref. Sample and hold 64 cycles
+  ADC10CTL1 = INCH_4 + CONSEQ_1 ;         // Channel 3, ADC10CLK/3
+  ADC10AE0 = ioConfig.P1ADC;
+  ADC10DTC1 = 5;                          // 5 conversions
+}
+
+void initTimer() {
+  TA0R = 0;								// Reset timer counter.
+  TA0CCR0 = 80;                         // Count to this, then interrupt; About 8ms. 
+}
+
