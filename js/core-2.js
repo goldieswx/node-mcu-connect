@@ -222,16 +222,17 @@ var MCUInterface = function() {
    this.superClass = MCUObject.prototype;
    MCUNode.super_.call(this);
    this.childType = "interface";
-   this._cachedIOList = {};  // list of IO indexed by (hardware) id
+   this._cachedIOList = [];  // list of IO with hardware ids.
 
 };
 
 util.inherits(MCUInterface,MCUObject);
 
-MCUInterface.prototype.add = function(key) {
+MCUInterface.prototype.add = function(key,hardwareKeys) {
 
    var child = new MCUIo();
    child.key = key;
+   this._cachedIOList.push(hardwareKeys);
    return (this.superClass.add.bind(this))(child);
 
 };
@@ -242,11 +243,11 @@ MCUInterface.prototype._callback = function(message) {
 	// compare each io with the trigger and the port masks to identify 
 	// the ios to callback
 	var ioId = message.trigger;
-
-	// lazy cache of cachedIOList.
-	if(_.isUndefined(_cachedIOList[ioId])) {
-		_cachedIoList[ioId] = _.find(this.children,{id:message.interfaceId});
-	}
+	_.each(this._cachedIOList,function(item){
+		if ((item.trigger & message.trigger) && (item.portMask & message.portData[item.port-1])) {
+			item.ioObject._callback(message);
+		}
+	});
 
 };
 
@@ -256,6 +257,30 @@ var MCUIo = function() {
    this.superClass = MCUObject.prototype;
    MCUNode.super_.call(this);
    this.childType = "io"
+};
+
+MCUIo.getPortMask = function(stringMask) {
+
+	// stringMask is like "digital 2.2" "analog 1.2"
+	var keys = stringMask.split(" ");
+	// assume digital if not specified.
+	if (keys.length == 1) {
+		keys.unshift("digital");
+	}
+
+	var portNumber = keys[1].split("."); // e.g "2.3"
+	var mapping = { port: parseInt(portNumber[0]), mask: 1 << parseInt(portNumber[1]) };
+
+	var ret = { trigger: 0, portMask: 0x0, port: mapping.port, ioObject : this};
+
+	if (keys[0] == "analog") {
+		ret.trigger = mapping.mask;
+	} else {
+		ret.trigger = 1 << (4+mapping.port); // 1<<5 for port 1, <<6 for 2 ...
+		ret.portMask = mapping.mask;
+	}
+
+	return ret;
 };
 
 MCUIo.prototype.on = function(eventType,fn) {
@@ -273,9 +298,9 @@ util.inherits(MCUIo,MCUObject);
 
 
 var net = new MCUNetwork();
-var node = net.add('node-5',5);
-var iface = node.add('iface-2',1);
-var io = iface.add('2.2',4 /*adce trigger id*/, MCUIo.getPortMask('digital 2.2')/* adce long port mask */).tag("tag-1");
+var node = net.add('node-4',0x04);
+var iface = node.add('iface-1',0x01);
+var io = iface.add('wall-switch', MCUIo.getPortMask('analog 1.2')/* adce long port mask */).tag("tag-1");
 //io = iface.add('1.5').tag("tag-1 tag-2");
 
 /*iface.find('1.6').on('touch',function(e) {
