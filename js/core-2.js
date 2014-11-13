@@ -180,11 +180,10 @@ MCUNetwork.prototype._callback = function(value) {
 						value.readUInt16LE(0x2),
 						value.readUInt16LE(0x4),
 						value.readUInt16LE(0x6),
-						value.readUInt16LE(0x8)]
+						value.readUInt16LE(0x8)],
+		interfaceId	:	1
 	}
-
 	this._dispatchMessage(message);
-  
 }
 
 
@@ -192,7 +191,9 @@ var MCUNode = function() {
 
    this.superClass = MCUObject.prototype;
    MCUNode.super_.call(this);
+   
    this.childType = "node";
+   this._cachedInterfaceList = {}; // list of interfaced indexed by (hardware) id
 
 };
 
@@ -207,27 +208,24 @@ MCUNode.prototype.add = function(key) {
 
 MCUNode.prototype._callback = function(message) {
 
-	var dbg = [message.destination], j=1,i;
-
-	for(i=0;i<5;i++) { 
-		if (message.trigger & (j)) {
-			dbg.push(i);
-			dbg.push(message.adcData[i]);
-		}
-		j <<= 1;
+	// lazy cache of cachedInterfaceList.
+	if(_.isUndefined(_cachedInterfaceList[message.interfaceId])) {
+		_cachedInterfaceList[message.interfaceId] = _.find(this.children,{id:message.interfaceId});
 	}
 
+	_cachedInterfaceList[message.interfaceId]._callback(message);
+
 };
-
-
 
 var MCUInterface = function() {
 
    this.superClass = MCUObject.prototype;
    MCUNode.super_.call(this);
    this.childType = "interface";
+   this._cachedIOList = {};  // list of IO indexed by (hardware) id
 
 };
+
 util.inherits(MCUInterface,MCUObject);
 
 MCUInterface.prototype.add = function(key) {
@@ -235,6 +233,20 @@ MCUInterface.prototype.add = function(key) {
    var child = new MCUIo();
    child.key = key;
    return (this.superClass.add.bind(this))(child);
+
+};
+
+
+MCUInterface.prototype._callback = function(message) {
+	
+	// compare each io with the trigger and the port masks to identify 
+	// the ios to callback
+	var ioId = message.trigger;
+
+	// lazy cache of cachedIOList.
+	if(_.isUndefined(_cachedIOList[ioId])) {
+		_cachedIoList[ioId] = _.find(this.children,{id:message.interfaceId});
+	}
 
 };
 
@@ -249,7 +261,11 @@ var MCUIo = function() {
 MCUIo.prototype.on = function(eventType,fn) {
 
 
+};
 
+MCUIo.prototype._callback = function(message) {
+
+	console.log(message);
 };
 
 
@@ -259,7 +275,7 @@ util.inherits(MCUIo,MCUObject);
 var net = new MCUNetwork();
 var node = net.add('node-5',5);
 var iface = node.add('iface-2',1);
-var io = iface.add('1.5',"P1.5").tag("tag-1");
+var io = iface.add('2.2',4 /*adce trigger id*/, MCUIo.getPortMask('digital 2.2')/* adce long port mask */).tag("tag-1");
 //io = iface.add('1.5').tag("tag-1 tag-2");
 
 /*iface.find('1.6').on('touch',function(e) {
