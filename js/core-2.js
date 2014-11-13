@@ -1,6 +1,22 @@
+/*
+    node-mcu-connect . node.js UDP Interface for embedded devices.
+    Copyright (C) 2013-4 David Jakubowski
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <http://www.gnu.org/licenses/>. 
+*/
+
 var util = require('util');
 var dgram = require('dgram');
 var _ = require('lodash-node');
+
 
 var MCUObject = function(key) {
 
@@ -12,33 +28,41 @@ var MCUObject = function(key) {
 
 };
 
+
+/**
+ * function find(selector)
+ * @returns 
+ *
+ * Transforms a selector to a collection of objects.
+ */
+
 MCUObject.prototype.find = function(selector) {
 
   // split expression by spaces and recursively call ourselves
   // to reduce the result subset by subset
   var expression  = selector.split(' ');
   if (expression.length > 1) {
-     var tmp = this;
-     _.each(expression,function(item){
-        tmp = tmp.find(item);
-     });
-     return tmp;
+	 var tmp = this;
+	 _.each(expression,function(item){
+		tmp = tmp.find(item);
+	 });
+	 return tmp;
   }
 
   // treat simpler case where selector is just one string ([key]:[[tag]:[tag2]])
   var ret,children = [];
   var parseChildren = function(obj,filter,result) {
-     // check if the object matches, check also its children recursively
-     // when match, push result by reference
-     if (obj.children && obj.children.length) {
-        result.push  (_.filter(obj.children,function(child){
-            return  ((filter.key.length)?(child.key == filter.key):1)
-                    && _.intersection(child.tags,filter.tags).length == filter.tags.length;
-        }));
-        _.each(obj.children,function(child) {
-          parseChildren(child,filter,result);
-        });
-     } 
+	 // check if the object matches, check also its children recursively
+	 // when match, push result by reference
+	 if (obj.children && obj.children.length) {
+		result.push  (_.filter(obj.children,function(child){
+			return  ((filter.key.length)?(child.key == filter.key):1)
+					&& _.intersection(child.tags,filter.tags).length == filter.tags.length;
+		}));
+		_.each(obj.children,function(child) {
+		  parseChildren(child,filter,result);
+		});
+	 } 
   }
   
   var selector = selector.split(":");
@@ -49,11 +73,11 @@ MCUObject.prototype.find = function(selector) {
   children = _.flatten(children);
 
   if (children.length != 1) {
-     ret = new MCUObject();
-     ret.childType = "mixed-multiple";
-     ret.children = children;
+	 ret = new MCUObject();
+	 ret.childType = "mixed-multiple";
+	 ret.children = children;
   } else {
-     ret = children[0];
+	 ret = children[0];
   }
   
   return ret;
@@ -88,70 +112,78 @@ var MCUNetwork = function() {
   MCUNetwork.super_.call(this);
   this.childType = "network";
 
+  this._cachedNodeList = {}; // node list lazy loaded and cached by id.
+
 
   this._listenntingSocket = dgram.createSocket('udp4');
   this._listenntingSocket.on("message",function(msg,rinfo){
-      self._callback(msg);
+	  self._callback(msg);
   });
 
   this._listenntingSocket.bind(9931);
+
+
 
 };
 util.inherits(MCUNetwork,MCUObject);
 
 
-MCUNetwork.prototype.add = function(key) {
+MCUNetwork.prototype.add = function(key,nodeId) {
 
    var child = new MCUNode();
    child.key = key;
+   child.id = nodeId;
    return (this.superClass.add.bind(this))(child);
 
 };
 
 MCUNetwork.prototype._sendMessage = function(buffer) {
 
-  var client = dgram.createSocket("udp4");
-      client.send(buffer, 0, buffer.length, 9930,'localhost', function(err, bytes) {
-      client.close();
-  });
+	var client = dgram.createSocket("udp4");
+		client.send(buffer, 0, buffer.length, 9930,'localhost', function(err, bytes) {
+		client.close();
+	});
 
 };
 
+MCUNetwork.prototype._dispatchMessage = function(message) {
 
+	// lazy cache of cachedNodeList.
+	if(_.isUndefined(_cachedNodeList[message.destination])) {
+		_cachedNodeList[message.destination] = _.find(this.children,{id:message.destination});
+	}
+
+	// dispatch message to right node.
+	_cachedNodeList[message.destination]._callback(message);
+
+}
+
+
+/**
+ * MCUNetwork::_callback(value)
+ *
+ * value is received in binary form from udp.
+ * extract node number, interface id and io.
+ * dispatch right away to node
+ *
+ */
 MCUNetwork.prototype._callback = function(value) {
 
-  // value is received in binary form from udp.
-  // extract node number, interface id and io.
-  // dispatch right away to io and bubble up if necessary to net.
-  var nodeId = "node-5";
-  var interfaceId = "iface-2";
-  var ioId = "1.5";
+	var message = {
+		timestamp 	: 	(new Date()).getTime(),
+		destination : 	value.readUInt32LE(36),
+		trigger 	:  	value.readUInt16LE(12),
+		portData 	: [	value.readUInt8(10),
+						value.readUInt8(11),
+						value.readUInt8(14)],
+		adcData 	: [	value.readUInt16LE(0x0),
+						value.readUInt16LE(0x2),
+						value.readUInt16LE(0x4),
+						value.readUInt16LE(0x6),
+						value.readUInt16LE(0x8)]
+	}
 
-  var message = {
- 	timestamp : (new Date()).getTime(),
- 	destination : value.readUInt32LE(36),
-        trigger :  value.readUInt16LE(12),
- 	portData : [value.readUInt8(10),
- 		    value.readUInt8(11),
- 		    value.readUInt8(14)],
- 	adcData : [value.readUInt16LE(0x0),
- 	           value.readUInt16LE(0x2),
- 	           value.readUInt16LE(0x4),
- 	           value.readUInt16LE(0x6),
- 	           value.readUInt16LE(0x8)], 
-  }
-
-  
-  var dbg = [message.destination], j=1,i;
-
-   for(i=0;i<5;i++) { 
-    if (message.trigger & (j)) {
-        dbg.push(i);
-        dbg.push(message.adcData[i]);
-    }
-    j <<= 1;
-   }
-  console.log(dbg);
+	this._dispatchMessage(message);
   
 }
 
@@ -172,6 +204,21 @@ MCUNode.prototype.add = function(key) {
    return (this.superClass.add.bind(this))(child);
 
 };
+
+MCUNode.prototype._callback = function(message) {
+
+	var dbg = [message.destination], j=1,i;
+
+	for(i=0;i<5;i++) { 
+		if (message.trigger & (j)) {
+			dbg.push(i);
+			dbg.push(message.adcData[i]);
+		}
+		j <<= 1;
+	}
+
+};
+
 
 
 var MCUInterface = function() {
@@ -217,8 +264,8 @@ var io = iface.add('1.5',"P1.5").tag("tag-1");
 
 /*iface.find('1.6').on('touch',function(e) {
 
-      e.addTag('lighting-button','night');
-      e.cancelBubble(); // bubble up to iface/node/net by deft.
+	  e.addTag('lighting-button','night');
+	  e.cancelBubble(); // bubble up to iface/node/net by deft.
 
 });*/
 
@@ -242,23 +289,23 @@ var io = iface.add('1.5',"P1.5").tag("tag-1");
  
  
  (function ($) {
- 	
- 	$('room//bed-sensor-left').on('touch',function() {
-              $('room//[lighting,out,low|mid]').toggle();
- 	});
- 	
+	
+	$('room//bed-sensor-left').on('touch',function() {
+			  $('room//[lighting,out,low|mid]').toggle();
+	});
+	
  } (net.find));
 
 var ext = $('node/7').find('ext/1').alias('room');
 
-    ext.find('io/1.1')
-       .alias('ambiance')
-       .io('out','triac')
-       .tag(['out','lightning','ambiance'])
-       .map("2m 18m 2.5m, 4m 19m 2.5m"); // bbox or dot
-       
+	ext.find('io/1.1')
+	   .alias('ambiance')
+	   .io('out','triac')
+	   .tag(['out','lightning','ambiance'])
+	   .map("2m 18m 2.5m, 4m 19m 2.5m"); // bbox or dot
+	   
 
-    ext.find('io/1.2')
+	ext.find('io/1.2')
 	.alias('entrance-sensor')
 	.io('in','analog')
 	.tag(['in','analog','lightning','sensor','low'])
