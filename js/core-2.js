@@ -100,7 +100,15 @@ MCUObject.prototype.tag  = function(tags) {
    return this;
 };
 
+MCUObject.prototype.on = function(eventId,fn) {
 
+    if (this.childType == "mixed-multiple") {
+       _.each(this.children,function(item){
+           item.on(eventId,fn);
+       });
+    }
+
+}
 
 
 var MCUNetwork = function() {
@@ -154,7 +162,11 @@ MCUNetwork.prototype._dispatchMessage = function(message) {
 	}
 
 	// dispatch message to right node.
-	this._cachedNodeList[message.destination]._callback(message);
+	if (this._cachedNodeList[message.destination]) {
+    this._cachedNodeList[message.destination]._callback(message);
+  } else {
+    console.log('callback required to unregistered node: ',message.destination);
+  }
 
 }
 
@@ -246,10 +258,8 @@ MCUInterface.prototype._callback = function(message) {
  	var ioId = message.trigger;
 	_.each(this.children,function(item){
         
-        //console.log(item,message);
 		if ((item.hardwareKeys.trigger & message.trigger) && (item.hardwareKeys.ignorePortMask || (item.hardwareKeys.portMask & message.portData[item.port-1]))) {
 			item._callback(message);
-		//	console.log(item);
 		}
 	});
 
@@ -260,19 +270,50 @@ var MCUIo = function() {
 
    this.superClass = MCUObject.prototype;
    MCUIo.super_.call(this);
-   this.childType = "io"
+   this.childType = "io";
+   this._callbacks = { "change":[],"up":[],"down":[]};
 };
 
 util.inherits(MCUIo,MCUObject);
 
+
+/**
+ * MCUIo::on (eventType,callback)
+ * 
+ * register callback event
+ */
 MCUIo.prototype.on = function(eventType,fn) {
 
+  this._callbacks[eventType].push (
+    {callback:fn,context:{},previousValue:null,value:null,previousContext:{}}
+  );
 
 };
 
 MCUIo.prototype._callback = function(message) {
 
-	console.log(message);
+  var self = this;
+  _.forOwn(this._callbacks,function(item,key) {
+      switch(key) {
+          case "change": 
+            _.each(item,function(changeEvent){
+              changeEvent.context = message;
+              changeEvent.previousValue =
+              changeEvent.value = MCUIo.getValueFromContext(self.hardwareKeys,message);
+              changeEvent.callback(changeEvent); 
+              changeEvent.previousContext = message; 
+            });
+          break;
+      }
+  });
+
+
+};
+
+MCUIo.getValueFromContext = function(hardwareKeys,message) {
+
+      if (!_.isUndefined(hardwareKeys.analogTrigger)) { return message.adcData[hardwareKeys.analogTrigger]; }
+      return null;
 };
 
 
@@ -291,8 +332,13 @@ MCUIo.getPortMask = function(stringMask) {
 	var ret = { trigger: 0, portMask: 0x00, port: mapping.port, ignorePortMask: 0};
 
 	if (keys[0] == "analog") {
-		ret.trigger = mapping.mask;
+		var tmp = mapping.mask;
+    ret.trigger = mapping.mask;
 		ret.ignorePortMask = 1;
+    ret.analogTrigger = 0;
+    while (tmp >>= 1){
+     ret.analogTrigger++;
+    }
 	} else {
 		ret.trigger = 1 << (4+mapping.port); // 1<<5 for port 1, <<6 for 2 ...
 		ret.portMask = mapping.mask;
@@ -300,9 +346,6 @@ MCUIo.getPortMask = function(stringMask) {
 
 	return ret;
 };
-
-
-
 
 
 
@@ -331,10 +374,37 @@ var  messageToBuffer= function(message) {
 var net = new MCUNetwork();
 var node = net.add('node-4',0x04);
 var iface = node.add('iface-1',0x01);
-var io = iface.add('wall-switch', MCUIo.getPortMask('analog 1.2')/* adce long port mask */).tag("tag-1");
+var io = iface.add('wall-switch-3', MCUIo.getPortMask('analog 1.2')/* adce long port mask */).tag("tag-1");
 
 
-net._callback(messageToBuffer({
+var node2 = net.add('node-3',0x03);
+var iface2 = node2.add('iface-1',0x01);
+var io2 = iface2.add('wall-switch-1', MCUIo.getPortMask('analog 1.0')/* adce long port mask */).tag("tag-1");
+var io3 = iface2.add('wall-switch-2', MCUIo.getPortMask('analog 1.1')/* adce long port mask */).tag("tag-1");
+
+
+
+
+net.find(":tag-1").on("change",function(event) {
+
+  console.log("io1 -- itf1",event.value);
+
+});
+
+
+io2.on("change",function(event) {
+
+  console.log("io2",event.value);
+
+});
+
+io3.on("change",function(event) {
+
+  console.log("io3",event.value);
+
+});
+
+/*net._callback(messageToBuffer({
 		destination : 	0x04,
 		trigger 	:  	0x04,
 		portData 	:  [ 0,
@@ -346,7 +416,7 @@ net._callback(messageToBuffer({
 						555,
 						666],
 		interfaceId	:	1
-}));
+}));*/
 
 //io = iface.add('1.5').tag("tag-1 tag-2");
 
