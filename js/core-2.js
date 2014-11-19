@@ -90,6 +90,7 @@ MCUObject.prototype.alias = function(alias) {
 
 MCUObject.prototype.add  = function(child) {
    
+   child._network = this._network||this;
    this.children.push(child);
    return child;
 };
@@ -307,8 +308,20 @@ MCUIo.prototype._callback = function(message) {
       }
   });
 
-
 };
+
+MCUIo.prototype.enable = function() {
+
+	this._network._sendMessage(MCUIo.getMessageIoWriteDigital(this.hardwareKeys,4,1));
+
+}
+
+MCUIo.prototype.disable = function() {
+
+	this._network._sendMessage(MCUIo.getMessageIoWriteDigital(this.hardwareKeys,4,0));
+
+}
+
 
 MCUIo.getValueFromContext = function(hardwareKeys,message) {
 
@@ -316,6 +329,30 @@ MCUIo.getValueFromContext = function(hardwareKeys,message) {
       return null;
 };
 
+
+MCUIo.getMessageIoWriteDigital = function(hardwareKeys,ioKey,value) {
+
+    var msg = new Buffer("012345678901234567891234"); // see adce.c@processMsg for details 
+	var andAddrStart = 3; 
+	var orAddrStart = 0;
+
+	msg.fill(0);
+    msg.writeUInt32LE(0x66,0);
+    msg.writeUInt32LE(ioKey,20);
+
+    if (value) {
+    	msg.writeUInt8 (0xFF & hardwareKeys.portMask,orAddrStart + hardwareKeys.port );
+		msg.writeUInt8 (0xFF ,andAddrStart + hardwareKeys.port );    	
+    } else {
+    	msg.writeUInt8 (0x00,orAddrStart + hardwareKeys.port );
+		msg.writeUInt8 (0xFF & ~hardwareKeys.portMask,andAddrStart + hardwareKeys.port );    	
+    }
+
+    console.log(msg);
+
+    return msg;
+
+}
 
 MCUIo.getPortMask = function(stringMask) {
 
@@ -332,18 +369,17 @@ MCUIo.getPortMask = function(stringMask) {
 	var ret = { trigger: 0, portMask: 0x00, port: mapping.port, ignorePortMask: 0};
 
 	if (keys[0] == "analog") {
-		var tmp = mapping.mask;
-    ret.trigger = mapping.mask;
-		ret.ignorePortMask = 1;
-    ret.analogTrigger = 0;
-    while (tmp >>= 1){
-     ret.analogTrigger++;
-    }
+		var tmp 				= mapping.mask;
+  			ret.trigger  		= mapping.mask;
+			ret.ignorePortMask 	= 1;
+    		ret.analogTrigger 	= 0;  while (tmp >>= 1){ ret.analogTrigger++;  }
 	} else {
-		ret.trigger = 1 << (4+mapping.port); // 1<<5 for port 1, <<6 for 2 ...
-		ret.portMask = mapping.mask;
+			ret.trigger 		= 1 << (4+mapping.port); // 1<<5 for port 1, <<6 for 2 ...
+			ret.portMask 		= mapping.mask;
+			if(mapping.port > 1) {
+				ret.portMask <<= 3; // avail P2.x and P3.x is BIT3..BIT7 instead of BIT0..BIT4
+			}
 	}
-
 	return ret;
 };
 
@@ -382,18 +418,40 @@ var iface2 = node2.add('iface-1',0x01);
 var io2 = iface2.add('wall-switch-1', MCUIo.getPortMask('analog 1.0')/* adce long port mask */).tag("tag-1");
 var io3 = iface2.add('wall-switch-2', MCUIo.getPortMask('analog 1.1')/* adce long port mask */).tag("tag-1");
 
+var io4 = iface.add('spotlight',MCUIo.getPortMask('digital 1.1'));
+var io5 = iface.add('spotlight2',MCUIo.getPortMask('digital 1.0'));
 
 
 
 net.find(":tag-1").on("change",function(event) {
 
-  console.log("io1 -- itf1",event.value);
+	event.throttle = event.throttle || 
+		_.throttle(function() { 
+		 	if (event.value < 450) {
+		  			 io4.enable();
+		  	} else {
+		  			 io4.disable();
+		  	}
+		}, 400);
+
+	event.throttle();
+	console.log("io1 -- itf1",event.value);
 
 });
 
 
 io2.on("change",function(event) {
 
+	event.throttle = event.throttle || 
+		_.throttle(function() { 
+		 	if (event.value < 450) {
+		  			 io5.enable();
+		  	} else {
+		  			 io5.disable();
+		  	}
+		}, 400);
+
+	event.throttle();
   console.log("io2",event.value);
 
 });
@@ -403,6 +461,8 @@ io3.on("change",function(event) {
   console.log("io3",event.value);
 
 });
+
+io4.disable();
 
 /*net._callback(messageToBuffer({
 		destination : 	0x04,
