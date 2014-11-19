@@ -207,7 +207,6 @@ void mcomProcessBuffer() {
 void _signalMaster() {
   
 
-
     int i;
     unsigned int chk = 0;
     for (i=0;i<20;i++) {
@@ -567,27 +566,34 @@ void checkADC() {
     __delay_cycles(4000);  // Give some time to ADCE to react
 
 
-    static int debug = 0;
+   // static int debug = 0;
 
     transfer(0xAC); // we should check preamble received
     transfer(0xAC);
 
     unsigned int i;
+    unsigned char trsfBuf[20];
     for (i=0;i<19;i++) {
-         outBuffer[i] = transfer(inDataCopy[i]);
+         //outBuffer[i] = transfer(inDataCopy[i]);
+         trsfBuf[i] = transfer(inDataCopy[i]);
     }
 
     _CIP_POUT ^= CS_INCOMING_PACKET;   // pulse signal for last byte.
-    outBuffer[19] = transfer(inDataCopy[19]);
+    //outBuffer[19] = transfer(inDataCopy[19]);
+    trsfBuf[19] = transfer(inDataCopy[i]);
     _CIP_POUT ^= CS_INCOMING_PACKET;   // pulse signal for last byte.
   
     //outBuffer[19] = debug++;
-    debug %= 256;
-     
+    //debug %= 256;
 
-    if (outBuffer[12]) { 
+    if (trsfBuf[12] && (!(signalMaster||outPacket.signalMask1))) { 
+
+        _memcpy(outBuffer,trsfBuf,20);
         _signalMaster(); 
-    }
+    } // TODO : else, there is something in the OutBuffer, and we have sent out in the return a
+      // cmd to the adce and received another OutBuffer, yet we have now 2 buffer to process, this shouldn' happen, fix, pass a param
+      // in the spi stream saying node busy or buffer this .
+
 
     busy = 0; // we're finished with buffer
     action &= ~ADC_CHECK;            // Clear current action flag.

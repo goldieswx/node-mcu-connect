@@ -214,7 +214,7 @@ void checkDAC() {
 		for (i=0;i<MAX_ADC_CHANNELS;i++) {
 			if (ioADCRead[i]) {
 			   readValue = adcData[i];
-			   if ((readValue < 750) && ((readValue > (lastValues[i]+15)) || (readValue < (lastValues[i]-15)))) {
+			   if ((readValue < 850) && ((readValue > (lastValues[i]+15)) || (readValue < (lastValues[i]-15)))) {
 					  lastValues[i] = readValue;
 					  dataTrigger |= 0x01 << i;
 			   }
