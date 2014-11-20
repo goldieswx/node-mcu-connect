@@ -246,8 +246,41 @@ MCUInterface.prototype.add = function(key,hardwareKeys) {
 
    var child = new MCUIo();
    child.key = key;
+   if (_.isString(hardwareKeys)) { hardwareKeys = MCUIo.getPortMask(hardwareKeys); }
    child.hardwareKeys = hardwareKeys;
    return (this.superClass.add.bind(this))(child);
+
+};
+
+/**
+ *  Function MCUInterface::refresh()
+ *  Transmits the IO state 
+ */
+
+MCUInterface.prototype.refresh = function() {
+
+	// loop through all children and see what io they use and how
+	var hardwareKeyList = _.pluck(children,'hardwareKeys');
+    var config = { portDIR: [0,0,0], portADC: 0, portREN: [0xFF,0xFF,0xFF], portOUT: [0,0,0]};
+
+    _.each(hardwareKeyList(item,function(item){
+    		if (item.direction == "out") { // Digital in
+    			config.portDIR[item.port-1] |= item.portMask;   // enable output flag
+    			config.portREN[item.port-1] &= (0xFF & ~item.portMask); // disable pullup/dn flag
+    			config.portOUT[item.port-1] &= (0xFF & ~item.portMask); // disable out flag
+    		} else {
+    			if (item.trigger < (31)) { // ADC
+    				config.portADC |= item.trigger;
+	    			config.portOUT[item.port-1] &= (0xFF & ~item.trigger); // disable out flag
+    				config.portDIR[item.port-1] &= (0xFF & ~item.trigger); // enable output flag
+    				config.portREN[item.port-1] |= (0xFF & ~item.trigger); // disable pullup/dn flag
+    			} else { // Digital out 
+    				config.portDIR[item.port-1] &= (0xFF & ~item.portMask); // disable output flag
+    				config.portREN[item.port-1] |= item.portMask; // enable pulldn flag
+    				config.portOUT[item.port-1] &= (0xFF & ~item.portMask); // pull dn
+    			}
+    		}
+    }));
 
 };
 
@@ -356,17 +389,17 @@ MCUIo.getMessageIoWriteDigital = function(hardwareKeys,ioKey,value) {
 
 MCUIo.getPortMask = function(stringMask) {
 
-	// stringMask is like "digital 2.2" "analog 1.2"
+	// stringMask is like "digital out 2.2" "analog in 1.2"
 	var keys = stringMask.split(" ");
 	// assume digital if not specified.
 	if (keys.length == 1) {
 		keys.unshift("digital");
 	}
 
-	var portNumber = keys[1].split("."); // e.g "2.3"
+	var portNumber = keys[2].split("."); // e.g "2.3"
 	var mapping = { port: parseInt(portNumber[0]), mask: 1 << parseInt(portNumber[1]) };
 
-	var ret = { trigger: 0, portMask: 0x00, port: mapping.port, ignorePortMask: 0};
+	var ret = { trigger: 0, portMask: 0x00, port: mapping.port, ignorePortMask: 0, direction: keys[1]};
 
 	if (keys[0] == "analog") {
 		var tmp 				= mapping.mask;
@@ -410,34 +443,45 @@ var  messageToBuffer= function(message) {
 var net = new MCUNetwork();
 var node = net.add('node-4',0x04);
 var iface = node.add('iface-1',0x01);
-var io = iface.add('wall-switch-3', MCUIo.getPortMask('analog 1.2')/* adce long port mask */).tag("tag-1");
+var io = iface.add('wall-switch-3', 'analog 1.2').tag("tag-1");
+
+(function($) {
+
+	/* Configuration of node-3 and its interface(s) */
+    net.add('node-3',0x03).add('interface-1',0x01);
+   
+   	// Configure interface 1 I/Os
+    (function(i) {
+		i.add('wall-switch-1','analog in 1.0').tag("tag-1");
+		i.add('wall-switch-2','analog in 1.1').tag("tag-1");
+		i.add('spotlight','digital out 1.1').tag("tag-2");
+		i.add('spotlight2','digital out 1.0').tag("tag-2");
+        i.refresh();
+	})($('interface-1'));
 
 
-var node2 = net.add('node-3',0x03);
-var iface2 = node2.add('iface-1',0x01);
-var io2 = iface2.add('wall-switch-1', MCUIo.getPortMask('analog 1.0')/* adce long port mask */).tag("tag-1");
-var io3 = iface2.add('wall-switch-2', MCUIo.getPortMask('analog 1.1')/* adce long port mask */).tag("tag-1");
+    // io logic
+	$(":tag-1").on("change",function(event) {
 
-var io4 = iface.add('spotlight',MCUIo.getPortMask('digital 1.1'));
-var io5 = iface.add('spotlight2',MCUIo.getPortMask('digital 1.0'));
+		event.throttle = event.throttle || 
+			_.throttle(function() { 
+			 	if (event.value < 450) {
+			  			 $('spotlight').enable();
+			  	} else {
+			  			 $('spotlight').disable();
+			  	}
+			}, 400);
+
+		event.throttle();
+		console.log("io1 -- itf1",event.value);
+	});
 
 
+})(net.find);
 
-net.find(":tag-1").on("change",function(event) {
+/* * */ 
 
-	event.throttle = event.throttle || 
-		_.throttle(function() { 
-		 	if (event.value < 450) {
-		  			 io4.enable();
-		  	} else {
-		  			 io4.disable();
-		  	}
-		}, 400);
 
-	event.throttle();
-	console.log("io1 -- itf1",event.value);
-
-});
 
 
 io2.on("change",function(event) {
