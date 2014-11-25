@@ -260,10 +260,10 @@ MCUInterface.prototype.add = function(key,hardwareKeys) {
 MCUInterface.prototype.refresh = function() {
 
 	// loop through all children and see what io they use and how
-	var hardwareKeyList = _.pluck(children,'hardwareKeys');
+	var hardwareKeyList = _.pluck(this.children,'hardwareKeys');
     var config = { portDIR: [0,0,0], portADC: 0, portREN: [0xFF,0xFF,0xFF], portOUT: [0,0,0]};
 
-    _.each(hardwareKeyList(item,function(item){
+    _.each(hardwareKeyList,function(item){
     		if (item.direction == "out") { // Digital in
     			config.portDIR[item.port-1] |= item.portMask;   // enable output flag
     			config.portREN[item.port-1] &= (0xFF & ~item.portMask); // disable pullup/dn flag
@@ -280,7 +280,9 @@ MCUInterface.prototype.refresh = function() {
     				config.portOUT[item.port-1] &= (0xFF & ~item.portMask); // pull dn
     			}
     		}
-    }));
+    });
+
+    console.log (config);
 
 };
 
@@ -332,7 +334,7 @@ MCUIo.prototype._callback = function(message) {
           case "change": 
             _.each(item,function(changeEvent){
               changeEvent.context = message;
-              changeEvent.previousValue =
+              changeEvent.previousValue = changeEvent.value;
               changeEvent.value = MCUIo.getValueFromContext(self.hardwareKeys,message);
               changeEvent.callback(changeEvent); 
               changeEvent.previousContext = message; 
@@ -343,9 +345,12 @@ MCUIo.prototype._callback = function(message) {
 
 };
 
-MCUIo.prototype.enable = function() {
+MCUIo.prototype.enable = function(value) {
 
-	this._network._sendMessage(MCUIo.getMessageIoWriteDigital(this.hardwareKeys,4,1));
+	if (!arguments.length) { value = 1; }
+	value = (value)?1:0;
+
+	this._network._sendMessage(MCUIo.getMessageIoWriteDigital(this.hardwareKeys,4,value));
 
 }
 
@@ -416,15 +421,91 @@ MCUIo.getPortMask = function(stringMask) {
 	return ret;
 };
 
+MCUIo.throttle = function (e,fn,timeout) {
+
+   e.throttle = e.throttle  || _.throttle(fn,timeout,{leading:false,trailing:true});
+   e.throttle();
+
+}
+
+/* test area */
 
 
+var net = new MCUNetwork();
 
+(function($) {
 
-var  messageToBuffer= function(message) {
-
-	var buffer = new Buffer("1234567890123456789012345678901234567890");
+    net.add('node-entry',0x03).add('entry',0x01);
+    net.add('node-bedroom',0x04).add('bedroom',0x01);
    
-	buffer.writeUInt32LE(message.destination,36);
+   	// Entry interface
+    (function(i) {
+		i.add('sw-1','analog in 1.0').tag("in");
+		i.add('sw-2','analog in 1.1').tag("in in2");
+		i.refresh();
+	})($('entry'));
+
+
+	//Bedroom interface
+    (function(i) {
+	    i.add('sw-3',		'analog in 1.2').tag("in");
+		i.add('spotlight-1','digital out 1.1').tag("out");
+		i.add('spotlight-2','digital out 1.0').tag("out");
+        i.refresh();
+	})($('bedroom'));
+
+    // IO Logic
+	$(":in").on("change",function(event) {
+
+    event.ranges = event.ranges || [];
+    
+    var sum = 0, len = 0, abort = 0;
+
+    event.ranges.push({ v: event.value, t: event.context.timestamp } );
+
+    _.each(event.ranges,function(item) {
+        if ((event.context.timestamp - item.t) < 50) {
+            sum += item.v;
+            len++;
+        }
+    });
+
+    if (len) {
+      sum = Math.round(sum/len);
+    } else { sum = event.value; }
+
+    _.remove(event.ranges,function(item){
+       return ((event.context.timestamp - item.t) > 50);
+    });
+
+    event.sum = sum;
+		MCUIo.throttle(event,function() { 
+				$('spotlight-1').enable(event.sum < 450)
+        $('spotlight-2').enable(event.sum > 450)
+        console.log("Sending filtered, throttled at",event.sum,event.value);
+		}, 50);
+
+		//console.log("event",event.value,sum,event.context.timestamp);
+	});
+
+  setInterval(function(){ $('spotlight-1').enable() },2000);
+
+	/*$(":in2").on("change",function(event) {
+
+		MCUIo.throttle(event,function() { 
+				$('spotlight-2').enable(event.value < 450)
+		}, 400);
+		console.log("event",event.value);
+	});*/
+
+
+})(net.find.bind(net));
+
+/* * */ 
+/*
+var  messageToBuffer= function(message) {
+	var buffer = new Buffer("1234567890123456789012345678901234567890");
+   	buffer.writeUInt32LE(message.destination,36);
 	buffer.writeUInt16LE(message.trigger,12);
 	buffer.writeUInt8(message.portData[0],10);
 	buffer.writeUInt8(message.portData[1],11);
@@ -434,171 +515,6 @@ var  messageToBuffer= function(message) {
 	buffer.writeUInt16LE(message.adcData[2],0x4);
 	buffer.writeUInt16LE(message.adcData[3],0x6);
 	buffer.writeUInt16LE(message.adcData[4],0x8);
-
 	return buffer;
-
 };
-
-
-var net = new MCUNetwork();
-var node = net.add('node-4',0x04);
-var iface = node.add('iface-1',0x01);
-var io = iface.add('wall-switch-3', 'analog 1.2').tag("tag-1");
-
-(function($) {
-
-	/* Configuration of node-3 and its interface(s) */
-    net.add('node-3',0x03).add('interface-1',0x01);
-   
-   	// Configure interface 1 I/Os
-    (function(i) {
-		i.add('wall-switch-1','analog in 1.0').tag("tag-1");
-		i.add('wall-switch-2','analog in 1.1').tag("tag-1");
-		i.add('spotlight','digital out 1.1').tag("tag-2");
-		i.add('spotlight2','digital out 1.0').tag("tag-2");
-        i.refresh();
-	})($('interface-1'));
-
-
-    // io logic
-	$(":tag-1").on("change",function(event) {
-
-		event.throttle = event.throttle || 
-			_.throttle(function() { 
-			 	if (event.value < 450) {
-			  			 $('spotlight').enable();
-			  	} else {
-			  			 $('spotlight').disable();
-			  	}
-			}, 400);
-
-		event.throttle();
-		console.log("io1 -- itf1",event.value);
-	});
-
-
-})(net.find);
-
-/* * */ 
-
-
-
-
-io2.on("change",function(event) {
-
-	event.throttle = event.throttle || 
-		_.throttle(function() { 
-		 	if (event.value < 450) {
-		  			 io5.enable();
-		  	} else {
-		  			 io5.disable();
-		  	}
-		}, 400);
-
-	event.throttle();
-  console.log("io2",event.value);
-
-});
-
-io3.on("change",function(event) {
-
-  console.log("io3",event.value);
-
-});
-
-io4.disable();
-
-/*net._callback(messageToBuffer({
-		destination : 	0x04,
-		trigger 	:  	0x04,
-		portData 	:  [ 0,
-						0,
-						0 ] ,
-		adcData 	: [	123,
-						456,
-						789,
-						555,
-						666],
-		interfaceId	:	1
-}));*/
-
-//io = iface.add('1.5').tag("tag-1 tag-2");
-
-/*iface.find('1.6').on('touch',function(e) {
-
-	  e.addTag('lighting-button','night');
-	  e.cancelBubble(); // bubble up to iface/node/net by deft.
-
-});*/
-
-//net._callback();
-//console.log(net.find(5)[0].find(2)[0].find('1.5'));
-
-/* core-2 draft
-
- var net = new MCUNetwork('NETWORK-ID');
- 
- var node = net.add('1','room');
- var iface = node.add('1');
- var io = node.add('1.5'); 
- 
- net.find('room/1/1.5');
- net.find('room//1.5','bed-sensor-left'); // often there is just one extension.
- net.find('room//bed-sensor-left');
- 
- net.find('room//bed-sensor-left').setup('1.2p adc 15dx 15s 3.3v 10bit','5v 10k 10k'); // 15s retransmit value is unchanged
- net.find('room//bed-sensor-left').setup('1.3p out','5v 10k 10k'); // 15s retransmit value is unchanged
- 
- 
- (function ($) {
-	
-	$('room//bed-sensor-left').on('touch',function() {
-			  $('room//[lighting,out,low|mid]').toggle();
-	});
-	
- } (net.find));
-
-var ext = $('node/7').find('ext/1').alias('room');
-
-	ext.find('io/1.1')
-	   .alias('ambiance')
-	   .io('out','triac')
-	   .tag(['out','lightning','ambiance'])
-	   .map("2m 18m 2.5m, 4m 19m 2.5m"); // bbox or dot
-	   
-
-	ext.find('io/1.2')
-	.alias('entrance-sensor')
-	.io('in','analog')
-	.tag(['in','analog','lightning','sensor','low'])
-	.map("south-east 1.5m");
-
-
-   $('entrance-sensor').on('tap',function(value){
-	
-	$('ambiance').toggle();
-
-   })
-
-
-   $('entrance-sensor').on('any',function(value){
-	// logData
-   });
-
- 
-   $('entrance-sensor').on('touch',function(value){
-	 var light = ext.find('[lighting,out]'); 
-
-	 if (value.greater(.5)) {	
-		light.find('[mid|high]').enable();
-		light.find('[night]').disable();
-	 }  else {
-		light.find('[mid|low]').enable();
-		light.find('[night]').disable();
-	 }
-
-   });
-
-
-
 */

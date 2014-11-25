@@ -61,7 +61,7 @@
 #define MCOM_NODE_QUEUE_LEN 10
 #define MCOM_MAX_NODES 16
 
-#define MAX_TRANSFER_ERRORS_MESSAGE  5 
+#define MAX_TRANSFER_ERRORS_MESSAGE  5
 
 typedef struct _UDPMessage {
 
@@ -138,7 +138,7 @@ int onMessageReceived(message * q) {
 
   //printf("Received\n");
   //debugMessage(q);
-	sendto(clientSocket, q->data, 20, 0, (struct sockaddr* ) &si_other, slen);
+	sendto(clientSocket, q, sizeof(message), 0, (struct sockaddr* ) &si_other, slen);
 }
 
 int onMessageSent(message * q) {
@@ -203,20 +203,7 @@ int sendMessage(message * outQueue,message * inQueues, int * pNumSNCCRequests) {
 	pck.cmd = MI_CMD;
         printf("HDR:\n");
 	// send preamble and get the first answer
-<<<<<<< Updated upstream
-	
-	#ifdef DEBUG_TRANSFER
-	        printf("HDR:\n");
-		printBuffer2(ppck,SIZEOF_MCOM_OUT_HEADER);  
-	#endif
-	bcm2835_spi_transfern (ppck,SIZEOF_MCOM_OUT_HEADER); 
-	#ifdef DEBUG_TRANSFER
-		printf("-");  
-		printBuffer2(ppck,SIZEOF_MCOM_OUT_HEADER);
-	#endif
-=======
 	printBuffer2(ppck,SIZEOF_MCOM_OUT_HEADER);  bcm2835_spi_transfern (ppck,SIZEOF_MCOM_OUT_HEADER); printf("-");  printBuffer2(ppck,SIZEOF_MCOM_OUT_HEADER);
->>>>>>> Stashed changes
 
 	// send first bytes to preprocess, if no sncc request is pending,
 	// we'll try to insert the request in this signalmask already
@@ -246,21 +233,9 @@ int sendMessage(message * outQueue,message * inQueues, int * pNumSNCCRequests) {
 
 	pck.__reserved_1 = 0;
 	pck.__reserved_2 = 0;
-<<<<<<< Updated upstream
-
-	#ifdef DEBUG_TRANSFER
-        	printf("PL:\n"); printBuffer2(ppck,SIZEOF_MCOM_OUT_PAYLOAD);  printf("-"); 
-        #endif
-        bcm2835_spi_transfern (ppck,SIZEOF_MCOM_OUT_PAYLOAD); 
-       	#ifdef DEBUG_TRANSFER
-	        printBuffer2(ppck,SIZEOF_MCOM_OUT_PAYLOAD);
-		ppck += SIZEOF_MCOM_OUT_PAYLOAD;
-	#endif
-=======
         printf("PL:\n");
 	printBuffer2(ppck,SIZEOF_MCOM_OUT_PAYLOAD);  printf("-"); bcm2835_spi_transfern (ppck,SIZEOF_MCOM_OUT_PAYLOAD); printBuffer2(ppck,SIZEOF_MCOM_OUT_PAYLOAD);
 	ppck += SIZEOF_MCOM_OUT_PAYLOAD;
->>>>>>> Stashed changes
 
 	int checkSumSNCC;
 	if (inQueue) {
@@ -268,23 +243,14 @@ int sendMessage(message * outQueue,message * inQueues, int * pNumSNCCRequests) {
 		pck.snccCheckSum = checkSumSNCC;
 	}
 
-<<<<<<< Updated upstream
-	#ifdef DEBUG_TRANSFER
-        	printf("CHK:\n"); printBuffer2(ppck,SIZEOF_MCOM_OUT_CHK); printf("-"); 
-        #endif
-        bcm2835_spi_transfern (ppck,SIZEOF_MCOM_OUT_CHK);  
-      	#ifdef DEBUG_TRANSFER
-	        printBuffer2(ppck,SIZEOF_MCOM_OUT_CHK);
-	#endif
-=======
         printf("CHK:\n");
 	printBuffer2(ppck,SIZEOF_MCOM_OUT_CHK); printf("-"); bcm2835_spi_transfern (ppck,SIZEOF_MCOM_OUT_CHK);  printBuffer2(ppck,SIZEOF_MCOM_OUT_CHK);
->>>>>>> Stashed changes
+        usleep(500);
 
 	if(outQueue) {
 		if (pck.chkSum == checkSum) {
 			outQueue->status = MI_STATUS_TRANSFERRED;
-			onMessageSent(outQueue);
+      onMessageSent(outQueue);
 		} else {
 			outQueue->transferError++;
 			setRetryDelay(outQueue);
@@ -294,7 +260,7 @@ int sendMessage(message * outQueue,message * inQueues, int * pNumSNCCRequests) {
 	if (inQueue && (pck.snccCheckSum == checkSumSNCC)) {
 		_memcpy(inQueue->data,pck.data,MCOM_DATA_LEN);
 		inQueue->status = MI_STATUS_TRANSFERRED;
-		onMessageReceived(inQueue);
+    onMessageReceived(inQueue);
 	} 
 
 	postProcessSNCCmessage(&pck,inQueues,inQueue,pNumSNCCRequests);      
@@ -344,14 +310,9 @@ void dropMessageOnExcessiveErrors (message ** q) {
 // process udp queue.
 int insertNewCmds(message ** outQueues) {
  
-<<<<<<< Updated upstream
-    UDPMessage buf;
-    message * m;
-=======
 	UDPMessage buf;
     //static message m;
 	message * m;
->>>>>>> Stashed changes
 
     if (recvfrom (sockfd, &buf, sizeof(UDPMessage), 0, (struct sockaddr*)&cli_addr, &slen) == sizeof(UDPMessage)) {
 		if (buf.destination <= MCOM_MAX_NODES) {
@@ -362,12 +323,8 @@ int insertNewCmds(message ** outQueues) {
 				  	m = fifo_remove(outQueuePool);
 		  			//printf("Got from (%d) (%x) index: %x\n",fifo_len(outQueuePool),m,&outQueues[index]);
 					if (!m) { 
-<<<<<<< Updated upstream
-						// TODO throw error instead of ignoring the msg
-=======
 					//	printf("Got empty queue\n");
 						//onMessageDropped(NULL); 
->>>>>>> Stashed changes
 						return 0; 
 					}
 					_memcpy(m->data,&buf,sizeof(UDPMessage));
@@ -396,7 +353,7 @@ int preProcessSNCCmessage(McomOutPacket* pck, message * inQueues,int * pNumSNCCR
    		for (i=lastNodeServiced+1;i<(MCOM_MAX_NODES+lastNodeServiced+1);i++) {
    			currentNode = i%MCOM_MAX_NODES;
    			if (inQueues[currentNode].status == SNCC_SIGNAL_RECEIVED) {
-          			//printf("Signal received on node [%d]\n",currentNode);
+          //printf("Signal received on node [%d]\n",currentNode);
    				*inQueue = &(inQueues[currentNode]);
    				(*inQueue)->destination = currentNode;
    			} 
@@ -408,8 +365,8 @@ int preProcessSNCCmessage(McomOutPacket* pck, message * inQueues,int * pNumSNCCR
 
    		if (pck->preamble_1) {
    			int probableNode = pck->preamble_1 & 0x7F; // strip off nofify bit
-   			if (probableNode< MCOM_MAX_NODES) {
-			          //printf("sncc preamble received from node: [%x]\n",probableNode);
+   			if (probableNode && probableNode< MCOM_MAX_NODES) {
+          //printf("sncc preamble received from node: [%x]\n",probableNode);
    				*inQueue = &(inQueues[probableNode]);
    				(*inQueue)->destination = probableNode;
    				(*inQueue)->status = SNCC_PREAMBLE_RECEIVED;
@@ -429,7 +386,7 @@ int postProcessSNCCmessage(McomOutPacket* pck,message * inQueues,message * inQue
 
 	  	 //preprocess assigned a queue, so let's check.
 	  	 if (inQueue->status == MI_STATUS_TRANSFERRED) {
-         			// printf("SNCC Status transferred\n");
+         // printf("SNCC Status transferred\n");
 	  	 		inQueue->status = 0;
 	  	 		processedNode = inQueue->destination;
 	  	 		lastNodeServiced = processedNode;
@@ -439,10 +396,12 @@ int postProcessSNCCmessage(McomOutPacket* pck,message * inQueues,message * inQue
 	  // analyse signalmask.
 	  unsigned int i,j = 1;
 
+  
 	  *pNumSNCCRequests = 0; // recaculate num of open sncc requests
+	
 
 	  for(i=0;i<8;i++) {
-	  	if (pck->signalMask1 & j) {
+	  		if (pck->signalMask1 & j) {
         	if ((inQueue == NULL) || (i != inQueue->destination)) { // ignore signal of 'just processed' node 
 	  											  // (can't (already) request another one)
 	  				inQueues[i].destination = i;
@@ -487,14 +446,10 @@ int main(int argc, char **argv)
   message m;
   memset(&m,0,sizeof(message));
 
-<<<<<<< Updated upstream
-  outQueuePool = initOutQueuePool();
-=======
   printf("init pool\n");
   outQueuePool = initOutQueuePool();
   printf("done init pool\n");
 
->>>>>>> Stashed changes
 
   int           numSNCCRequests = 0;
   int           allMsgProcessed;
