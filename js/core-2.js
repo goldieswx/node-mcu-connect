@@ -216,6 +216,7 @@ MCUNode.prototype.add = function(key,id) {
    var child = new MCUInterface();
    child.key = key;
    child.id = id;
+   child.node = this;
    return (this.superClass.add.bind(this))(child);
 
 };
@@ -236,6 +237,7 @@ var MCUInterface = function() {
    this.superClass = MCUObject.prototype;
    MCUInterface.super_.call(this);
    this.childType = "interface";
+
    this._cachedIOList = [];  // list of IO with hardware ids.
 
 };
@@ -246,6 +248,7 @@ MCUInterface.prototype.add = function(key,hardwareKeys) {
 
    var child = new MCUIo();
    child.key = key;
+   child.node = this.node;
    if (_.isString(hardwareKeys)) { hardwareKeys = MCUIo.getPortMask(hardwareKeys); }
    child.hardwareKeys = hardwareKeys;
    return (this.superClass.add.bind(this))(child);
@@ -350,7 +353,7 @@ MCUIo.prototype.enable = function(value) {
 	if (!arguments.length) { value = 1; }
 	value = (value)?1:0;
 
-	this._network._sendMessage(MCUIo.getMessageIoWriteDigital(this.hardwareKeys,4,value));
+	this._network._sendMessage(MCUIo.getMessageIoWriteDigital(this.hardwareKeys,this.node.id,value));
 
 }
 
@@ -437,6 +440,8 @@ var net = new MCUNetwork();
 
     net.add('node-entry',0x03).add('entry',0x01);
     net.add('node-bedroom',0x04).add('bedroom',0x01);
+    net.add('sync',0x09).add('sync',0x01).add('sync','digital out 1.0').tag('sync');
+
    
    	// Entry interface
     (function(i) {
@@ -470,6 +475,10 @@ var net = new MCUNetwork();
         }
     });
 
+    if (event.value > 1000) {
+    	console.log (event.context);
+    }
+
     if (len) {
       sum = Math.round(sum/len);
     } else { sum = event.value; }
@@ -481,14 +490,14 @@ var net = new MCUNetwork();
     event.sum = sum;
 		MCUIo.throttle(event,function() { 
 				$('spotlight-1').enable(event.sum < 450)
-        $('spotlight-2').enable(event.sum > 450)
+               $('spotlight-2').enable(event.sum > 450)
         console.log("Sending filtered, throttled at",event.sum,event.value);
 		}, 50);
 
 		//console.log("event",event.value,sum,event.context.timestamp);
 	});
 
-  setInterval(function(){ $('spotlight-1').enable() },2000);
+  setInterval(function(){ $(':sync').enable() },2000);
 
 	/*$(":in2").on("change",function(event) {
 

@@ -284,6 +284,7 @@ void checkDAC() {
 void processMsg () {
 	action &= ~PROCESS_MSG;
 
+	UCB0TXBUF = 0x00;
 	WDTCTL = WDTPW + WDTCNTCL;
 	if (exchangeBuffer[0] != PREAMBLE) { // just checking this for now. 
 		//resample = 0;
@@ -344,7 +345,7 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 			__bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM
 		}
 	} else {
-		UCB0TXBUF = 0x99;
+		UCB0TXBUF = 0x00;
 		IFG2 &= ~UCB0RXIFG;
 	}
 	return;
