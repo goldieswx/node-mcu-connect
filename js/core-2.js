@@ -310,6 +310,7 @@ var MCUIo = function() {
    this.superClass = MCUObject.prototype;
    MCUIo.super_.call(this);
    this.childType = "io";
+  // this.value = undefined;
    this._callbacks = { "change":[],"up":[],"down":[]};
 };
 
@@ -348,18 +349,35 @@ MCUIo.prototype._callback = function(message) {
 
 };
 
+MCUIo.prototype.toggle = function() {
+
+		if (this.value) {
+			this.disable();
+		} else {
+			this.enable();
+		}
+
+};
+
 MCUIo.prototype.enable = function(value) {
 
 	if (!arguments.length) { value = 1; }
 	value = (value)?1:0;
 
-	this._network._sendMessage(MCUIo.getMessageIoWriteDigital(this.hardwareKeys,this.node.id,value));
+	if (_.isUndefined(this.value) || (this.value != value)) {
+		this._network._sendMessage(MCUIo.getMessageIoWriteDigital(this.hardwareKeys,this.node.id,value));
+		this.value = value;
+	}
 
 }
 
 MCUIo.prototype.disable = function() {
 
-	this._network._sendMessage(MCUIo.getMessageIoWriteDigital(this.hardwareKeys,4,0));
+
+	if (_.isUndefined(this.value) || (this.value)) {
+		this._network._sendMessage(MCUIo.getMessageIoWriteDigital(this.hardwareKeys,this.node.id,0));
+		this.value = 0;
+	}
 
 }
 
@@ -431,6 +449,46 @@ MCUIo.throttle = function (e,fn,timeout) {
 
 }
 
+/**
+ * function() averageFilter
+ * Creates a average between the currently elapsed n milliseconds of the event values.
+ */
+
+MCUIo.timedAverageFilter = function(event) {
+
+	var averageTimeFrame = 50; // values are kept for average for 50ms
+
+	event.filters = event.filters || {};
+	event.filters.timedAverage =  event.filters.timedAverage || {};
+	var e = event.filters.timedAverage;
+	var sum = 0, len = 0;
+
+	e.ranges = e.ranges || [];
+	e.ranges.push({ v: event.value, t: event.context.timestamp } );
+
+	_.each(e.ranges,function(item) {
+		if ((event.context.timestamp - item.t) < averageTimeFrame) {
+			sum += item.v;
+			len++;
+		}
+	});
+
+	if (len) {
+		sum = Math.round(sum/len);
+	} else {
+		sum = event.value; 
+	}
+
+	e.value = sum;
+
+	_.remove(e.ranges,function(item){
+		return ((event.context.timestamp - item.t) > averageTimeFrame);
+	});
+
+};
+
+
+
 /* test area */
 
 
@@ -441,12 +499,11 @@ var net = new MCUNetwork();
     net.add('node-entry',0x03).add('entry',0x01);
     net.add('node-bedroom',0x04).add('bedroom',0x01);
     net.add('sync',0x09).add('sync',0x01).add('sync','digital out 1.0').tag('sync');
-
    
    	// Entry interface
     (function(i) {
 		i.add('sw-1','analog in 1.0').tag("in");
-		i.add('sw-2','analog in 1.1').tag("in in2");
+		i.add('sw-2','analog in 1.1').tag("in2");
 		i.refresh();
 	})($('entry'));
 
@@ -459,54 +516,36 @@ var net = new MCUNetwork();
         i.refresh();
 	})($('bedroom'));
 
+	var blink = function(event) {
+
+		if (event.blink && event.blink.active) { return; }
+		event.blink = { numRepeats : 0, active:1 };
+
+		var clearInt = setInterval(function(){ $('spotlight-1').toggle(); event.blink.numRepeats++; if (event.blink.numRepeats > 5) { clearInterval(clearInt); event.blink.active=0; } },200);
+	}
+
     // IO Logic
 	$(":in").on("change",function(event) {
 
-    event.ranges = event.ranges || [];
-    
-    var sum = 0, len = 0, abort = 0;
-
-    event.ranges.push({ v: event.value, t: event.context.timestamp } );
-
-    _.each(event.ranges,function(item) {
-        if ((event.context.timestamp - item.t) < 50) {
-            sum += item.v;
-            len++;
-        }
-    });
-
-    if (event.value > 1000) {
-    	console.log (event.context);
-    }
-
-    if (len) {
-      sum = Math.round(sum/len);
-    } else { sum = event.value; }
-
-    _.remove(event.ranges,function(item){
-       return ((event.context.timestamp - item.t) > 50);
-    });
-
-    event.sum = sum;
+    	MCUIo.timedAverageFilter(event);
 		MCUIo.throttle(event,function() { 
-				$('spotlight-1').enable(event.sum < 450)
-               $('spotlight-2').enable(event.sum > 450)
-        console.log("Sending filtered, throttled at",event.sum,event.value);
+			blink(event);
+			//$('spotlight-1').enable(event.filters.timedAverage.value < 450)
 		}, 50);
 
-		//console.log("event",event.value,sum,event.context.timestamp);
 	});
 
-  setInterval(function(){ $(':sync').enable() },2000);
+  
+	$(":in2").on("change",function(event) {
 
-	/*$(":in2").on("change",function(event) {
-
+		MCUIo.timedAverageFilter(event);
 		MCUIo.throttle(event,function() { 
-				$('spotlight-2').enable(event.value < 450)
-		}, 400);
-		console.log("event",event.value);
-	});*/
+				$('spotlight-2').enable(event.filters.timedAverage.value < 450)
+		}, 50);
+	});
 
+
+	setInterval(function(){ $(':sync').toggle() },2000);
 
 })(net.find.bind(net));
 
