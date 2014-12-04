@@ -111,6 +111,17 @@ MCUObject.prototype.on = function(eventId,fn) {
 
 }
 
+MCUObject.prototype.enable = function(val) {
+
+    if (this.childType == "mixed-multiple") {
+       _.each(this.children,function(item){
+           item.enable(val);
+       });
+    }
+
+}
+
+
 
 var MCUNetwork = function() {
 
@@ -593,7 +604,8 @@ var net = new MCUNetwork();
     // IO Logic
 	$(":in").on("change",function(event) {
 
-		if (event.value > 850) {
+		if (event.buttonDown && event.value > 850) {
+		
 			var delay = event.context.timestamp-event.buttonDown||0;
 			event.buttonDown = 0;
 			console.log('button-up',delay);
@@ -601,8 +613,9 @@ var net = new MCUNetwork();
 			event.timeOut = 0;
 			return;
 		}
+		if (event.value > 850) { return};
 
-
+		console.log('button down 1',event.value);
 		event.buttonDown = event.buttonDown || event.context.timestamp;
 		event.timeOut  = event.timeOut || setTimeout(function(){  blink(event); },4000);
 
@@ -617,16 +630,28 @@ var net = new MCUNetwork();
   
 	$(":in2").on("change",function(event) {
 
-		if (event.value > 850) {
-			console.log('button-up-2');
+		if (event.buttonDown && event.value > 850) {
+			var delay = event.context.timestamp-event.buttonDown||0;
+			event.buttonDown = 0;
+			clearTimeout(event.timeOut||0);
+			event.timeOut = 0;
+			$('spotlight-2').enable(event.filters.timedAverage.value > 450)
+			console.log('button-up2',delay,event.filters.timedAverage.value);
+
 			return;
 		}
+		if (event.value > 850) { return};
 
-		console.log('here');
 		MCUIo.timedAverageFilter(event);
+
+		event.buttonDown = event.buttonDown || event.context.timestamp;
+		event.timeOut  = event.timeOut || setTimeout(function(){   $(':out').enable(event.filters.timedAverage.value > 450); console.log('long push',event.filters.timedAverage.value > 450) },2000);
+
+
+		/*MCUIo.timedAverageFilter(event);
 		MCUIo.throttle(event,function() { 
 				$('spotlight-2').enable(event.filters.timedAverage.value < 450)
-		}, 50);
+		}, 50);*/
 	});
 
   $('spotlight-2').enable().disable().enable().disable().enable().disable().enable().disable().enable().disable();
