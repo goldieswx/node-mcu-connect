@@ -214,7 +214,7 @@ void checkDAC() {
 		for (i=0;i<MAX_ADC_CHANNELS;i++) {
 			if (ioADCRead[i]) {
 			   readValue = adcData[i];
-			   if ((readValue < 850) && ((readValue > (lastValues[i]+15)) || (readValue < (lastValues[i]-15)))) {
+			   if (/*(readValue < 850) &&*/ ((readValue > (lastValues[i]+15)) || (readValue < (lastValues[i]-15)))) {
 					  lastValues[i] = readValue;
 					  dataTrigger |= 0x01 << i;
 			   }
@@ -261,7 +261,7 @@ void checkDAC() {
 		exchangeBuffer[MAX_ADC_CHANNELS+NUM_PORTS_AVAIL+1] = chkSum & 0xFFFF;
 
 		/* Prepare usci */
-		WDTCTL = WDT_ARST_16;			 // release the dog
+		//WDTCTL = WDT_ARST_16;			 // release the dog
 		pExchangeBuff = (char*)exchangeBuffer;
 		resetUSCI();
 		UCB0RXBUF;
@@ -522,7 +522,7 @@ void initADC() {
   ADC10DTC0   = 0;
   ADC10DTC1   = 0;
 
-  ADC10CTL0 = SREF_0 + ADC10SHT_2 + MSC + ADC10ON + ADC10IE;  // Vcc,Vss as ref. Sample and hold 64 cycles
+  ADC10CTL0 = SREF_0 + ADC10SHT_3 + MSC + ADC10ON + ADC10IE;  // Vcc,Vss as ref. Sample and hold 64 cycles
   ADC10CTL1 = INCH_4 + CONSEQ_1 ;         // Channel 3, ADC10CLK/3
   ADC10AE0 = ioConfig.P1ADC;
   ADC10DTC1 = 5;                          // 5 conversions

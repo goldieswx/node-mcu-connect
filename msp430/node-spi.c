@@ -24,7 +24,7 @@
 // global declarations
 
 volatile unsigned int action;
-#define currentNodeId   3
+#define currentNodeId   4
   // id of this node
 
 #define PROCESS_BUFFER 0x01

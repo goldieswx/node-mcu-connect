@@ -234,21 +234,64 @@ MCUNode.prototype._callback = function(message) {
 
 var MCUInterface = function() {
 
-   this.superClass = MCUObject.prototype;
-   MCUInterface.super_.call(this);
-   this.childType = "interface";
-
-   this._cachedIOList = [];  // list of IO with hardware ids.
+	this.superClass = MCUObject.prototype;
+	MCUInterface.super_.call(this);
+	this.childType = "interface";
+	this._outMessageQueue = [];
+	this._cachedIOList = [];  // list of IO with hardware ids.
+	
+	this.throttleMessageQueue = MCUInterface.getThrottleMessageQueue(this);
 
 };
 
 util.inherits(MCUInterface,MCUObject);
+
+
+MCUInterface.getThrottleMessageQueue = function(self) {
+
+	return _.throttle(function(){
+		var state;
+		var aggreatedMessage = new Buffer("012345678901234567891234"); // see adce.c@processMsg for details 
+		aggreatedMessage.fill(0);
+		aggreatedMessage.writeUInt32LE(0x66,0);
+		aggreatedMessage.writeUInt32LE(self.node.id,20);
+
+		_.remove(self._outMessageQueue,function(item){
+			if (item[0] == 0x66) {
+				state = state || [item[1],item[2],item[3]];
+				state[0] |= item[1];
+				state[1] |= item[2];
+				state[2] |= item[3];
+				state[0] &= item[4];
+				state[1] &= item[5];
+				state[2] &= item[6];
+			} else {
+				self._network._sendMessage(item); 
+			}         
+		});
+
+		aggreatedMessage[1] = 0xff & state[0];
+		aggreatedMessage[2] = 0xff & state[1];
+		aggreatedMessage[3] = 0xff & state[2];
+		aggreatedMessage[4] = 0xff & state[0];
+		aggreatedMessage[5] = 0xff & state[1];
+		aggreatedMessage[6] = 0xff & state[2];
+
+		if(state) { self._network._sendMessage(aggreatedMessage); console.log(aggreatedMessage); }
+
+	},30,{leading:false,trailing:true}); 
+
+};
+
+
+
 
 MCUInterface.prototype.add = function(key,hardwareKeys) {
 
    var child = new MCUIo();
    child.key = key;
    child.node = this.node;
+   child._interface = this;
    if (_.isString(hardwareKeys)) { hardwareKeys = MCUIo.getPortMask(hardwareKeys); }
    child.hardwareKeys = hardwareKeys;
    return (this.superClass.add.bind(this))(child);
@@ -267,17 +310,17 @@ MCUInterface.prototype.refresh = function() {
     var config = { portDIR: [0,0,0], portADC: 0, portREN: [0xFF,0xFF,0xFF], portOUT: [0,0,0]};
 
     _.each(hardwareKeyList,function(item){
-    		if (item.direction == "out") { // Digital in
+    		if (item.direction == "out") { // Digital out
     			config.portDIR[item.port-1] |= item.portMask;   // enable output flag
     			config.portREN[item.port-1] &= (0xFF & ~item.portMask); // disable pullup/dn flag
     			config.portOUT[item.port-1] &= (0xFF & ~item.portMask); // disable out flag
     		} else {
     			if (item.trigger < (31)) { // ADC
-    				config.portADC |= item.trigger;
-	    			config.portOUT[item.port-1] &= (0xFF & ~item.trigger); // disable out flag
-    				config.portDIR[item.port-1] &= (0xFF & ~item.trigger); // enable output flag
-    				config.portREN[item.port-1] |= (0xFF & ~item.trigger); // disable pullup/dn flag
-    			} else { // Digital out 
+    				config.portADC |= item.configMask;
+	    			config.portOUT[item.port-1] &= (0xFF & ~item.configMask); // disable out flag
+    				config.portDIR[item.port-1] &= (0xFF & ~item.configMask); // enable output flag
+    				config.portREN[item.port-1] |= (0xFF & ~item.configMask); // disable pullup/dn flag
+    			} else { // Digital in
     				config.portDIR[item.port-1] &= (0xFF & ~item.portMask); // disable output flag
     				config.portREN[item.port-1] |= item.portMask; // enable pulldn flag
     				config.portOUT[item.port-1] &= (0xFF & ~item.portMask); // pull dn
@@ -285,9 +328,29 @@ MCUInterface.prototype.refresh = function() {
     		}
     });
 
-    console.log (config);
+	this._network._sendMessage(MCUInterface.getRefreshMessage(config,this.node.id));
 
 };
+
+MCUInterface.getRefreshMessage = function(config,id) {
+
+	var msg = new Buffer("                        ");
+	msg.fill(0);
+	msg.writeUInt8(0x55,0);
+	msg.writeUInt8(config.portDIR[0],1); 
+	msg.writeUInt8(config.portADC,2); 
+	msg.writeUInt8(config.portREN[0],3); 
+	msg.writeUInt8(config.portOUT[0],4); 
+	msg.writeUInt8(config.portDIR[1],5); 
+	msg.writeUInt8(config.portREN[1],6); 
+	msg.writeUInt8(config.portOUT[1],7); 
+	msg.writeUInt8(config.portDIR[2],8); 
+	msg.writeUInt8(config.portREN[2],9); 
+	msg.writeUInt8(config.portOUT[2],10); 
+	msg.writeUInt32LE(id,20);
+
+	return msg;
+}
 
 
 MCUInterface.prototype._callback = function(message) {
@@ -312,6 +375,7 @@ var MCUIo = function() {
    this.childType = "io";
   // this.value = undefined;
    this._callbacks = { "change":[],"up":[],"down":[]};
+  
 };
 
 util.inherits(MCUIo,MCUObject);
@@ -356,7 +420,7 @@ MCUIo.prototype.toggle = function() {
 		} else {
 			this.enable();
 		}
-
+    return this;
 };
 
 MCUIo.prototype.enable = function(value) {
@@ -365,20 +429,22 @@ MCUIo.prototype.enable = function(value) {
 	value = (value)?1:0;
 
 	if (_.isUndefined(this.value) || (this.value != value)) {
-		this._network._sendMessage(MCUIo.getMessageIoWriteDigital(this.hardwareKeys,this.node.id,value));
+    this._interface._outMessageQueue.push(MCUIo.getMessageIoWriteDigital(this.hardwareKeys,this.node.id,value));
+		this._interface.throttleMessageQueue();
 		this.value = value;
 	}
+  return this;
 
 }
 
 MCUIo.prototype.disable = function() {
 
-
 	if (_.isUndefined(this.value) || (this.value)) {
-		this._network._sendMessage(MCUIo.getMessageIoWriteDigital(this.hardwareKeys,this.node.id,0));
+    this._interface._outMessageQueue.push(MCUIo.getMessageIoWriteDigital(this.hardwareKeys,this.node.id,0));
+    this._interface.throttleMessageQueue();
 		this.value = 0;
 	}
-
+  return this;
 }
 
 
@@ -407,9 +473,7 @@ MCUIo.getMessageIoWriteDigital = function(hardwareKeys,ioKey,value) {
 		msg.writeUInt8 (0xFF & ~hardwareKeys.portMask,andAddrStart + hardwareKeys.port );    	
     }
 
-    console.log(msg);
-
-    return msg;
+   return msg;
 
 }
 
@@ -423,15 +487,17 @@ MCUIo.getPortMask = function(stringMask) {
 	}
 
 	var portNumber = keys[2].split("."); // e.g "2.3"
-	var mapping = { port: parseInt(portNumber[0]), mask: 1 << parseInt(portNumber[1]) };
+	var mapping = { port: parseInt(portNumber[0]), mask: (1 << parseInt(portNumber[1])) };
 
 	var ret = { trigger: 0, portMask: 0x00, port: mapping.port, ignorePortMask: 0, direction: keys[1]};
 
 	if (keys[0] == "analog") {
-		var tmp 				= mapping.mask;
-  			ret.trigger  		= mapping.mask;
+		// analog config is reverted 0..4 => 4..0 from writing config (0x55 messages) to triggers/events(0x66)
+		// reason for this is MSP if writing adc buffers backwards in CONSEQ_1 mode.
+  			ret.configMask  	= mapping.mask;
 			ret.ignorePortMask 	= 1;
-    		ret.analogTrigger 	= 0;  while (tmp >>= 1){ ret.analogTrigger++;  }
+			ret.analogTrigger 	= (4-parseInt(portNumber[1])); // trigger mask is backwards (than used when flashing config --> 0x55)
+			ret.trigger =  (1 << ret.analogTrigger);
 	} else {
 			ret.trigger 		= 1 << (4+mapping.port); // 1<<5 for port 1, <<6 for 2 ...
 			ret.portMask 		= mapping.mask;
@@ -456,7 +522,7 @@ MCUIo.throttle = function (e,fn,timeout) {
 
 MCUIo.timedAverageFilter = function(event) {
 
-	var averageTimeFrame = 50; // values are kept for average for 50ms
+	var averageTimeFrame = 100; // values are kept for average for 50ms
 
 	event.filters = event.filters || {};
 	event.filters.timedAverage =  event.filters.timedAverage || {};
@@ -502,8 +568,8 @@ var net = new MCUNetwork();
    
    	// Entry interface
     (function(i) {
-		i.add('sw-1','analog in 1.0').tag("in");
-		i.add('sw-2','analog in 1.1').tag("in2");
+		i.add('sw-1','analog in 1.3').tag("in");
+		i.add('sw-2','analog in 1.4').tag("in2");
 		i.refresh();
 	})($('entry'));
 
@@ -521,16 +587,29 @@ var net = new MCUNetwork();
 		if (event.blink && event.blink.active) { return; }
 		event.blink = { numRepeats : 0, active:1 };
 
-		var clearInt = setInterval(function(){ $('spotlight-1').toggle(); event.blink.numRepeats++; if (event.blink.numRepeats > 5) { clearInterval(clearInt); event.blink.active=0; } },200);
+		var clearInt = setInterval(function(){ $('spotlight-1').toggle(); event.blink.numRepeats++; if (event.blink.numRepeats > 15) { clearInterval(clearInt); event.blink.active=0; } },50);
 	}
 
     // IO Logic
 	$(":in").on("change",function(event) {
 
+		if (event.value > 850) {
+			var delay = event.context.timestamp-event.buttonDown||0;
+			event.buttonDown = 0;
+			console.log('button-up',delay);
+			clearTimeout(event.timeOut||0);
+			event.timeOut = 0;
+			return;
+		}
+
+
+		event.buttonDown = event.buttonDown || event.context.timestamp;
+		event.timeOut  = event.timeOut || setTimeout(function(){  blink(event); },4000);
+
     	MCUIo.timedAverageFilter(event);
 		MCUIo.throttle(event,function() { 
-			blink(event);
-			//$('spotlight-1').enable(event.filters.timedAverage.value < 450)
+			
+			 $('spotlight-1').enable(event.filters.timedAverage.value < 450)
 		}, 50);
 
 	});
@@ -538,11 +617,20 @@ var net = new MCUNetwork();
   
 	$(":in2").on("change",function(event) {
 
+		if (event.value > 850) {
+			console.log('button-up-2');
+			return;
+		}
+
+		console.log('here');
 		MCUIo.timedAverageFilter(event);
 		MCUIo.throttle(event,function() { 
 				$('spotlight-2').enable(event.filters.timedAverage.value < 450)
 		}, 50);
 	});
+
+  $('spotlight-2').enable().disable().enable().disable().enable().disable().enable().disable().enable().disable();
+  $('spotlight-1').enable().disable().enable().disable().enable().disable().enable().disable().enable().disable().enable();
 
 
 	setInterval(function(){ $(':sync').toggle() },2000);
