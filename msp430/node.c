@@ -21,39 +21,52 @@
 
 #define nodeId 4 
 
-#define MASTER_REQUEST_SNCC(pc) (((pc)->dataIn.destinationSncc == nodeId) && ((pc)->signalMaster)) // if master choose us as sncc and if we signalled master
-#define DO_CHECKSUM(pc,rx) ((pc)->dataOut.chksum += (rx))
-
-static register unsigned int tx = 0;
+#define MASTER_REQUEST_SNCC(pc) \ 
+		(((pc)->dataIn.destinationSncc == nodeId) && ((pc)->signalMaster)) 
+#define DO_CHECKSUM(pc,rx) \
+		((pc)->dataOut.chksum += (rx))
 
 struct PacketContainer {
 
-    int 					pointer,				// Number from 0 to sizeof(McomInPacket)-1 representing the byte number being inspected.
-	int 					incomplete,    			// When cleared, a packet has been sucessfully received from master.
-	int 					synced,					// When set, the SPI stream is potentially in sync. (when checksumCount is set, it is fully in sync.)
-	Inspector				inspect,				// Function pointer to the next/current packet inspector. 
+    int 					pointer,				
+    // Number from 0 to sizeof(McomInPacket)-1 representing the byte number being inspected.
+	int 					incomplete,    			
+	// When cleared, a packet has been sucessfully received from master.
+	int 					synced,					
+	// When set, the SPI stream is potentially in sync. (when checksumCount is set, it is fully in sync.)
+	Inspector				inspect,				
+	// Function pointer to the next/current packet inspector. 
 	int 					validChecksumCount,			
-	int     				signalMaster,			// When set, calls in a SNCC. 
-	int     				masterInquiryCommand,   // When set means, the inBuffer needs to be transferred to an ADCE.
-	int 					startMICMDCheckSum,     // When set, start Checksumming rx (MICMDs)
+	int     				signalMaster,			
+	// When set, calls in a SNCC. 
+	int     				masterInquiryCommand,   
+	// When set means, the inBuffer needs to be transferred to an ADCE.
+	int 					startMICMDCheckSum,     
+	// When set, start Checksumming rx (MICMDs)
 
-	int     				outBuffer[10],         	// Buffer to write to master (SNCCs)
-	int                     outBufferChecksum,      // When writing SNCCs, checksum of the outBuffer
-	int 					inBuffer[10],			// Buffer to write to ADCE
-
-
+	int     				outBuffer[10],         	
+	// Buffer to write to master (SNCCs)
+	int                     outBufferChecksum,      
+	// When writing SNCCs, checksum of the outBuffer
+	int 					inBuffer[10],			
+	// Buffer to write to ADCE
 	
-	struct McomInPacket 	dataIn,					// Raw data In
-	struct McomOutPacket	dataOut, 				// Raw data Out
+	struct McomInPacket 	dataIn,					
+	// Raw data In
+	struct McomOutPacket	dataOut, 				
+	// Raw data Out
 
-	unsigned char * 		pIn,					// Floating Pointer to dataIn
-	unsigned char * 		pOut,					// Floating Pointer to dataOut
+	unsigned char * 		pIn,					
+	// Floating Pointer to dataIn
+	unsigned char * 		pOut,					
+	// Floating Pointer to dataOut
 
 }
 
-/////
 
 int main() {
+
+	static register int tx = 0;
 	
 	initSPI();
 	//initADCE();
@@ -66,7 +79,7 @@ int main() {
 			while(IFG2 & UCA0RXIFG) {
 					// SPI byte received 
 					UCA0TXBUF = tx;
-					inspectAndIncrement(UCA0RXBUF,&packetContainer);
+					tx = inspectAndIncrement(UCA0RXBUF,&packetContainer);
 			}
 		}
 		transferPendingIO(); // transfer pending messages from/to adce if any
@@ -75,9 +88,9 @@ int main() {
 }
 
 
-inline void inspectAndIncrement(const register int rx, struct PacketContainer  * packetContainer) {
+inline int inspectAndIncrement(const register int rx, struct PacketContainer  * packetContainer) {
 	packetContainer->inspect(rx,packetContainer);
-	incrementPacket(rx,packetContainer);
+	return incrementPacket(rx,packetContainer);
 }
 	
 
@@ -108,12 +121,11 @@ void initializePacketContainer(struct PacketContainer * packetContainer) {
  * update the packet packetInspector with respect from the packet pointer (.pointer);
  */
 
-void incrementPacket(const register int rx, struct PacketContainer  * packetContainer) {
+int incrementPacket(const register int rx, struct PacketContainer  * packetContainer) {
 
 	if (packetContainer->synced) {
 
 		packetContainer->pIn++;
-		packetContainer->pOut++;
 		packetContainer->pointer++;
 
 		if (packetContainer->startCheckSum) DO_CHECKSUM(packetContainer,rx);
@@ -131,17 +143,28 @@ void incrementPacket(const register int rx, struct PacketContainer  * packetCont
 				packetContainer->inspect = &noActionEvent;
 		}
 
+		return *(packetContainer->pOut++);
+
 	} else 	{
 		rescue (rx,packetContainer);
+		return 0;
 	}
 
 }
 
 
+/**
+ * function endOfHeaderEvent()
+ */
+
 void endOfHeaderEvent		(const register int rx,  const  PacketContainer * packetContainer) {
 
 	packetContainer->outPacket.signalMask1 = (packetContainer->signalMaster << nodeId);
 }
+
+/**
+ * function endOfHeaderEvent()
+ */
 
 void endOfDestinationEvent	(const register int rx,  const  PacketContainer * packetContainer) {
 
@@ -156,12 +179,19 @@ void endOfDestinationEvent	(const register int rx,  const  PacketContainer * pac
 
 }
 
+/**
+ * function endOfHeaderEvent()
+ */
+
 void packetCheckSumEvent	(const register int rx,  const  PacketContainer * packetContainer) {
 
 	packetContainer->pOut = &packetContainer->dataOut[packetContainer->pointer]; // Reset floating pointer to dataOut
 
 }
 
+/**
+ * function endOfHeaderEvent()
+ */
 
 void endOfPacketEvent		(const register int rx, const  PacketContainer * packetContainer) {
 
@@ -179,6 +209,10 @@ void endOfPacketEvent		(const register int rx, const  PacketContainer * packetCo
 	}
 	
 }
+
+/**
+ * function endOfHeaderEvent()
+ */
 
 void noActionEvent			(const register int rx, const  PacketContainer * packetContainer) {
 
@@ -214,6 +248,10 @@ inline void rescue (const register int rx,  const PacketContainer * packetContai
 			endOfHeaderEvent(rx,packetContainer);
 		}
 }
+
+/**
+ * function endOfHeaderEvent()
+ */
 
 
 void transferPendingIO() {
