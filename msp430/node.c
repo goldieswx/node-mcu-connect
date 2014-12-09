@@ -17,33 +17,56 @@
 #include "msp430g2553.h"
 #include <legacymsp430.h>
 
-// global declarations
+///// GLOBAL DECLARATIONS
 
-McomInPacket    inPacket;
-McomOutPacket   outPacket;
+#define nodeId 4 
 
-unsigned char * pInPacket;
-unsigned char * pOutPacket;
+#define MASTER_REQUEST_SNCC(pc) (((pc)->dataIn.destinationSncc == nodeId) && ((pc)->signalMaster)) // if master choose us as sncc and if we signalled master
+#define DO_CHECKSUM(pc,rx) ((pc)->dataOut.chksum += (rx))
 
 static register unsigned int tx = 0;
-static register FUNC packetInspectorEvent;
 
-static unsigned int packetPtr;
-static unsigned int incompletePacket = 1;
+struct PacketContainer {
 
+    int 					pointer,				// Number from 0 to sizeof(McomInPacket)-1 representing the byte number being inspected.
+	int 					incomplete,    			// When cleared, a packet has been sucessfully received from master.
+	int 					synced,					// When set, the SPI stream is potentially in sync. (when checksumCount is set, it is fully in sync.)
+	Inspector				inspect,				// Function pointer to the next/current packet inspector. 
+	int 					validChecksumCount,			
+	int     				signalMaster,			// When set, calls in a SNCC. 
+	int     				masterInquiryCommand,   // When set means, the inBuffer needs to be transferred to an ADCE.
+	int 					startMICMDCheckSum,     // When set, start Checksumming rx (MICMDs)
+
+	int     				outBuffer[10],         	// Buffer to write to master (SNCCs)
+	int                     outBufferChecksum,      // When writing SNCCs, checksum of the outBuffer
+	int 					inBuffer[10],			// Buffer to write to ADCE
+
+
+	
+	struct McomInPacket 	dataIn,					// Raw data In
+	struct McomOutPacket	dataOut, 				// Raw data Out
+
+	unsigned char * 		pIn,					// Floating Pointer to dataIn
+	unsigned char * 		pOut,					// Floating Pointer to dataOut
+
+}
+
+/////
 
 int main() {
 	
 	initSPI();
 	//initADCE();
 
+	PacketContainer packetContainer;
+	initializePacketContainer (&packetContainer);
+
 	while(1) {	
-		while(incompletePacket) {
+		while(packetContainer.incomplete) {
 			while(IFG2 & UCA0RXIFG) {
 					// SPI byte received 
 					UCA0TXBUF = tx;
-					packetInspectorEvent(UCA0RXBUF);
-					updatePacketInspectorPtr();
+					inspectAndIncrement(UCA0RXBUF,&packetContainer);
 			}
 		}
 		transferPendingIO(); // transfer pending messages from/to adce if any
@@ -52,129 +75,190 @@ int main() {
 }
 
 
-inline void updatePacketInspectorPtr() {
+inline void inspectAndIncrement(const register int rx, struct PacketContainer  * packetContainer) {
+	packetContainer->inspect(rx,packetContainer);
+	incrementPacket(rx,packetContainer);
+}
+	
 
-	pInPacket++;
-	pOutPacket++;
-	packetPtr++;
 
-	switch (packetPtr) {
-		case 4:
-			packetInspectorEvent = &endOfPreambleEvent;
-		case 8:
-			packetInspectorEvent = &endOfHeaderEvent;
-		case 20:
-			packetInspectorEvent = &packetCheckSumEvent;
-		case 32:
-			packetInspectorEvent = &endOfPacketEvent
-		default:
-			packetInspectorEvent = &noActionEvent;
+/**
+ * function  initializePacketContainer()
+ * Initialises/reset the pacektContrainer structure.
+ *
+ * Sets the incomplete flag, reset start of floating In and Out Pointers.
+ * Sets the packet inspector to noActionEvent
+ * The rest is Zeroed 
+ */
+
+void initializePacketContainer(struct PacketContainer * packetContainer) {
+
+	setmem(packetContainer,0,sizeof(struct PacketContainer));
+	packetContainer->inspect 	= &noActionEvent;
+	packetContainer->incomplete = 1;
+	packetContainer->pIn	= &packetContainer->dataIn;
+	packetContainer->pOut 	= &packetContainer->dataOut;
+}
+
+
+/**
+ * function  incrementPacket()
+ *
+ * increment the in/out Packet floating pointers
+ * update the packet packetInspector with respect from the packet pointer (.pointer);
+ */
+
+void incrementPacket(const register int rx, struct PacketContainer  * packetContainer) {
+
+	if (packetContainer->synced) {
+
+		packetContainer->pIn++;
+		packetContainer->pOut++;
+		packetContainer->pointer++;
+
+		if (packetContainer->startCheckSum) DO_CHECKSUM(packetContainer,rx);
+
+		switch (packetContainer->pointer) {
+			case PTR_END_OF_HEADER:
+				packetContainer->inspect = &endOfHeaderEvent;
+			case PTR_END_OF_DESTINATION:
+				packetContainer->inspect = &endOfDestinationEvent;
+			case PTR_END_OF_CHECKSUM: // 1B before chk
+		 		packetContainer->inspect = &packetCheckSumEvent;
+			case PTR_END_OF_PACKET:
+				packetContainer->inspect = &endOfPacketEvent
+			default:
+				packetContainer->inspect = &noActionEvent;
+		}
+
+	} else 	{
+		rescue (rx,packetContainer);
 	}
 
 }
 
 
-void endOfPreambleEvent		(register int rx) {
-	// check validity of preamble event
-	// send sncc id if pending
+void endOfHeaderEvent		(const register int rx,  const  PacketContainer * packetContainer) {
+
+	packetContainer->outPacket.signalMask1 = (packetContainer->signalMaster << nodeId);
+}
+
+void endOfDestinationEvent	(const register int rx,  const  PacketContainer * packetContainer) {
+
+
+ 	if (MASTER_REQUEST_SNCC(packetContainer))    {
+        packetContainer->pOut = packetContainer->outBuffer;    					// Stream out buffer as of now.
+    }
+
+	packetContainer->dataOut.chkSum = 0; 										// Reset Checksum
+    packetContainer->startMICMDCheckSum = MASTER_SENDING_MICMD(packetContainer);
+	packetContainer->dataOut.snccChksum = packetContainer->outBufferChecksum; 
 
 }
 
-void endOfHeaderEvent		(register int rx) {
+void packetCheckSumEvent	(const register int rx,  const  PacketContainer * packetContainer) {
+
+	packetContainer->pOut = &packetContainer->dataOut[packetContainer->pointer]; // Reset floating pointer to dataOut
 
 }
 
-void packetCheckSumEvent	(register int rx) {
-	// send sncc packet checksum
-	// send micmd packet checksum
-	// send micmd packet checksum if busy.
-}
 
-void endOfPacketEvent		(register int rx) {
+void endOfPacketEvent		(const register int rx, const  PacketContainer * packetContainer) {
 
-	// (MICMD Successful (or no MICMD)) AND (No more sncc pending)  then incompletePacket = 0;
-	// Otherwise incompletePacket = 1;
-    
-}
+	if (MASTER_REQUEST_SNCC(packetContainer)) {  
+		if (packetContainer->dataIn.snccCheckSum == packetContainer->outBufferChecksum ) { 
+			packetContainer->signalMaster = 0;
+		}
+	}
 
-void noActionEvent			(register int rx) {
-	*pInPacket = rx;
-}
-
-
-void transferPendingIO() {
+	if (MASTER_SENDING_MICMD(packetContainer)) { 
+		if (packetContainer->dataIn.checkSum == packetContainer.dataOut.checkSum) {
+			TRIGGER_ACTION_EXIT_LPM(MI_CMD_ACTION);
+				//__bic_SR_register_on_exit(LPM3_bits); // exit LPM, keep global interrupts state      
+		}
+	}
 	
-	// check P1IN (adce intr) for a hi signal
-	// do if(p1in or micmd pending) 
-		// bring SIGNAL hi to adce
-		// initiate spi transfer
-		// bring SIGNAL lo to adce
-		// (repeat until valid checksums)
-	// incompletepacket = 1
+}
+
+void noActionEvent			(const register int rx, const  PacketContainer * packetContainer) {
+
+	if (packetContainer->synced) {
+		packetContainer->pIn = rx;
+	}
 
 }
 
 
 /**
- * MCOM Related
+ *	function rescue()
+ *
+ *  When the packet is in unsynced mode.
+ *  Scan the incoming stream to find a MI_RESCUE long byte.
+ *  When found, this is a candidate for a start of packet, thus update the packet state with synced.
  */
-void mcomProcessBuffer() {
 
-	 __enable_interrupt();
+inline void rescue (const register int rx,  const PacketContainer * packetContainer) {
+	
+		packetContainer->pInPacket = (unsigned char*) &packetContainer->inPacket;
 
-	 if (!busy) { _memcpy(inDataCopy,inPacket.data,20); }
-	 busy = 1;
+		unsigned char * rescuePtrSrc = pInPacket;
+		*pInPacket++ = *rescuePtrSrc++;
+		*pInPacket++ = *rescuePtrSrc++;
+		*pInPacket++ = *rescuePtrSrc;	
+		*pInPacket = rx;
 
-	 if (_CNM_PIN & CS_NOTIFY_MASTER)  {
-		  // adce is currently transferring something, just wait and retry.
-		  TA0CCR0 = 500;
-		  TA0CTL = TASSEL_1 | MC_1 ;             // Clock source ACLK
-		  TA0CCTL1 = CCIE ;                      // Timer A interrupt enable
-	 } else {
-		 // clear to send to adce, just go.
-		  P2OUT ^= BIT7;
-		_CIP_POUT |= CS_INCOMING_PACKET;  // Dear ADCe, We have some data that needs to be transferred.
-		action |= ADC_CHECK;
-	 }
+		if ((*(long *)&inPacket) == MI_RESCUE) {
+			packetContainer->pointer = PTR_END_OF_HEADER;
+			packetContainer->incomplete = 1;
+			packetContainer->checksumCount = 0;
+			endOfHeaderEvent(rx,packetContainer);
+		}
+}
 
-	 action &= ~PROCESS_BUFFER;
 
-	 // when we release the action (process_buffer), we will stop being busy and
-	 // contents of inBuffer must be ready to reuse
-	 // (and will be destroyed)
-	return;
+void transferPendingIO() {
+	
+   if (signalMaster || outPacket.signalMask1) { // since we started receving the pkgs master was signalled
+              UCA0TXBUF = 0x80 | currentNodeId;
+   }
+
+/*
+	----- SCK
+	----- SDI
+	----- SDO
+	----- A  (SIG, common)
+	----- B  (INTR, particular)
+
+   //OUT [A HIGH] [AC] [A LOW] [AC] [iid] [20b] [cso] [A HIGH] [cso] [A LOW]
+   // IN 			[00]         [00] [000]	[20b] [csi]          [csi]
+
+ 	// cycle B pins
+	if (_CNM_PIN & CS_NOTIFY_MASTER || pendingMICmd )  {
+		_CIP_POUT |= CS_INCOMING_PACKET;
+		while(1) {
+			// A LOW
+			__delay_cycles(100);
+			// A HIGH
+			if (transfer(0xAC) != 0xAC) continue;
+			// A LOW
+			if (transfer(0xAC) != 0xAC)	continue;
+			//
+
+			headIn	= transfer(head);
+			chkIn 	= transfer(checkSum);
+			buf[i] 	= transfer(buffer);
+
+			break;
+		}
+		_CIP_POUT &= ~CS_INCOMING_PACKET;
+		__delay_cycles(100);
+	} */
 
 }
 
 
 
 
-
-void _signalMaster() {
-  
-
-	int i;
-	unsigned int chk = 0;
-	for (i=0;i<20;i++) {
-	  chk += outBuffer[i];
-	}
-
-	outBuffer[20] = chk & 0xFF;
-	outBufferCheckSum = chk;
-
-	__disable_interrupt();  
-
-	signalMaster = 1;
-	// in case we are synced (out of a rescue, and not in a middle of a packet, force MISO high to signal master.)
-	//__disable_interrupt();
-	if (mcomPacketSync && (pInPacket == (unsigned char*)&inPacket)) { // not in receive state, but synced
-	  if (UCA0TXIFG) {
-		UCA0TXBUF = 0x80 | currentNodeId;
-	  }
-	}
-
-  
-}
 
 
 
@@ -183,20 +267,20 @@ void initSPI() {
   // UART A (main comm chanell with MASTER)
   //     (bit1 = MISO, bit2 = MOSI, BIT4 = SCLK)
  
-  P1DIR |= BIT1;
-  P1DIR &= ~(BIT2 | BIT4);
-  P1SEL &=  ~(BIT1 | BIT2 | BIT4);
-  P1SEL2 &=  ~(BIT1 | BIT2 | BIT4);
+	P1DIR	|= BIT1;
+	P1DIR	&= ~(BIT2 | BIT4);
+	P1SEL 	&=  ~(BIT1 | BIT2 | BIT4);
+	P1SEL2 	&=  ~(BIT1 | BIT2 | BIT4);
 
-  P1SEL |=  BIT1 | BIT2 | BIT4;
-  P1SEL2 |=  BIT1 | BIT2 | BIT4;
-	
-  UCA0CTL1 = UCSWRST;                       // **Put state machine in reset**
-  __delay_cycles(10);
-  UCA0CTL0 |= UCCKPH + UCMSB + UCSYNC;     // 3-pin, 8-bit SPI slave
-  UCA0CTL1 &= ~UCSWRST;                     // **Initialize USCI state machine**
+	P1SEL 	|=  BIT1 | BIT2 | BIT4;
+	P1SEL2 	|=  BIT1 | BIT2 | BIT4;
 
-  UCA0TXBUF = 0x00;                         // We do not want to ouput anything on the line
+	UCA0CTL1 = UCSWRST;                       // **Put state machine in reset**
+	__delay_cycles(10);
+	UCA0CTL0 |= UCCKPH + UCMSB + UCSYNC;     // 3-pin, 8-bit SPI slave
+	UCA0CTL1 &= ~UCSWRST;                     // **Initialize USCI state machine**
+
+	UCA0TXBUF = 0x00;                         // We do not want to ouput anything on the line
 
 }
 
@@ -219,186 +303,6 @@ void initGlobal() {
 
   P2DIR |= BIT6 + BIT7;  
 }
-
-
-
-// INTERRUPTS
-interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
-
-  unsigned char savepInPacket = (*pInPacket); 
-
-   if (UCA0STAT & UCOE) {
-  // buffer overrun occured
-	  mcomPacketSync = 0;
-	  WDTCTL = WDTHOLD;
-   }
-
-  (*pInPacket) = UCA0RXBUF;
- 
-	  if (mcomPacketSync) {
-
-	   UCA0TXBUF = (*pOutPacket++);
-
-		/* case pckBndPacketEnd */
-		if (pInPacket==pckBndPacketEnd) { 
-			UCA0TXBUF = 0x00;
-			//P2OUT |= BIT7;
-			if (inPacket.destinationSncc == currentNodeId) {  // there was a sncc transfer
-				if (inPacket.snccCheckSum == outBufferCheckSum) { // successful
-					outPacket.signalMask1 = 0; // clear signal mask meaning master received the sncc buffer.
-					
-					action |= processPendingActionUponSNCC;
-					processPendingActionUponSNCC = 0;
-					if (action) {  __bic_SR_register_on_exit(LPM3_bits); }
-					#ifdef node2_0  
-					  // P2OUT ^= BIT6;
-					#else
-					   //UT ^= BIT0;
-					  //action |= ADC_CHECK;    
-					#endif
-				}
-			}
-			pInPacket = (unsigned char*)&inPacket;
-			pInPacket--; // -- since it is sytematically increased
-			pOutPacket = (unsigned char*)&outPacket;
-			pOutPacket++; // -- since we are sytematically 1B late
-
-			if (signalMaster || outPacket.signalMask1) { // since we started receving the pkgs master was signalled
-			  UCA0TXBUF = 0x80 | currentNodeId;
-			}
-
-			if (inPacket.destinationCmd == currentNodeId) { // there was a mi cmd
-			  if (inPacket.chkSum == outPacket.chkSum) {
-				   #ifdef node2_0  
-					  //P2OUT &= inPacket.data[0];
-					  //P2OUT |= inPacket.data[1];
-					  //action |= ADC_CHECK;    
-					  //_signalMaster();
-					  //P2OUT ^= BIT7;
-					#else
-					  P1OUT ^= BIT3;
-					#endif
-				 action |= PROCESS_BUFFER;
-				  __bic_SR_register_on_exit(LPM3_bits); // exit LPM, keep global interrupts state      
-			  }
-			}
-			goto afterChecks;
-		}
-
-		/* case pckBndHeaderEnd */
-		if (pInPacket==pckBndHeaderEnd) {
-			  if ((*(long *)&inPacket) == MI_RESCUE) {
-				  outPacket.signalMask1 |= (signalMaster << currentNodeId);
-				  signalMaster = 0;
-			  } else {
-				  mcomPacketSync = 0;
-				  preserveInBuffer = 0;
-				  inPacket.preamble =0;
-				  inPacket.cmd = 0;
-			  }
-			goto afterChecks;
-		}
-
-		/* case pckBndDestEnd */
-		if (pInPacket==pckBndDestEnd) {
-
-			 if ((inPacket.destinationSncc == currentNodeId) && (outPacket.signalMask1)) {
-				 // if master choose us as sncc and if we signalled master
-				pOutPacket = outBuffer; // outBuffer contains sncc data payload
-			 }
-			 checkSum = 0; // start checksumming
-			 if (busy || (action & PROCESS_BUFFER)) {  // we are busy, preserve the input buffer, we
-											 // are processing it
-				*pInPacket = 0; // normally this is a reserved byte
-								// force to 0 just so checksum will be correct in any case
-				preserveInBuffer = 1;
-			 }
-			 goto afterChecks;
-		 }
-		 /* case pckBndDataEnd */
-		 if  (pInPacket==pckBndDataEnd) {
-			 // exchange chksums
-			 pOutPacket = (unsigned char*) &(outPacket.chkSum);
-			 pOutPacket--;
-
-			 if ((inPacket.destinationSncc == currentNodeId)  // it's our turn (sncc)
-				 && (outPacket.signalMask1)) {               //  we signalled master
-				outPacket.snccCheckSum = outBufferCheckSum;
-			 } else {
-				outPacket.snccCheckSum = 0;
-			 } 
-			 if ((!preserveInBuffer) && (inPacket.destinationCmd == currentNodeId)) 
-			 {   // also send cmd chk if it's its turn and if we are not busy 
-				outPacket.chkSum = checkSum + (*pInPacket);
-			 } else {
-				if (inPacket.destinationCmd == currentNodeId) {
-					outPacket.chkSum = checkSum + (*pInPacket)+1; // send out a bad chksum if we can transmi data on the line, otherwise say 0
-				} else {
-					outPacket.chkSum = 0; // just shut up (not our turn)
-				}
-			 }
-			 preserveInBuffer = 0;
-		  }
-	  /* after all error checks */    afterChecks:
-	  checkSum += (*pInPacket);
-	  if (preserveInBuffer) { (*pInPacket) = savepInPacket; }
-	  pInPacket++;
-	  return;
-
-  } else {
-	  UCA0TXBUF = 0x00;
-	// scan stream and try to find a preamble start sequence
-	// (Oxac Oxac KNOWN CMD)
-	// we are in the intr and have very few cycles to intervene 
-		pInPacket = (unsigned char*)&inPacket;
-		unsigned char* rescuePtrSrc = pInPacket;
-		rescuePtrSrc++;
-
-		*pInPacket++ = *rescuePtrSrc++;
-		*pInPacket++ = *rescuePtrSrc++;
-		*pInPacket++ = *rescuePtrSrc;
-		*pInPacket++ = UCA0RXBUF;
-	  
-		if ((*(long *)&inPacket) == MI_RESCUE) {
-			// On (first) sync:
-			//Enable INTR interrupt on raising edge.
-
-			_CNM_PIE |=  CS_NOTIFY_MASTER ; 
-			_CNM_PIFG |=  _CNM_PIN & CS_NOTIFY_MASTER; // force interrupt to be called if input is already high.
-
-		  mcomPacketSync++;
-		  // sync out buffer also.
-		  pOutPacket = ((unsigned char*)&outPacket)+5; // sizeof double preamble, cmd + late byte
-		} else {
-		  if(transmissionErrors++ >= 100) {
-			WDTCTL = WDTHOLD;
-		  }
-		}
-
-  }
-  return;
-}
-
-
-
-
-interrupt(_CNM_PORT_VECTOR) p2_isr(void) { //PORT2_VECTOR
-
-  //__enable_interrupt();
-
-  if (_CNM_PIFG & CS_NOTIFY_MASTER) {
-	 if (signalMaster||outPacket.signalMask1)  { 
-		processPendingActionUponSNCC = ADC_CHECK;
-	 } else {
-		 action |= ADC_CHECK;
-		__bic_SR_register_on_exit(LPM3_bits + GIE); // exit LPM     
-	 }
-  }
-
-  _CNM_PIFG &= 0;
-  return;
-  
-} 
 
 
 /**
@@ -425,55 +329,6 @@ void initADCE() {
   //power the extension
   //P1DIR |= BIT3;
   //P1OUT |= BIT3;
-}
-
-void checkADC() {
-
-	__enable_interrupt();         // Our process is low priority, only listenning to master spi is the priority.
-
-
-	while (!(_CNM_PIN & CS_NOTIFY_MASTER)) {
-	  __delay_cycles(1000);
-	}
-	_CIP_POUT &= ~CS_INCOMING_PACKET;   // release extension signal
-
-	__delay_cycles(4000);  // Give some time to ADCE to react
-	__delay_cycles(4000);  // Give some time to ADCE to react
-	__delay_cycles(4000);  // Give some time to ADCE to react
-
-
-   // static int debug = 0;
-
-	transfer(0xAC); // we should check preamble received
-	transfer(0xAC);
-
-	unsigned int i;
-	unsigned char trsfBuf[20];
-	for (i=0;i<19;i++) {
-		 //outBuffer[i] = transfer(inDataCopy[i]);
-		 trsfBuf[i] = transfer(inDataCopy[i]);
-	}
-
-	_CIP_POUT ^= CS_INCOMING_PACKET;   // pulse signal for last byte.
-	//outBuffer[19] = transfer(inDataCopy[19]);
-	trsfBuf[19] = transfer(inDataCopy[i]);
-	_CIP_POUT ^= CS_INCOMING_PACKET;   // pulse signal for last byte.
-  
-	//outBuffer[19] = debug++;
-	//debug %= 256;
-
-	if (trsfBuf[12] && (!(signalMaster||outPacket.signalMask1))) { 
-
-		_memcpy(outBuffer,trsfBuf,20);
-		_signalMaster(); 
-	} // TODO : else, there is something in the OutBuffer, and we have sent out in the return a
-	  // cmd to the adce and received another OutBuffer, yet we have now 2 buffer to process, this shouldn' happen, fix, pass a param
-	  // in the spi stream saying node busy or buffer this .
-
-
-	busy = 0; // we're finished with buffer
-	action &= ~ADC_CHECK;            // Clear current action flag.
-	return;
 }
 
 
