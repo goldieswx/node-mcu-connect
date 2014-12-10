@@ -14,15 +14,19 @@
 */
 
 
-#include "msp430g2553.h"
-#include <legacymsp430.h>
+//#include "msp430g2553.h"
+//#include <legacymsp430.h>
 
 #include "string.h"
 
 ///// GLOBAL DECLARATIONS
 
 #define nodeId 4
-#define MI_RESCUE   0x220aacac
+#define MI_RESCUE 0xacac0a22 //  0x220aacac
+
+#define BIT2 0 
+#define BIT1 1
+#define BIT4 0
 
 #define USCI_CONFIG_BITS_IN     (BIT2 | BIT4)
 #define USCI_CONFIG_BITS_OUT    (BIT1)
@@ -39,15 +43,14 @@
 #define DO_CHECKSUM(pc,rx) \
                 ((pc)->dataOut.chkSum += (rx))
 
-#define SWITCH_LOW_POWER_MODE   __bis_SR_register(LPM3_bits + GIE)
+#define SWITCH_LOW_POWER_MODE  //   __bis_SR_register(LPM3_bits + GIE)
 
 
-#define PTR_END_OF_HEADER               (4)
-#define PTR_END_OF_DESTINATION          (PTR_END_OF_HEADER+ 2)
+#define PTR_END_OF_DESTINATION          (3)
 #define PTR_END_OF_CHECKSUM             (PTR_END_OF_DESTINATION  + 22)
 #define PTR_END_OF_PACKET               (PTR_END_OF_CHECKSUM + 4)
 
-#define word int
+#define word short 
 
 struct McomInPacket {
   unsigned word                                 preamble;
@@ -116,9 +119,6 @@ struct PacketContainer {
 
 
 int             initializePacketContainer(struct PacketContainer * packetContainer);
-void            initGlobal();
-void            initADCE();
-void            initializeUSCI();
 
 int             incrementPacket(const register int rx, struct PacketContainer  * packetContainer);
 inline void 	rescue (const register int rx, struct PacketContainer * packetContainer);
@@ -133,20 +133,35 @@ void 			prepareNextPacketCyle	(struct PacketContainer* packetContainer);
 
 int main() {
 
-    initializeUSCI();
+    //initializeUSCI();
     inspectAndIncrement(0); // initialize static container.
 
-    SWITCH_LOW_POWER_MODE;
+    //SWITCH_LOW_POWER_MODE;
 
-    while(1);
+    //while(1);
+    
+    unsigned char b[] = {0xAC,0xAC,0x0A,0x22,0x04,0x04,0x00,0x00,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,0,0,210,0};
+
+    int i = 0;
+    for (i=0;i<sizeof(b);i++) {
+       intr(b[i]);
+    }
+
+
+
+
 }
 
-interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
+//interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
+void intr(int UCA0RXBUF)
+{
     static int tx;
 
-    UCA0TXBUF = tx;
+    //UCA0TXBUF = tx;
     tx = inspectAndIncrement(UCA0RXBUF);
+   
+
 
 }
 
@@ -155,12 +170,18 @@ inline int inspectAndIncrement(const register int rx) {
 
 	static struct PacketContainer packetContainer;
 
+ 
 	if (packetContainer.initialized) {
+                *(packetContainer.pIn) = rx;
 		packetContainer.inspect(rx,&packetContainer);
-		return incrementPacket(rx,&packetContainer);
+		int tx;
+		tx = incrementPacket(rx,&packetContainer);
+		printf("TX : %x , RX: %x, pointer: %d, pin %x, pout %x \n",tx,rx,packetContainer.pointer,packetContainer.pIn,packetContainer.pOut);
+		return tx;
 	}
 
 	return initializePacketContainer(&packetContainer);
+
 }
 
 
@@ -183,6 +204,16 @@ int initializePacketContainer(struct PacketContainer * packetContainer) {
 	packetContainer->pOut                   = (unsigned char*)&packetContainer->dataOut;
 	packetContainer->initialized    = 1;
 
+	packetContainer->dataOut.data[0] = 1;
+	packetContainer->dataOut.data[1] = 2;
+	packetContainer->dataOut.data[2] = 3;
+	packetContainer->dataOut.data[3] = 4;
+	packetContainer->dataOut.data[4] = 5;
+
+	packetContainer->outBufferChecksum = 0xFFAB;
+	packetContainer->outBuffer[5] = 0xFFAB;
+	packetContainer->signalMaster = 1;
+
 	return 0;
 }
 
@@ -203,9 +234,6 @@ int incrementPacket(const register int rx, struct PacketContainer  * packetConta
 	if (packetContainer->startMICMDCheckSum) DO_CHECKSUM(packetContainer,rx);
 
 		switch (packetContainer->pointer) {
-			case PTR_END_OF_HEADER:
-				packetContainer->inspect = (Inspector) &endOfHeaderEvent;
-				break;
 			case PTR_END_OF_DESTINATION:
 				packetContainer->inspect = (Inspector) &endOfDestinationEvent;
 				break;
@@ -234,7 +262,7 @@ int incrementPacket(const register int rx, struct PacketContainer  * packetConta
 void endOfHeaderEvent           (const register int rx,  struct  PacketContainer * packetContainer) {
 
 	packetContainer->dataOut.signalMask1 = (packetContainer->signalMaster << nodeId);
-
+        printf("End of Header\n");
 }
 
 /**
@@ -245,12 +273,15 @@ void endOfDestinationEvent      (const register int rx,  struct  PacketContainer
 
 	if (MASTER_REQUEST_SNCC(packetContainer))    {
 		packetContainer->pOut = (unsigned char*)packetContainer->outBuffer;                                     // Stream out buffer as of now.
+              printf("Requested SNCC\n");
 	}
 
 	packetContainer->dataOut.snccCheckSum = packetContainer->outBufferChecksum;
 
 	packetContainer->dataOut.chkSum = 0;                                                                            // Reset Checksum
 	packetContainer->startMICMDCheckSum = MASTER_SENDING_MICMD(packetContainer);
+
+        printf("End of Destination [%x]\n", packetContainer->startMICMDCheckSum  );
 
 }
 
@@ -260,7 +291,12 @@ void endOfDestinationEvent      (const register int rx,  struct  PacketContainer
 
 void packetCheckSumEvent        (const register int rx,  struct  PacketContainer * packetContainer) {
 
-	packetContainer->pOut = (unsigned char*)&packetContainer->dataOut + packetContainer->pointer -1; // Reset floating pointer to dataOut
+packetContainer->startMICMDCheckSum = 0;
+	    packetContainer->pOut = (unsigned char*)&packetContainer->dataOut.snccCheckSum  ; // Reset floating pointer to dataOut
+//packetContainer->dataOut.snccCheckSum = 0x1234;
+//packetContainer->dataOut.chkSum = 0x5678 ;
+
+        printf("End of Checksum [%x]\n",packetContainer->dataOut.chkSum);
 
 }
 
@@ -282,7 +318,9 @@ void endOfPacketEvent           (const register int rx, struct  PacketContainer 
 			packetContainer->masterInquiryCommand = 1;
 		}
 	}
-	prepareNextPacketCyle(packetContainer);
+
+        printf("End of Packet\n");
+	//prepareNextPacketCyle(packetContainer);
 
 }
 
@@ -292,6 +330,7 @@ void endOfPacketEvent           (const register int rx, struct  PacketContainer 
  * dummy event inspector
  */
 void noActionEvent                      (const register int rx, const struct  PacketContainer * packetContainer) {
+       printf("No Action\n");
 }
 
 
@@ -326,11 +365,18 @@ inline void rescue (const register int rx, struct PacketContainer * packetContai
 	*p = *(--rescuePtrSrc); p--;
 	*p = *(--rescuePtrSrc); p--;
 	*p = *(--rescuePtrSrc); p--;
-	*p = rx;
+	*p = rx;        
+
+
+printf("Rescue : %x vs %x, %x %x\n",(*(long *)rescuePtrSrc));
 
 	if ((*(long *)rescuePtrSrc) == MI_RESCUE) {
-		packetContainer->pOut = (unsigned char*) &packetContainer->dataOut + 3;
-		packetContainer->pointer = PTR_END_OF_HEADER;
+
+	    packetContainer->pIn = (unsigned char*) &packetContainer->dataIn + 4;
+		printf("OK SYNC\n(pin=%x)",packetContainer->pIn);
+	
+		packetContainer->pOut = (unsigned char*) &packetContainer->dataOut + 5;
+		packetContainer->pointer = 2;
 		packetContainer->incomplete = 1;
 		packetContainer->validChecksumCount = 0;
 		packetContainer->synced = 1;
@@ -387,66 +433,8 @@ void transferPendingIO() {
 
 
 
-/**
- * function intializeUSCI()
- * UART A (main comm chanell with MASTER)
- *    (bit1 = MISO, bit2 = MOSI, BIT4 = SCLK)
- */
-
-void initializeUSCI() {
-
-        P1DIR   |=      USCI_CONFIG_BITS_OUT;
-        P1DIR   &=      ~USCI_CONFIG_BITS_IN;
-        P1SEL   &=  ~USCI_CONFIG_BITS;
-        P1SEL2  &=  ~USCI_CONFIG_BITS;
-        P1SEL   |=  USCI_CONFIG_BITS;
-        P1SEL2  |=  USCI_CONFIG_BITS;
-
-        UCA0CTL1 = UCSWRST;                                             // Reset USCI
-        __delay_cycles(10);
-        UCA0CTL0 |= UCCKPH + UCMSB + UCSYNC;    // 3-pin, 8-bit SPI slave
-        UCA0CTL1 &= ~UCSWRST;                                   // Enable USCI
-        UCA0TXBUF = 0x00;                                               // SIlent output
-        while(IFG2 & UCA0RXIFG);
-        IE2 |= UCA0RXIE;                                                // Enable USCI0 RX interrupt
-}
 
 
 
 
-void initGlobal() {
-
-        WDTCTL = WDTPW + WDTHOLD;                               // Stop watchdog timer
-        BCSCTL1 = CALBC1_12MHZ;
-        DCOCTL = CALDCO_12MHZ;
-        BCSCTL3 |= LFXT1S_2;                                    // Set clock source to VLO (low power osc for timer)
-
-        P1REN &= 0;
-        P1OUT &= 0;
-        P2REN &= 0;
-
-        P2SEL2 &= 0;
-        P2SEL &= 0;
-
-        P2DIR |= BIT6 + BIT7;                                   // Debug LEDs
-}
-
-
-/**
- *  ADCE Related
- */
-/*
-void initADCE() {
-
-  _CNM_PDIR &= ~CS_NOTIFY_MASTER ;
- // _CNM_PIE |=  CS_NOTIFY_MASTER ;
-  _CNM_PIFG &= ~CS_NOTIFY_MASTER;
-  _CNM_PIES &= ~CS_NOTIFY_MASTER ;
-  _CNM_PREN |=  CS_NOTIFY_MASTER;
-
-  _CIP_PDIR |= CS_INCOMING_PACKET;
-  _CIP_POUT &= ~CS_INCOMING_PACKET;
-
-}
-*/
 
