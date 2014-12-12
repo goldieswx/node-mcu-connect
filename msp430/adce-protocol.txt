@@ -1,5 +1,76 @@
 
 
+
+
+
+
+masterInquiry;
+
+
+if (clearMasterInquiry)
+{
+	masterInquiry = 0;
+}
+clearMasterInquiry = 0
+
+	clearMasterInquiry { 
+		if (clearMasterInquiry) return   
+		if(!masterInquiry) return  
+		clearMasterInquiry = 1;
+	}
+
+
+
+
+NODE
+
+pendingInterrupts = 0x1 | 0x2 | 0x4; // interrupt received from ADCE and not taken in care
+beingProcessed = 0x04
+lastADCEServiced = 0x2;
+	
+
+	INTERRUPT {
+
+		--- receives ADCE1 intr
+                ---- 
+		update pendingInterrupts, dont touch the one beingProcessed.
+		FLAG checkPendingInterrupts action.
+		remove Powersave on exit.
+	}
+
+	CHECK_PENDING_INTERRUPTS. {
+
+		next = getNExtAdceToService(lastADCEServiced,pending);
+		service(next);
+
+	}
+
+	decl	service(adceunit) {
+		update beingProcessed = adceunit;
+				
+		signal(adce);
+		spitransfer(adce)
+		removependinginterrupt(adce)
+		clear beingProcessed;	
+		removesignal(adce)
+
+		
+	}
+
+	decl getNExtAdcetoService(last,pending);
+
+
+
+ADCE  1
+
+   // SIGNAL.and wait for spi.
+
+
+
+ADCE  2
+
+
+
 Taken from the point of view of the ADCE
 
                         WDCNT                 WDHOLD                  WDCNT           14ms
