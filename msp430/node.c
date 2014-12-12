@@ -21,13 +21,11 @@
 
 ///// GLOBAL DECLARATIONS
 #define LONG long
+#define word short 
 
 #define nodeId 					4
 #define MI_RESCUE				0xacac 
-
-#define USCI_CONFIG_BITS_IN     (BIT2 | BIT4)
-#define USCI_CONFIG_BITS_OUT    (BIT1)
-#define USCI_CONFIG_BITS        (USCI_CONFIG_BITS_IN | USCI_CONFIG_BITS_OUT)
+#define MAX_TRANSMISSION_ERRORS 40
 
 #define MASTER_REQUEST_SNCC(pc) \
 				(((pc)->dataIn.destinationSncc == nodeId) && ((pc)->signalMaster))
@@ -48,9 +46,6 @@
 #define PTR_END_OF_CHECKSUM_PRE         (PTR_END_OF_CHECKSUM - 1) 
 #define PTR_END_OF_PACKET               (PTR_END_OF_CHECKSUM + 2) // out lags 2 bytes behind in (therefore 4-2 = 2).
 
-#define word short 
-
-#define RESET WDTCTL = WDTHOLD
 
 struct McomInPacket {
   unsigned word                                 preamble;
@@ -119,40 +114,49 @@ struct PacketContainer {
 };
 
 
-int             initializePacketContainer(struct PacketContainer * packetContainer);
 
-int             incrementPacket(const register int rx, struct PacketContainer  * packetContainer);
-inline void     rescue (const register int rx, struct PacketContainer * packetContainer);
-inline int      inspectAndIncrement(const register int rx);
+/* */
 
-void            endOfHeaderEvent        (const register int rx, struct PacketContainer * packetContainer);
-void            endOfDestinationEvent   (const register int rx, struct PacketContainer * packetContainer);
-void            endOfPacketEvent        (const register int rx, struct PacketContainer * packetContainer);
-void            endOfReservedEvent      (const register int rx, struct PacketContainer * packetContainer);
-void        	packetCheckSumPreEvent 	(const register int rx, struct PacketContainer * packetContainer);
-void            packetCheckSumEvent     (const register int rx, struct PacketContainer * packetContainer);
+int             	initializePacketContainer(struct PacketContainer * packetContainer);
+int             	incrementPacket(const register int rx, struct PacketContainer  * packetContainer);
+inline void    		rescue (const register int rx, struct PacketContainer * packetContainer);
+inline int      	inspectAndIncrement(const register int rx);
+inline Inspector 	getNextInspector(const register int pointer);
+void           		prepareNextPacketCycle   (struct PacketContainer* packetContainer);
 
-void            noActionEvent           (const register int rx, const struct PacketContainer * packetContainer);
+/* Register Event inspectors */ 
+
+void	endOfHeaderEvent        (const register int rx, struct PacketContainer * packetContainer);
+void	endOfDestinationEvent   (const register int rx, struct PacketContainer * packetContainer);
+void	endOfPacketEvent        (const register int rx, struct PacketContainer * packetContainer);
+void	endOfReservedEvent      (const register int rx, struct PacketContainer * packetContainer);
+void	packetCheckSumPreEvent 	(const register int rx, struct PacketContainer * packetContainer);
+void	packetCheckSumEvent     (const register int rx, struct PacketContainer * packetContainer);
+void	noActionEvent           (const register int rx, const struct PacketContainer * packetContainer);
+
+/*  MSP SPECIFIC */
+
+void	initGlobal();
+void	initializeUSCI();
+
+#define USCI_CONFIG_BITS_IN     (BIT2 | BIT4)
+#define USCI_CONFIG_BITS_OUT    (BIT1)
+#define USCI_CONFIG_BITS        (USCI_CONFIG_BITS_IN | USCI_CONFIG_BITS_OUT)
+
+#define RESET WDTCTL = WDTHOLD
 
 
-void            prepareNextPacketCycle   (struct PacketContainer* packetContainer);
-
-
-void 			initGlobal();
-void 			initializeUSCI();
+/* */
 
 int main() {
 
-   WDTCTL = WDTPW + WDTHOLD;    
-
-	initGlobal();
+ 	initGlobal();
 	initializeUSCI();
 	inspectAndIncrement(0); // initialize static container.
 
 	SWITCH_LOW_POWER_MODE;
 
 	while(1);
-	
 	return 0;
 }
 
@@ -170,11 +174,9 @@ inline int inspectAndIncrement(const register int rx) {
 	static struct PacketContainer packetContainer;
 	if (packetContainer.initialized) {
 
-		if (!packetContainer.incomplete) {
-			prepareNextPacketCycle(&packetContainer);
-		}
+		if (!packetContainer.incomplete) prepareNextPacketCycle(&packetContainer);
 
-		if (packetContainer.synced){
+		if (packetContainer.synced) {
 			 *(packetContainer.pIn) = rx;
 			 packetContainer.incomplete = 1; 
 		 }
@@ -187,8 +189,6 @@ inline int inspectAndIncrement(const register int rx) {
 
 }
 
-
-
 /**
  * function  initializePacketContainer()
  * Initialises/reset the pacektContrainer structure.
@@ -197,7 +197,6 @@ inline int inspectAndIncrement(const register int rx) {
  * Sets the packet inspector to noActionEvent
  * The rest is Zeroed
  */
-
 int initializePacketContainer(struct PacketContainer * packetContainer) {
 
 	memset(packetContainer,0,sizeof(struct PacketContainer));
@@ -221,34 +220,12 @@ int incrementPacket(const register int rx, struct PacketContainer  * packetConta
 
 	if (packetContainer->synced) {
 
-	packetContainer->pIn++;
-	packetContainer->pointer++;
+		packetContainer->pIn++;
+		packetContainer->pointer++;
 
-	if (packetContainer->startMICMDCheckSum) DO_CHECKSUM(packetContainer,rx);
+		if (packetContainer->startMICMDCheckSum) DO_CHECKSUM(packetContainer,rx);
 
-		switch (packetContainer->pointer) {
-			case PTR_END_OF_HEADER:
-				packetContainer->inspect = (Inspector) &endOfHeaderEvent;
-				break;
-			case PTR_END_OF_DESTINATION:
-				packetContainer->inspect = (Inspector) &endOfDestinationEvent;
-				break;
-			case PTR_END_OF_CHECKSUM: // 1B before chk
-				packetContainer->inspect = (Inspector) &packetCheckSumEvent;
-				break;
-			case PTR_END_OF_PACKET:
-				packetContainer->inspect = (Inspector) &endOfPacketEvent;
-			break;
-			case PTR_END_OF_RESERVED:
-				packetContainer->inspect = (Inspector) &endOfReservedEvent;
-				break;      
-			case PTR_END_OF_CHECKSUM_PRE:
-				packetContainer->inspect = (Inspector) &packetCheckSumPreEvent;
-				break;
-			default:
-				packetContainer->inspect = (Inspector) &noActionEvent;
-		}
-	   
+		packetContainer->inspect = getNextInspector(packetContainer->pointer);
 		return   *(packetContainer->pOut++);
 
 	} else  {
@@ -258,16 +235,40 @@ int incrementPacket(const register int rx, struct PacketContainer  * packetConta
 	}
 }
 
-void            endOfReservedEvent        (const register int rx, struct PacketContainer * packetContainer)
-{
-		 packetContainer->dataOut.chkSum = 0;                        // Reset Checksum
+
+inline Inspector getNextInspector(const register int pointer) {
+
+		switch (pointer) {
+			case PTR_END_OF_HEADER:
+				return (Inspector) &endOfHeaderEvent;
+			case PTR_END_OF_DESTINATION:
+				return (Inspector) &endOfDestinationEvent;
+			case PTR_END_OF_CHECKSUM: 
+				return (Inspector) &packetCheckSumEvent;
+			case PTR_END_OF_PACKET:
+				return (Inspector) &endOfPacketEvent;
+			case PTR_END_OF_RESERVED:
+				return (Inspector) &endOfReservedEvent;
+			case PTR_END_OF_CHECKSUM_PRE:
+				return (Inspector) &packetCheckSumPreEvent;
+			default:
+				return (Inspector) &noActionEvent;
+		};
+
 }
 
+/**
+ * function endOfReservedEvent()
+ */
+void endOfReservedEvent (const register int rx, struct PacketContainer * packetContainer)
+{
+		 packetContainer->dataOut.chkSum = 0;                       
+}
 
 /**
  * function endOfHeaderEvent()
  */
-void endOfHeaderEvent           (const register int rx,  struct  PacketContainer * packetContainer) {
+void endOfHeaderEvent (const register int rx,  struct  PacketContainer * packetContainer) {
 
 	if (((*(int *)&packetContainer->dataIn)) != MI_RESCUE) { 
 		packetContainer->synced = 0; 
@@ -279,7 +280,7 @@ void endOfHeaderEvent           (const register int rx,  struct  PacketContainer
 /**
  * function endOfHeaderEvent()
  */
-void endOfDestinationEvent      (const register int rx,  struct  PacketContainer * packetContainer) {
+void endOfDestinationEvent (const register int rx,  struct  PacketContainer * packetContainer) {
 
 	if (MASTER_REQUEST_SNCC(packetContainer))    {
 		packetContainer->pOut = (unsigned char*)packetContainer->outBuffer;                                     
@@ -296,19 +297,18 @@ void endOfDestinationEvent      (const register int rx,  struct  PacketContainer
  * function endOfHeaderEvent()
  */
 
-void packetCheckSumEvent        (const register int rx,  struct  PacketContainer * packetContainer) {
+void packetCheckSumEvent (const register int rx,  struct  PacketContainer * packetContainer) {
 
 	if (packetContainer->startMICMDCheckSum) DO_CHECKSUM(packetContainer,rx); // append latest byte to chksum if needed
 	packetContainer->startMICMDCheckSum = 0;
 
 }
 
-void packetCheckSumPreEvent        (const register int rx,  struct  PacketContainer * packetContainer) {
+void packetCheckSumPreEvent (const register int rx,  struct  PacketContainer * packetContainer) {
 
 	packetContainer->pOut = (unsigned char*)&packetContainer->dataOut.snccCheckSum   ; // Reset floating pointer to dataOut
 
 }
-
 
 /**
  * function endOfHeaderEvent()
@@ -384,7 +384,7 @@ inline void rescue (const register int rx, struct PacketContainer * packetContai
 
 	} else {
 		packetContainer->transmissionErrors++;
-		if (packetContainer->transmissionErrors > 40) { RESET; }
+		if (packetContainer->transmissionErrors > MAX_TRANSMISSION_ERRORS) RESET;
 	}
 }
 
