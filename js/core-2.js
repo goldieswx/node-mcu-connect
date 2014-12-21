@@ -16,7 +16,7 @@
 var util = require('util');
 var dgram = require('dgram');
 var _ = require('lodash-node');
-
+var Q = require('q');
 
 var MCUObject = function(key) {
 
@@ -378,6 +378,95 @@ MCUInterface.prototype._callback = function(message) {
 
 };
 
+var MCUEvent = function(fn) {
+
+   this.context = {}
+   this.callback = fn;
+   this.previousValue = null;
+   this.value = null; 
+   this.previousContext = {};
+
+   // init clearable timer instance.
+   this.clearableTimer = MCUEvent._clearableTimer();
+
+}
+
+MCUEvent.prototype.throttle = function (fn,timeout) {
+
+   this._throttleFn = this._throttleFn || _.throttle(fn,timeout,{leading:false,trailing:true});
+   this._throttleFn();
+
+}
+
+/**
+ * function() averageFilter
+ * Creates a average between the currently elapsed n milliseconds of the event values.
+ */
+
+MCUEvent.prototype.timedAverageFilter = function() {
+
+	var event = this;
+	var averageTimeFrame = 100; // values are kept for average for 50ms
+
+	event.filters = event.filters || {};
+	event.filters.timedAverage =  event.filters.timedAverage || {};
+	var e = event.filters.timedAverage;
+	var sum = 0, len = 0;
+
+	e.ranges = e.ranges || [];
+	e.ranges.push({ v: event.value, t: event.context.timestamp } );
+
+	_.each(e.ranges,function(item) {
+		if ((event.context.timestamp - item.t) < averageTimeFrame) {
+			sum += item.v;
+			len++;
+		}
+	});
+
+	if (len) {
+		sum = Math.round(sum/len);
+	} else {
+		sum = event.value; 
+	}
+
+	e.value = sum;
+
+	_.remove(e.ranges,function(item){
+		return ((event.context.timestamp - item.t) > averageTimeFrame);
+	});
+
+};
+
+
+MCUEvent._clearableTimer = function() {
+
+	var deferred;
+	var killId; 
+
+	var init = function() {
+		deferred = Q.defer();
+		killId = 0;
+	};	init();
+
+	return { 
+			start: function (delay) {
+				if (killId) { /* do not allow multiple timers, return rejected promise */ 
+					var _deferred = Q.defer();	_deferred.reject('Already running');
+					return Q(_deferred.promise);
+				}
+				killId  = setTimeout(function () { deferred.resolve(); init(); },delay);
+				return Q(deferred.promise);
+			},
+			cancel: function(){ 
+				clearTimeout(killId); 
+				deferred.reject(); 
+				init();
+			},
+	};
+ 
+}
+
+
 
 var MCUIo = function() {
 
@@ -399,9 +488,7 @@ util.inherits(MCUIo,MCUObject);
  */
 MCUIo.prototype.on = function(eventType,fn) {
 
-  this._callbacks[eventType].push (
-    {callback:fn,context:{},previousValue:null,value:null,previousContext:{}}
-  );
+  this._callbacks[eventType].push (new MCUEvent(fn));
 
 };
 
@@ -519,50 +606,6 @@ MCUIo.getPortMask = function(stringMask) {
 	return ret;
 };
 
-MCUIo.throttle = function (e,fn,timeout) {
-
-   e.throttle = e.throttle  || _.throttle(fn,timeout,{leading:false,trailing:true});
-   e.throttle();
-
-}
-
-/**
- * function() averageFilter
- * Creates a average between the currently elapsed n milliseconds of the event values.
- */
-
-MCUIo.timedAverageFilter = function(event) {
-
-	var averageTimeFrame = 100; // values are kept for average for 50ms
-
-	event.filters = event.filters || {};
-	event.filters.timedAverage =  event.filters.timedAverage || {};
-	var e = event.filters.timedAverage;
-	var sum = 0, len = 0;
-
-	e.ranges = e.ranges || [];
-	e.ranges.push({ v: event.value, t: event.context.timestamp } );
-
-	_.each(e.ranges,function(item) {
-		if ((event.context.timestamp - item.t) < averageTimeFrame) {
-			sum += item.v;
-			len++;
-		}
-	});
-
-	if (len) {
-		sum = Math.round(sum/len);
-	} else {
-		sum = event.value; 
-	}
-
-	e.value = sum;
-
-	_.remove(e.ranges,function(item){
-		return ((event.context.timestamp - item.t) > averageTimeFrame);
-	});
-
-};
 
 
 
@@ -609,19 +652,20 @@ var net = new MCUNetwork();
 			var delay = event.context.timestamp-event.buttonDown||0;
 			event.buttonDown = 0;
 			console.log('button-up',delay);
-			clearTimeout(event.timeOut||0);
-			event.timeOut = 0;
+			event.clearableTimer.cancel();
 			return;
 		}
 		if (event.value > 850) { return};
 
 		console.log('button down 1',event.value);
 		event.buttonDown = event.buttonDown || event.context.timestamp;
-		event.timeOut  = event.timeOut || setTimeout(function(){  blink(event); },4000);
 
-    	MCUIo.timedAverageFilter(event);
-		MCUIo.throttle(event,function() { 
-			
+		event.clearableTimer.start(4000).then(function(){ 
+		 	blink(event); 
+		});
+
+    	event.timedAverageFilter();
+		event.throttle(function() { 
 			 $('spotlight-1').enable(event.filters.timedAverage.value < 450)
 		}, 50);
 
@@ -633,8 +677,7 @@ var net = new MCUNetwork();
 		if (event.buttonDown && event.value > 850) {
 			var delay = event.context.timestamp-event.buttonDown||0;
 			event.buttonDown = 0;
-			clearTimeout(event.timeOut||0);
-			event.timeOut = 0;
+			event.clearableTimer.cancel();
 			$('spotlight-2').enable(event.filters.timedAverage.value > 450)
 			console.log('button-up2',delay,event.filters.timedAverage.value);
 
@@ -642,16 +685,14 @@ var net = new MCUNetwork();
 		}
 		if (event.value > 850) { return};
 
-		MCUIo.timedAverageFilter(event);
-
+		event.timedAverageFilter();
 		event.buttonDown = event.buttonDown || event.context.timestamp;
-		event.timeOut  = event.timeOut || setTimeout(function(){   $(':out').enable(event.filters.timedAverage.value > 450); console.log('long push',event.filters.timedAverage.value > 450) },2000);
+		//  https://github.com/kriskowal/q#propagation
+		event.clearableTimer.start(2000).then(function(){  
+			$(':out').enable(event.filters.timedAverage.value > 450); 
+			console.log('long push',event.filters.timedAverage.value > 450) 
+		});
 
-
-		/*MCUIo.timedAverageFilter(event);
-		MCUIo.throttle(event,function() { 
-				$('spotlight-2').enable(event.filters.timedAverage.value < 450)
-		}, 50);*/
 	});
 
   $('spotlight-2').enable().disable().enable().disable().enable().disable().enable().disable().enable().disable();
