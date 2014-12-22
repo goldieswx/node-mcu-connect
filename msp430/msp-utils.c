@@ -73,3 +73,26 @@ void flash_write(int *dest, int *src, unsigned int size)
   FCTL3 = FWKEY + LOCK;                 // Set LOCK bit
   __enable_interrupt();
 }
+
+
+void flashConfig(struct ioConfig * p) {
+
+  WDTCTL = WDTPW + WDTHOLD; // Hold watchdog.
+  struct flashConfig buffer;
+  buffer.magic = 0x4573;    // Surround Buffer with magic number.
+  buffer._magic = 0x7354;      
+
+  // Copy config buffer prior to writing it in flash
+  _memcpy(&buffer.ioConfig,p,sizeof(struct ioConfig));
+
+  // Do not write flash with the same existing buffer.
+  if (_memcmp(&buffer,flashIoConfig,sizeof(struct flashConfig))) {
+    return;
+  }
+
+  //Do Update the Flash
+  flash_erase((int*)flashIoConfig);
+  flash_write((int*)flashIoConfig,(int*)&buffer,sizeof(struct flashConfig)/sizeof(int));
+
+  WDTCTL = WDTHOLD; // reboot.
+}
