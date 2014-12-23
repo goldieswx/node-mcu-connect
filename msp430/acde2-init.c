@@ -1,6 +1,29 @@
+/*
+    node-mcu-connect . node.js UDP Interface for embedded devices.
+    Copyright (C) 2013-4 David Jakubowski
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <http://www.gnu.org/licenses/>. 
+    
+*/
+
+#include "msp430g2553.h"
+#include <legacymsp430.h>
+
+#include "adce2-init.h"
 
 
-inline void msp430SampleInputs(SampleData * sample) {
+inline void msp430SampleInputs(struct Sample * sample) {
 
 	ADC10CTL0 &= ~ADC10IFG;
 	ADC10CTL0 &= ~ENC;
@@ -25,7 +48,6 @@ inline void msp430ResetUSCI() {
 
   UCB0RXBUF;
   UCB0TXBUF = 0x00;
-
 
 }
 
@@ -53,13 +75,34 @@ inline void msp430StartTimer(int delay) {
 
 }
 
+inline void msp430BitMaskPorts (char * bitMasks, struct IoConfig * ioConfig) {
+
+	P1OUT |= (*bitMasks++ & ioConfig.P1DIR);
+	P2OUT |= (*bitMasks++ & ioConfig.P2DIR);
+	P3OUT |= (*bitMasks++ & ioConfig.P3DIR);
+	P1OUT &= (*bitMasks++ | ~ioConfig.P1DIR);
+	P2OUT &= (*bitMasks++ | ~ioConfig.P2DIR);
+	P3OUT &= (*bitMasks++ | ~ioConfig.P3DIR);
+
+}
+
+inline void msp430InitializeClocks() {
+	
+  BCSCTL1 	= CALBC1_8MHZ;			// CPU Freq | 8MHz
+  BCSCTL2  |= DIVS_3;				// SMCLK/DCO @ 1MHz
+  BCSCTL3	= LFXT1S_2; 			// ACLK @ 10kHz
+
+}
 
 
+void initializeIOConfig(struct IoConfig * ioConfig) {
 
-void initializeConfig() {
+	struct IoConfig * flashIoConfig;
+	flashIoConfig = (struct flashConfig*) IOCFG_HW_ADDR;
+
 
 	if ((flashIoConfig->magic == 0x4573) && (flashIoConfig->_magic = 0x7354)) {
-		_memcpy(&ioConfig,&flashIoConfig->ioConfig,sizeof(struct ioConfig));
+		memcpy(&ioConfig,&flashIoConfig->ioConfig,sizeof(struct IoConfig));
 	} else {
 		ioConfig.P1DIR = 0x03;
 		ioConfig.P1ADC = 0x04;
@@ -97,16 +140,9 @@ void initializeConfig() {
 	P3REN    = (P3REN & (~availP3)) | ioConfig.P3REN;
 	P3OUT    = (P3OUT & (~availP3)) | ioConfig.P3OUT;
 
-	unsigned int i;
-	char ioCfg = ioConfig.P1ADC;
-
-	/* Mark what input are being used. */
-	for (i=0;i<MAX_ADC_CHANNELS;i++) {
-		ioADCRead[MAX_ADC_CHANNELS-i-1] = ioCfg & 1; 
-		ioCfg >>=1;  
-	}
-
 }
+
+
 void initializeUSCI() {
 
   P1DIR		|=	BIT5 | BIT7;				// BIT5 is Master Clock. BIT7 is MOSI
@@ -151,4 +187,3 @@ void initTimer() {
   TA0R = 0;								// Reset timer counter.
   TA0CCR0 = 80;                         // Count to this, then interrupt; About 8ms. 
 }
-
