@@ -18,7 +18,22 @@
 */
     
 #define LOW_POWER_MODE(a)    (__bis_SR_register(LPM3_bits + GIE))
-#define INTERRUPT 			 (P2IN & CS_INCOMING_PACKET)
+#define NODE_INTERRUPT 			 (P2IN & CS_INCOMING_PACKET)
 
 
 #define IOCFG_HW_ADDR		0x0E000
+
+inline void msp430SampleInputs(struct Sample * sample);
+inline void msp430ResetUSCI();
+inline void msp430StopUSCI();
+inline void msp430NotifyNode(int level);
+
+inline void msp430StartTimer(int delay); 
+inline void msp430BitMaskPorts (char * bitMasks, struct IoConfig * ioConfig);
+inline void msp430InitializeClocks();
+
+void initializeIOConfig(struct IoConfig * ioConfig);
+void initializeUSCI();
+void initializeADC(struct IoConfig * ioConfig);
+void initializeTimer();
+

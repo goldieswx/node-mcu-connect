@@ -19,7 +19,6 @@
 */
 
 
-inline unsigned int _memcmp(void* a, void * b, int len);
-inline void _memcpy( void* dest, void* src, int len);
 void flash_erase(int *addr);
 void flash_write(int *dest, int *src, unsigned int size);
+void flashConfig(struct IoConfig * p);

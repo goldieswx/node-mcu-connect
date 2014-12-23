@@ -4,14 +4,14 @@ CFLAGS=-O2 -Wall -g -mmcu=msp430g2553 -L/usr/msp430/lib/ldscripts/msp430g2553 -T
 
 OBJS=node-spi.o
 SLAVE=node-spi.o
-ADC=adce.o msp-utils.o
+ADC2=adce2.o msp-utils.o adce2-init.o
 TEST=test.o
 
 slave: $(SLAVE)
 	$(CC) $(CFLAGS) -o slave.elf $(SLAVE)
 
-adc: $(ADC)
-	$(CC) $(CFLAGS) -o adc.elf $(ADC)
+adc2: $(ADC2)
+	$(CC) $(CFLAGS) -o adc.elf $(ADC2)
 
 test: $(TEST)
 	$(CC) $(CFLAGS) -o test.elf $(TEST)

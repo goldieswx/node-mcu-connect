@@ -20,7 +20,10 @@
 #include "msp430g2553.h"
 #include <legacymsp430.h>
 
+#include "adce2.h"
+#include "adce2-init.h"
 #include "msp-utils.h"
+#include "string.h"
 
 
 void flash_erase(int *addr)
@@ -65,10 +68,10 @@ void flashConfig(struct IoConfig * p) {
   buffer._magic = 0x7354;      
 
   // Copy config buffer prior to writing it in flash
-  memcpy(&buffer.ioConfig,p,sizeof(struct ioConfig));
+  memcpy(&buffer.ioConfig,p,sizeof(struct IoConfig));
 
   // Do not write flash with the same existing buffer.
-  if (memcmp(&buffer,flashIoConfig,sizeof(struct flashConfig))) {
+  if (!memcmp(&buffer,(int*)IOCFG_HW_ADDR,sizeof(struct flashConfig))) {
     return;
   }
 

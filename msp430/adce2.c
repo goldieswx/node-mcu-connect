@@ -21,6 +21,7 @@
 #include <legacymsp430.h>
 
 #include "adce2.h"
+#include "adce2-init.h"
 #include "msp-utils.h"
 #include "string.h"
 
@@ -47,18 +48,18 @@ int main() {
 
 		fillSampleTrigger(&new,&old,&ioConfig);
 
-		if (new.trigger || (INTERRUPT)) { 				// INTERRUPT read: 'node is interrupting'
+		if (new.trigger || (NODE_INTERRUPT)) { 				// INTERRUPT read: 'node is interrupting'
 			
 			struct Exchange exchange;
 			
-			fillExchange 	(&sample,&exchange);		// prepare output buffers with sample.
+			fillExchange 	(&new,&exchange);		// prepare output buffers with sample.
 			signalNode 		(HIGH);						// signal readyness to node 
-			while (!INTERRUPT) __delay_cycles(100);
+			while (!NODE_INTERRUPT) __delay_cycles(100);
 			listen 			(&exchange);				// start USCI and enable USCI interrupt.
 			LOW_POWER_MODE	();							// go LPM and enable interrupts and wait.
 			signalNode		(LOW);						// signal busyness to node
 			close			();							// stop USCI.
-			processExchange	(&exchange);				// process received buffer.
+			processExchange	(&exchange,&ioConfig);				// process received buffer.
 		}
 	}
 }
@@ -109,12 +110,13 @@ interrupt(TIMER0_A1_VECTOR) ta1_isr(void) {
 
 inline int incrementExchange(register int rx,struct Exchange * pExchange) {
 
-	static struct Exchange exchange;
-	if (pExchange) { exchange = pExchange; return; }
+	static struct Exchange * exchange;
+	if (pExchange) { exchange = pExchange; return 0x00; }
 	if (++(exchange->pointer) > sizeof (struct Sample)) { return 0x00; }
 
-	*exchange->pIn = rx;
-	*exchange->pIn++;
+	*(exchange->pIn) = rx;
+	exchange->pIn++;
+
 
 	return (*exchange->pOut++);
 
@@ -127,7 +129,7 @@ inline int incrementExchange(register int rx,struct Exchange * pExchange) {
  * restart USCI
  * enable  USCI IE
  */
-void listen(Exchange * exchange) {
+void listen(struct Exchange * exchange) {
 	msp430ResetUSCI();
 }
 
@@ -136,7 +138,7 @@ void listen(Exchange * exchange) {
  * stop USCI (and therefore USCI IE)
  * run received event if any.
  */
-void close(ExchangeDataEvent * exchange) {
+void close() {
 	msp430StopUSCI();
 }
 
@@ -148,14 +150,14 @@ void signalNode (int level) {
 }
 
 
-void sample(SampleData * sample) {
+void sample(struct Sample * sample) {
 	msp430SampleInputs(sample);
 	sample->sampled = 1;
 }
 
 
 void timer(int delay) {
-	msp430StartTimer(delay)
+	msp430StartTimer(delay);
 }
 
 /**
@@ -163,7 +165,7 @@ void timer(int delay) {
  * prepares exchange buffer and fills it with last sample
  */
 
-void fillExchange(Sample * sample,Exchange * exchange) {
+void fillExchange(struct Sample * sample,struct Exchange * exchange) {
 
 	memset(&exchange->inBuffer,0,sizeof(exchange->inBuffer));
 	memcpy(&exchange->outBuffer.s,sample,sizeof(struct Sample));
@@ -172,12 +174,12 @@ void fillExchange(Sample * sample,Exchange * exchange) {
 	exchange->outBuffer.checkSum = 0x4567; // TODO;
 
 	exchange->transferred 	= 0;
-	exchange->pIn  			= exchange->inBuffer;
-	exchange->pOut 			= exchange->outBuffer;
+	exchange->pIn  			= (char*) &exchange->inBuffer;
+	exchange->pOut 			= (char*) &exchange->outBuffer;
 
-	*exchange->__padding_in[0]	= 0;
-	*exchange->__padding_out[0] = 0;
-	*exchange->pointer 			= 0;
+	exchange->__padding_in[0]	= 0;
+	exchange->__padding_out[0] = 0;
+	exchange->pointer 			= 0;
 
 	incrementExchange(0,exchange); // sets exchange reference in intr
 
@@ -187,7 +189,7 @@ void fillExchange(Sample * sample,Exchange * exchange) {
  * function fillSampleTrigger
  * compares new and old sample and find out what was triggered.
  */
-int fillSampleTrigger(struct Sample * new,struct Sample * old,struct IoConfig * ioConfig) {
+void fillSampleTrigger(struct Sample * new,struct Sample * old,struct IoConfig * ioConfig) {
 
 	register int i, adcValue;
     int usedADCIo[MAX_ADC_CHANNELS];
@@ -204,9 +206,9 @@ int fillSampleTrigger(struct Sample * new,struct Sample * old,struct IoConfig * 
 	if (old->sampled) {
 		for (i=0;i<MAX_ADC_CHANNELS;i++) {
 			if (usedADCIo[i]) {
-			   adcValue = new->adcData[i];
-			   if ((adcValue > (old->adcData[i]+15)) || (adcValue < (old->adcData[i]-15))) {
-					  old->adcData[i] = adcValue;
+			   adcValue = new->adc[i];
+			   if ((adcValue > (old->adc[i]+15)) || (adcValue < (old->adc[i]-15))) {
+					  old->adc[i] = adcValue;
 					  new->trigger |= 0x01 << i;
 			   }
 			}
@@ -222,15 +224,15 @@ int fillSampleTrigger(struct Sample * new,struct Sample * old,struct IoConfig * 
 }
 
 
-void processExchange(struct Exchange * exchange) {
+void processExchange(struct Exchange * exchange,struct IoConfig * ioConfig) {
 
-	char * pExchangeBuf = exchange->inBuffer.inData;
+	char * pExchangeBuf = (char*)exchange->inBuffer.inData;
 	switch (*pExchangeBuf) {
 		case  0x55 :
 		    flashConfig((struct IoConfig*)++pExchangeBuf);
 		  	return;
 		case 0x66 :
-			msp430BitMaskPorts(++pExchangeBuf);
+			msp430BitMaskPorts(++pExchangeBuf,ioConfig);
 			return;
 	}
 
@@ -238,7 +240,8 @@ void processExchange(struct Exchange * exchange) {
 
 
 inline void getADCIoUsed (int ioADC, int * adcIoUsed) {
-	
+
+	int i;	
 	/* Mark what input are being used. */
 	for (i=0;i<MAX_ADC_CHANNELS;i++) {
 		adcIoUsed[MAX_ADC_CHANNELS-i-1] = ioADC & 1; 
@@ -248,17 +251,17 @@ inline void getADCIoUsed (int ioADC, int * adcIoUsed) {
 
 
 
-void initializeSample(SampleDataEvent * sample) {
+void initializeSample(struct Sample * sample) {
 
-	memset(&sample,0,sizeof(SampleData));
+	memset(&sample,0,sizeof(struct Sample));
 }
 
 void initialize(struct IoConfig * ioConfig) {
 
-	msp430initializeClocks();
+	msp430InitializeClocks();
 	initializeUSCI();
-	initializeADC();
-	initializeIOConfig(&ioConfig);
+	initializeADC(ioConfig);
+	initializeIOConfig(ioConfig);
 	initializeTimer();
 
 }

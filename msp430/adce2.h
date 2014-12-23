@@ -34,9 +34,13 @@
 
 #define PREAMBLE 			0xACAC
 
+#define HIGH	1
+#define LOW 	0
+
+
 /* data struct */
 
-struct ioConfig {
+struct IoConfig {
 	unsigned char P1DIR;
 	unsigned char P1ADC;
 	unsigned char P1REN;
@@ -51,7 +55,7 @@ struct ioConfig {
 
 struct flashConfig {
 	unsigned int  magic;
-	struct ioConfig ioConfig;
+	struct IoConfig ioConfig;
 	unsigned int  _magic;
 };
 
@@ -61,7 +65,7 @@ struct Sample {
 	int 	ports[3];
 	int 	trigger;
 	int     sampled;	// true if sampled.
-}
+};
 
 struct Exchange {
 	int transferred;
@@ -69,18 +73,36 @@ struct Exchange {
 		int    		  preamble;
 		int 		  inData[10];
 		int 		  checkSum;
-	};
+	} inBuffer;
 	int __padding_in[1];
 
 	struct outBuffer {
 		int    		  preamble;
 		struct 		  Sample s;
 		int 		  checkSum;
-	};
+	} outBuffer;
 	int __padding_out[1];
 
 	int pointer;
 	char * pIn;				// Floating Pointer to inBuffer:
 	char * pOut;			// Floating Pointer to outBuffer;
 
-}
+};
+
+
+void 	sample 				(struct Sample * sample);
+void 	timer 				(int delay);
+void 	fillSampleTrigger 	(struct Sample * new,struct Sample * old,struct IoConfig * ioConfig);
+
+void 	initializeSample 	(struct Sample * sample);
+void 	initialize 			(struct IoConfig * ioConfig);
+void 	signalNode 			(int level);
+void 	fillExchange 		(struct Sample * sample,struct Exchange * exchange);
+
+inline int incrementExchange(register int rx,struct Exchange * pExchange);
+inline void getADCIoUsed 	(int ioADC, int * adcIoUsed);
+
+void 	listen 				(struct Exchange * exchange);
+void 	close 				();
+void 	processExchange 	(struct Exchange * exchange,struct IoConfig * ioConfig);
+
