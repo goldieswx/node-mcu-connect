@@ -18,10 +18,9 @@
 */
 
 
-
-#define availP1 = (BIT0|BIT1|BIT2|BIT3|BIT4);	// max available usage of P1
-#define availP2 = (BIT3|BIT4|BIT5|BIT6|BIT7);  // max available usage of P2
-#define availP3 = (BIT3|BIT4|BIT5|BIT6|BIT7);  // max available usage of P3
+#define availP1 (BIT0|BIT1|BIT2|BIT3|BIT4)	// max available usage of P1
+#define availP2 (BIT3|BIT4|BIT5|BIT6|BIT7)  // max available usage of P2
+#define availP3 (BIT3|BIT4|BIT5|BIT6|BIT7)  // max available usage of P3
 
 #define MOSI			BIT7 
 #define MISO		 	BIT6
@@ -30,15 +29,8 @@
 #define CS_NOTIFY_MASTER  	BIT2   // External Interrupt INTR = P3.2
 #define CS_INCOMING_PACKET  BIT2   // Master enable the line before sending  SIG = P2.2
 
-#define PROCESS_MSG 		  0x04      //  Schedule processMsg() Task
-#define BEGIN_SAMPLE_DAC 	0x02      //  Schedule beginSampleDAC() Task
-#define CHECK_DAC 			  0x01      //  Schedule checkDAC() Task
-
 #define MAX_ADC_CHANNELS 	5
 #define NUM_PORTS_AVAIL  	3
-
-#define PREAMBLE_SIZE 		0x01
-#define CHECKSUM_SIZE 		0x01
 
 #define PREAMBLE 			0xACAC
 
@@ -62,3 +54,33 @@ struct flashConfig {
 	struct ioConfig ioConfig;
 	unsigned int  _magic;
 };
+
+
+struct Sample {
+	int 	adc[MAX_ADC_CHANNELS];
+	int 	ports[3];
+	int 	trigger;
+	int     sampled;	// true if sampled.
+}
+
+struct Exchange {
+	int transferred;
+	struct inBuffer {
+		int    		  preamble;
+		int 		  inData[10];
+		int 		  checkSum;
+	};
+	int __padding_in[1];
+
+	struct outBuffer {
+		int    		  preamble;
+		struct 		  Sample s;
+		int 		  checkSum;
+	};
+	int __padding_out[1];
+
+	int pointer;
+	char * pIn;				// Floating Pointer to inBuffer:
+	char * pOut;			// Floating Pointer to outBuffer;
+
+}
