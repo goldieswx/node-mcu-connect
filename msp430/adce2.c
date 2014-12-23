@@ -22,31 +22,7 @@
 
 #include "adce2.h"
 #include "msp-utils.h"
-
-
-
-struct Sample {
-	int 	adc[MAX_ADC_CHANNELS];
-	int 	ports[3];
-	int 	trigger;
-	int     sampled;	// true if sampled.
-}
-
-struct Exchange {
-	int transferred;
-	struct inBuffer {
-		int    		  preamble;
-		int 		  inData[10];
-		int 		  checkSum;
-	};
-	struct outBuffer {
-		int    		  preamble;
-		struct 		  Sample s;
-		int 		  checkSum;
-	};
-}
-
-
+#include "string.h"
 
 
 int main() {
@@ -60,7 +36,6 @@ int main() {
 	initialize(&ioConfig);
 
 	while(1) { 
-
 		timer(300);										// wait
 		LOW_POWER_MODE();								// go LPM and enable interrupts and wait.
 
@@ -72,8 +47,10 @@ int main() {
 
 		fillSampleTrigger(&new,&old,&ioConfig);
 
-		if (new.trigger || (INTERRUPT)) { // INTERRUPT here is 'node is interrupting'
-			Exchange exchange;
+		if (new.trigger || (INTERRUPT)) { 				// INTERRUPT read: 'node is interrupting'
+			
+			struct Exchange exchange;
+			
 			fillExchange 	(&sample,&exchange);		// prepare output buffers with sample.
 			signalNode 		(HIGH);						// signal readyness to node 
 			while (!INTERRUPT) __delay_cycles(100);
@@ -87,11 +64,59 @@ int main() {
 }
 
 
-void fillExchange(Sample * sample,Exchange * exchange) {
+/**
+ * DAC Sampling done.
+ * Interrupt service routine.
+ */
 
-	exchange->transferred = 0;
-	setmem(&exchange->inBuffer,0,sizeof(exchange->inBuffer));
-	memcpy(&exchange->outBuffer,sample,sizeof(exchange->inBuffer));
+interrupt(ADC10_VECTOR) ADC10_ISR (void) { 
+   
+	ADC10CTL0 &= ~ADC10IFG;
+	__bic_SR_register_on_exit(LPM3_bits + GIE); 		// exit low power mode  
+	return;
+
+}
+
+
+/**
+ * USCI Byte received from SPI
+ * Interrupt service routine.
+ */
+
+interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
+
+	static int tx;
+	UCA0TXBUF = tx;
+
+	tx = incrementExchange(UCA0RXBUF,NULL);
+
+}
+
+/**
+ * Timer overflow
+ * Interrupt service routine.
+ */
+
+interrupt(TIMER0_A1_VECTOR) ta1_isr(void) {
+
+	TA0CTL = TACLR;										// stop & clear timer
+	TA0CCTL1 &= 0;										// also disable timer interrupt & clear flag
+
+	__bic_SR_register_on_exit(LPM3_bits + GIE); 		// exit low power mode  
+	return;
+}
+
+
+inline int incrementExchange(register int rx,struct Exchange * pExchange) {
+
+	static struct Exchange exchange;
+	if (pExchange) { exchange = pExchange; return; }
+	if (++(exchange->pointer) > sizeof (struct Sample)) { return 0x00; }
+
+	*exchange->pIn = rx;
+	*exchange->pIn++;
+
+	return (*exchange->pOut++);
 
 }
 
@@ -133,6 +158,30 @@ void timer(int delay) {
 	msp430StartTimer(delay)
 }
 
+/**
+ * fillExchange()
+ * prepares exchange buffer and fills it with last sample
+ */
+
+void fillExchange(Sample * sample,Exchange * exchange) {
+
+	memset(&exchange->inBuffer,0,sizeof(exchange->inBuffer));
+	memcpy(&exchange->outBuffer.s,sample,sizeof(struct Sample));
+
+	exchange->outBuffer.preamble = PREAMBLE;
+	exchange->outBuffer.checkSum = 0x4567; // TODO;
+
+	exchange->transferred 	= 0;
+	exchange->pIn  			= exchange->inBuffer;
+	exchange->pOut 			= exchange->outBuffer;
+
+	*exchange->__padding_in[0]	= 0;
+	*exchange->__padding_out[0] = 0;
+	*exchange->pointer 			= 0;
+
+	incrementExchange(0,exchange); // sets exchange reference in intr
+
+}
 
 /** 
  * function fillSampleTrigger
@@ -140,62 +189,56 @@ void timer(int delay) {
  */
 int fillSampleTrigger(struct Sample * new,struct Sample * old,struct IoConfig * ioConfig) {
 
-		register int i, adcValue;
-	    int usedADCIo[MAX_ADC_CHANNELS];
+	register int i, adcValue;
+    int usedADCIo[MAX_ADC_CHANNELS];
 
-		new->trigger = 0;
+	new->trigger = 0;
 
-		// Update ports state on new sample
-		new->ports[0] = availP1 & (P1IN & ~ioConfig->P1DIR & ~ioConfig->P1ADC);
-		new->ports[1] = availP2 & (P2IN & ~ioConfig->P2DIR);
-		new->ports[2] = availP3 & (P3IN & ~ioConfig->P3DIR);
+	// Update ports state on new sample
+	new->ports[0] = availP1 & (P1IN & ~ioConfig->P1DIR & ~ioConfig->P1ADC);
+	new->ports[1] = availP2 & (P2IN & ~ioConfig->P2DIR);
+	new->ports[2] = availP3 & (P3IN & ~ioConfig->P3DIR);
 
-		getADCIoUsed(ioConfig->P1ADC,usedADCIo);
+	getADCIoUsed(ioConfig->P1ADC,usedADCIo);
 
-		if (old->sampled) {
-			for (i=0;i<MAX_ADC_CHANNELS;i++) {
-				if (usedADCIo[i]) {
-				   adcValue = new->adcData[i];
-				   if ((adcValue > (old->adcData[i]+15)) || (adcValue < (old->adcData[i]-15))) {
-						  old->adcData[i] = adcValue;
-						  new->trigger |= 0x01 << i;
-				   }
-				}
+	if (old->sampled) {
+		for (i=0;i<MAX_ADC_CHANNELS;i++) {
+			if (usedADCIo[i]) {
+			   adcValue = new->adcData[i];
+			   if ((adcValue > (old->adcData[i]+15)) || (adcValue < (old->adcData[i]-15))) {
+					  old->adcData[i] = adcValue;
+					  new->trigger |= 0x01 << i;
+			   }
 			}
-			for (i=0;i<NUM_PORTS_AVAIL;i++)	{
-				if (old->ports[i] != new->ports[i])  new->trigger |= 0x01 << (0x05+i);
-			}
-		} else {
-			new->trigger |= (1 << 8);
 		}
+		for (i=0;i<NUM_PORTS_AVAIL;i++)	{
+			if (old->ports[i] != new->ports[i])  new->trigger |= 0x01 << (0x05+i);
+		}
+	} else {
+		new->trigger |= (1 << 8); 	// we just booted up send initial config to node.
+	}
 
-		memcpy(old,new,sizeof(Sample));
-
+	memcpy(old,new,sizeof(struct Sample));
 }
 
 
-int processExchange(struct Exchange * exchange) {
+void processExchange(struct Exchange * exchange) {
 
-
-		char * pXchBuf = (char*)&exchangeBuffer[PREAMBLE_SIZE];
-		switch (*++pXchBuf) {
-			case  0x55 :
-			     flashConfig((struct ioConfig*)++pXchBuf);
-			  break;
-			case 0x66 :
-				P1OUT |= (*++pXchBuf & ioConfig.P1DIR);
-				P2OUT |= (*++pXchBuf & ioConfig.P2DIR);
-				P3OUT |= (*++pXchBuf & ioConfig.P3DIR);
-				P1OUT &= (*++pXchBuf | ~ioConfig.P1DIR);
-				P2OUT &= (*++pXchBuf | ~ioConfig.P2DIR);
-				P3OUT &= (*++pXchBuf | ~ioConfig.P3DIR);
-			break;
-		}
+	char * pExchangeBuf = exchange->inBuffer.inData;
+	switch (*pExchangeBuf) {
+		case  0x55 :
+		    flashConfig((struct IoConfig*)++pExchangeBuf);
+		  	return;
+		case 0x66 :
+			msp430BitMaskPorts(++pExchangeBuf);
+			return;
+	}
 
 }
 
 
 inline void getADCIoUsed (int ioADC, int * adcIoUsed) {
+	
 	/* Mark what input are being used. */
 	for (i=0;i<MAX_ADC_CHANNELS;i++) {
 		adcIoUsed[MAX_ADC_CHANNELS-i-1] = ioADC & 1; 
@@ -207,18 +250,15 @@ inline void getADCIoUsed (int ioADC, int * adcIoUsed) {
 
 void initializeSample(SampleDataEvent * sample) {
 
-	setmem(&sample,sizeof(SampleData),0);
+	memset(&sample,0,sizeof(SampleData));
 }
 
 void initialize(struct IoConfig * ioConfig) {
 
-	
-  BCSCTL1 	= CALBC1_8MHZ;			// CPU Freq | 8MHz
-  BCSCTL2  |= DIVS_3;				// SMCLK/DCO @ 1MHz
-  BCSCTL3	= LFXT1S_2; 			// ACLK @ 10kHz
-
-  initializeIOConfig(&ioConfig);
-  //initializeUSCI();
-  initializeTimer();
+	msp430initializeClocks();
+	initializeUSCI();
+	initializeADC();
+	initializeIOConfig(&ioConfig);
+	initializeTimer();
 
 }
