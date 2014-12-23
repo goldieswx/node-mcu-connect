@@ -149,9 +149,18 @@ int main() {
 	initializeUSCI();
 	inspectAndIncrement(0); // initialize static container.
 
-	SWITCH_LOW_POWER_MODE;
+	//activateNodeTrigger();
 
-	while(1);
+	while(1) {
+
+		SWITCH_LOW_POWER_MODE; // 
+		// waked up when either interrupt or micmd
+//		deactivateNodetrigger();
+//		EI();
+//		serviceNODE()
+		// activated when trigger and/or
+	}
+	
 	
 	return 0;
 }
