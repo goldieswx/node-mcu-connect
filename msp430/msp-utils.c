@@ -22,24 +22,6 @@
 
 #include "msp-utils.h"
 
-inline unsigned int _memcmp(void* a, void * b, int len) {
-
-  while (len--) {
-     if (*(char*)a++ != *(char*)b++) return 0;
-  }
-
-  return 1;
-
-}
-
-
-inline void _memcpy( void* dest, void*src, int len) {
-
-  while (len--) {
-     *(char*)dest++ = *(char*)src++;
-  }
-}
-
 
 void flash_erase(int *addr)
 {
@@ -75,7 +57,7 @@ void flash_write(int *dest, int *src, unsigned int size)
 }
 
 
-void flashConfig(struct ioConfig * p) {
+void flashConfig(struct IoConfig * p) {
 
   WDTCTL = WDTPW + WDTHOLD; // Hold watchdog.
   struct flashConfig buffer;
@@ -83,16 +65,16 @@ void flashConfig(struct ioConfig * p) {
   buffer._magic = 0x7354;      
 
   // Copy config buffer prior to writing it in flash
-  _memcpy(&buffer.ioConfig,p,sizeof(struct ioConfig));
+  memcpy(&buffer.ioConfig,p,sizeof(struct ioConfig));
 
   // Do not write flash with the same existing buffer.
-  if (_memcmp(&buffer,flashIoConfig,sizeof(struct flashConfig))) {
+  if (memcmp(&buffer,flashIoConfig,sizeof(struct flashConfig))) {
     return;
   }
 
   //Do Update the Flash
-  flash_erase((int*)flashIoConfig);
-  flash_write((int*)flashIoConfig,(int*)&buffer,sizeof(struct flashConfig)/sizeof(int));
+  flash_erase((int*)IOCFG_HW_ADDR);
+  flash_write((int*)IOCFG_HW_ADDR,(int*)&buffer,sizeof(struct flashConfig)/sizeof(int));
 
   WDTCTL = WDTHOLD; // reboot.
 }
