@@ -36,10 +36,14 @@ int main() {
 	initializeSample(&old);
 	initialize(&ioConfig);
 
+	int i;	for (i=0;i<15000;i++) __delay_cycles(5000);
+
+	signalNode 		(LOW);
+
 	while(1) { 
+		
 		timer(300);										// wait
 		LOW_POWER_MODE();								// go LPM and enable interrupts and wait.
-
 		struct Sample new;						
 		initializeSample(&new);							// initialize new sample structure
 
@@ -47,18 +51,20 @@ int main() {
 		LOW_POWER_MODE();								// go LPM and enable interrupts and wait.
 
 		fillSampleTrigger(&new,&old,&ioConfig);
-
+	
 		if (new.trigger || (NODE_INTERRUPT)) { 				// INTERRUPT read: 'node is interrupting'
-			
 			struct Exchange exchange;
 			
 			fillExchange 	(&new,&exchange);		// prepare output buffers with sample.
 			signalNode 		(HIGH);						// signal readyness to node 
+
 			while (!NODE_INTERRUPT) __delay_cycles(100);
+	
 			listen 			(&exchange);				// start USCI and enable USCI interrupt.
 			LOW_POWER_MODE	();							// go LPM and enable interrupts and wait.
 			signalNode		(LOW);						// signal busyness to node
 			close			();							// stop USCI.
+			
 			processExchange	(&exchange,&ioConfig);				// process received buffer.
 		}
 	}
@@ -87,10 +93,16 @@ interrupt(ADC10_VECTOR) ADC10_ISR (void) {
 interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
 	static int tx;
-	UCA0TXBUF = tx;
+	UCB0TXBUF = tx;
 
-	tx = incrementExchange(UCA0RXBUF,NULL);
+	tx = incrementExchange(UCB0RXBUF,NULL);
 
+	if (!NODE_INTERRUPT) {
+		__bic_SR_register_on_exit(LPM3_bits + GIE); 		// exit low power mode  
+	} else {
+		__bis_SR_register_on_exit(LPM3_bits); 
+	}
+	return;
 }
 
 /**
@@ -111,15 +123,14 @@ interrupt(TIMER0_A1_VECTOR) ta1_isr(void) {
 inline int incrementExchange(register int rx,struct Exchange * pExchange) {
 
 	static struct Exchange * exchange;
+
 	if (pExchange) { exchange = pExchange; return 0x00; }
 	if (++(exchange->pointer) > sizeof (struct Sample)) { return 0x00; }
 
 	*(exchange->pIn) = rx;
 	exchange->pIn++;
 
-
 	return (*exchange->pOut++);
-
 }
 
 
@@ -220,7 +231,8 @@ void fillSampleTrigger(struct Sample * new,struct Sample * old,struct IoConfig *
 		new->trigger |= (1 << 8); 	// we just booted up send initial config to node.
 	}
 
-	memcpy(old,new,sizeof(struct Sample));
+
+	if (new->trigger) { memcpy(old,new,sizeof(struct Sample));   }
 }
 
 
@@ -253,7 +265,7 @@ inline void getADCIoUsed (int ioADC, int * adcIoUsed) {
 
 void initializeSample(struct Sample * sample) {
 
-	memset(&sample,0,sizeof(struct Sample));
+	memset(sample,0,sizeof(struct Sample));
 }
 
 void initialize(struct IoConfig * ioConfig) {
