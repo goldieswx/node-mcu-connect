@@ -33,12 +33,14 @@
 				(((pc)->dataIn.destinationSncc == nodeId) && ((pc)->signalMaster))
 
 #define MASTER_SENDING_MICMD(pc) \
-				((pc)->dataIn.destinationCmd == nodeId)
+				(((pc)->dataIn.destinationCmd == nodeId) && (!(pc)->masterInquiryCommand))
 
 #define DO_CHECKSUM(pc,rx) \
 				((pc)->dataOut.chkSum += (rx))
 
 #define SWITCH_LOW_POWER_MODE   __bis_SR_register(LPM3_bits + GIE)
+
+#define ENABLE_INTERRUPT 		__enable_interrupt()
 
 
 #define PTR_END_OF_HEADER               (2)     // Header ends after preamble
@@ -47,10 +49,17 @@
 #define PTR_END_OF_CHECKSUM             (PTR_END_OF_DESTINATION  + 21)
 #define PTR_END_OF_CHECKSUM_PRE         (PTR_END_OF_CHECKSUM - 1) 
 #define PTR_END_OF_PACKET               (PTR_END_OF_CHECKSUM + 2) // out lags 2 bytes behind in (therefore 4-2 = 2).
+#define PTR_END_OF_PACKET2              (PTR_END_OF_CHECKSUM + 4) // out lags 2 bytes behind in (therefore 4-2 = 2).
 
-#define word short 
+
+#define word int 
 
 #define RESET WDTCTL = WDTHOLD
+
+#define MOSI  BIT7 
+#define MISO  BIT6
+#define SCK   BIT5
+
 
 struct McomInPacket {
   unsigned word                                 preamble;
@@ -60,8 +69,8 @@ struct McomInPacket {
   unsigned char                                 __reserved_1;
   unsigned char                                 __reserved_2;
   unsigned char                                 data[20];
-  unsigned word                                 snccCheckSum;
-  unsigned word                                 chkSum;
+  int                                 snccCheckSum;
+  int                                 chkSum;
 };
 
 struct McomOutPacket {
@@ -72,8 +81,8 @@ struct McomOutPacket {
   unsigned char                                 __reserved_1;
   unsigned char                                 __reserved_2;
   unsigned char                                 data[20];
-  unsigned word                                 snccCheckSum;
-  unsigned word                                 chkSum;
+  int                                 snccCheckSum;
+  int                                 chkSum;
 };
 
 typedef void (*Inspector) ( int rx, void  * packetContainer);
@@ -104,10 +113,11 @@ struct PacketContainer {
 		// Buffer to write to ADCE
 
 		struct McomInPacket     dataIn;
+		int __padding; // output padding must be 0 (used when tx overflows)
 		// Raw data In
 		struct McomOutPacket    dataOut;
 		// Raw data Out
-
+		int ___padding; // output padding must be 0 (used when tx overflows)
 		unsigned char *                 pIn;
 		// Floating Pointer to dataIn
 		unsigned char *                 pOut;
@@ -115,6 +125,10 @@ struct PacketContainer {
 		int                                     initialized;
 		// This structure needs to be initialized.
 		int                                     transmissionErrors;
+		// clear  masterInquiryCommand bit on next packet end.
+		int 								clearMasterInquiry;
+		int 								signalMasterLP;
+		int *								pClearLP;
 
 };
 
@@ -123,23 +137,30 @@ int             initializePacketContainer(struct PacketContainer * packetContain
 
 int             incrementPacket(const register int rx, struct PacketContainer  * packetContainer);
 inline void     rescue (const register int rx, struct PacketContainer * packetContainer);
-inline int      inspectAndIncrement(const register int rx);
+inline int      inspectAndIncrement(const register int rx, int* pClearLP);
 
 void            endOfHeaderEvent        (const register int rx, struct PacketContainer * packetContainer);
 void            endOfDestinationEvent   (const register int rx, struct PacketContainer * packetContainer);
 void            endOfPacketEvent        (const register int rx, struct PacketContainer * packetContainer);
 void            endOfReservedEvent      (const register int rx, struct PacketContainer * packetContainer);
+void 			endOfPacketEvent2       (const register int rx, struct  PacketContainer * packetContainer);
+
 void        	packetCheckSumPreEvent 	(const register int rx, struct PacketContainer * packetContainer);
 void            packetCheckSumEvent     (const register int rx, struct PacketContainer * packetContainer);
 
 void            noActionEvent           (const register int rx, const struct PacketContainer * packetContainer);
-
-
 void            prepareNextPacketCycle   (struct PacketContainer* packetContainer);
-
 
 void 			initGlobal();
 void 			initializeUSCI();
+void 			setADCETrigger(int state);
+void 			serviceADCE();
+char 			transfer(char s);
+void 			clearMasterInquiry (struct PacketContainer * packetContainer);
+
+struct 			PacketContainer * getPacketContainer(struct PacketContainer * set);
+
+int test = BIT1;
 
 int main() {
 
@@ -147,18 +168,23 @@ int main() {
 
 	initGlobal();
 	initializeUSCI();
-	inspectAndIncrement(0); // initialize static container.
-
-	//activateNodeTrigger();
+	inspectAndIncrement(0,NULL); // initialize static container.
+	
+	struct PacketContainer * p = getPacketContainer(NULL);
 
 	while(1) {
-
+		while(p->signalMaster) {
+			p->signalMasterLP = 1;
+			SWITCH_LOW_POWER_MODE; // 
+			p->signalMasterLP = 0;
+		}
+		setADCETrigger(1);
 		SWITCH_LOW_POWER_MODE; // 
 		// waked up when either interrupt or micmd
-//		deactivateNodetrigger();
-//		EI();
-//		serviceNODE()
-		// activated when trigger and/or
+
+		ENABLE_INTERRUPT;
+		serviceADCE();
+		clearMasterInquiry(NULL);
 	}
 	
 	
@@ -168,17 +194,21 @@ int main() {
 interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 
 	static int tx;
+	int clearLP;
 	UCA0TXBUF = tx;
-	tx = inspectAndIncrement(UCA0RXBUF);
+	tx = inspectAndIncrement(UCA0RXBUF,&clearLP);
+	if (clearLP) { __bic_SR_register_on_exit(LPM3_bits + GIE); };
+	return;
 
 }
 
 
-inline int inspectAndIncrement(const register int rx) {
+inline int inspectAndIncrement(const register int rx,int * clearLP) {
 
 	static struct PacketContainer packetContainer;
 	if (packetContainer.initialized) {
-
+		packetContainer.pClearLP = clearLP;
+		*clearLP = 0;
 		if (!packetContainer.incomplete) {
 			prepareNextPacketCycle(&packetContainer);
 		}
@@ -189,10 +219,21 @@ inline int inspectAndIncrement(const register int rx) {
 		 }
 
 		packetContainer.inspect(rx,&packetContainer);
+
 		return incrementPacket(rx,&packetContainer);
 	}
 
 	return initializePacketContainer(&packetContainer);
+
+}
+
+struct PacketContainer * getPacketContainer(struct PacketContainer * set) {
+
+	static struct PacketContainer * packetContainer;
+	if (!packetContainer && set) {
+		packetContainer = set;
+	}
+	return packetContainer;
 
 }
 
@@ -216,6 +257,7 @@ int initializePacketContainer(struct PacketContainer * packetContainer) {
 	packetContainer->pOut                   = (unsigned char*)&packetContainer->dataOut;
 	packetContainer->initialized    = 1;
 
+	getPacketContainer(packetContainer);
 	return 0x00;
 }
 
@@ -248,6 +290,10 @@ int incrementPacket(const register int rx, struct PacketContainer  * packetConta
 			case PTR_END_OF_PACKET:
 				packetContainer->inspect = (Inspector) &endOfPacketEvent;
 			break;
+			case PTR_END_OF_PACKET2:
+				packetContainer->inspect = (Inspector) &endOfPacketEvent2;
+			break;
+
 			case PTR_END_OF_RESERVED:
 				packetContainer->inspect = (Inspector) &endOfReservedEvent;
 				break;      
@@ -282,7 +328,9 @@ void endOfHeaderEvent           (const register int rx,  struct  PacketContainer
 		packetContainer->synced = 0; 
 		return; 
 	}  
-	packetContainer->dataOut.signalMask1 = (packetContainer->signalMaster << nodeId);
+	packetContainer->dataOut.signalMask1 =  (packetContainer->signalMaster << nodeId);
+	//packetContainer->dataOut.cmd = (packetContainer->signalMaster << nodeId);
+
 }
 
 /**
@@ -328,15 +376,36 @@ void endOfPacketEvent           (const register int rx, struct  PacketContainer 
 	if (MASTER_REQUEST_SNCC(packetContainer)) {
 		if (packetContainer->dataIn.snccCheckSum == packetContainer->outBufferChecksum ) {
 			packetContainer->signalMaster = 0;
+			if (packetContainer->signalMasterLP) {
+				*packetContainer->pClearLP = 1;
+			}
 		}
 	}
 
-	if (MASTER_SENDING_MICMD(packetContainer)) {
-		if (packetContainer->dataIn.chkSum == packetContainer->dataOut.chkSum) {
-			packetContainer->masterInquiryCommand = 1;
+	  
+}
+
+/**
+ * function endOfHeaderEvent()
+ */
+
+void endOfPacketEvent2           (const register int rx, struct  PacketContainer * packetContainer) {
+
+
+	if (packetContainer->clearMasterInquiry) {
+		packetContainer->clearMasterInquiry = 0;
+		packetContainer->masterInquiryCommand = 0;
+	} else {
+		if (MASTER_SENDING_MICMD(packetContainer)) {
+			if (packetContainer->dataIn.chkSum == packetContainer->dataOut.chkSum) {
+				packetContainer->masterInquiryCommand = 1;
+				test ^= (BIT0 | BIT1);
+				P2OUT |= BIT0;
+			}
 		}
 	}
 
+	packetContainer->dataIn.preamble = 0;
 	packetContainer->incomplete = 0;  // mark packet as complete (to process)
 	  
 }
@@ -350,6 +419,21 @@ void noActionEvent                      (const register int rx, const struct  Pa
 }
 
 
+void clearMasterInquiry (struct PacketContainer * packetContainer) {
+
+	if (!packetContainer) { packetContainer = getPacketContainer(NULL); }
+	
+	if (packetContainer->masterInquiryCommand) {
+		if (packetContainer->incomplete == 0) { // packet complete, clear directly
+			packetContainer->masterInquiryCommand = 0;
+		} else { // a packet is being transmitted, clear indirectly
+			packetContainer->clearMasterInquiry = 1;
+		}
+			
+	}
+
+}
+
 
 void prepareNextPacketCycle(struct PacketContainer* packetContainer) {
 
@@ -357,7 +441,7 @@ void prepareNextPacketCycle(struct PacketContainer* packetContainer) {
 	packetContainer->validChecksumCount++;
 	packetContainer->inspect                = (Inspector)&noActionEvent;
 	packetContainer->pIn                    = (unsigned char*)&packetContainer->dataIn;
-	packetContainer->pOut                   = (unsigned char*)&packetContainer->dataOut;    
+	packetContainer->pOut                   = (unsigned char*)&packetContainer->dataOut+2;    
 
 }
 
@@ -397,52 +481,78 @@ inline void rescue (const register int rx, struct PacketContainer * packetContai
 	}
 }
 
-/**
- * function endOfHeaderEvent()
- */
 
 
-void transferPendingIO() {
+// ADCE RELATED STUFF
 
- //  if (signalMaster || outPacket.signalMask1) { // since we started receving the pkgs master was signalled
- //             UCA0TXBUF = 0x80 | currentNodeId;
- //  }
+void setADCETrigger(int state) {
 
-/*
-		----- SCK
-		----- SDI
-		----- SDO
-		----- A  (SIG, common)
-		----- B  (INTR, particular)
+	P1IES = ~BIT3;
+ 	if(state) {
+		P1IE  |= BIT3;
+		P1IFG = P1IN & BIT3;
+ 	} else {
+		P1IE  &= ~BIT3;
+		P1IFG = 0;
+ 	}
 
-   //OUT [A HIGH] [AC] [A LOW] [AC] [iid] [20b] [cso] [A HIGH] [cso] [A LOW]
-   // IN                        [00]         [00] [000] [20b] [csi]          [csi]
+}
 
-		// cycle B pins
-		if (_CNM_PIN & CS_NOTIFY_MASTER || pendingMICmd )  {
-				_CIP_POUT |= CS_INCOMING_PACKET;
-				while(1) {
-						// A LOW
-						__delay_cycles(100);
-						// A HIGH
-						if (transfer(0xAC) != 0xAC) continue;
-						// A LOW
-						if (transfer(0xAC) != 0xAC)     continue;
-						//
+void serviceADCE() {
 
-						headIn  = transfer(head);
-						chkIn   = transfer(checkSum);
-						buf[i]  = transfer(buffer);
+	P2OUT |= BIT0;
+	//P2OUT |= BIT7;
+	__delay_cycles(1000);
 
-						break;
-				}
-				_CIP_POUT &= ~CS_INCOMING_PACKET;
-				__delay_cycles(100);
-		} */
+	struct PacketContainer * packetContainer = getPacketContainer(NULL);
+	
+	int i = 0x00;
+	 packetContainer->signalMaster = 0;
+	 unsigned char * p = (unsigned char*) packetContainer->outBuffer;
+
+	*p = transfer(0xAC);
+	i += (int)*p;
+	p++;
+	*p = transfer(0xAC);
+	i += (int)*p;
+
+	p++;
+	*p = transfer(0x66);
+	i += (int)*p;
+
+	p++;
+	*p = transfer(test);
+	i += (int)*p;
+	p++;
+	*p = transfer(0x00);
+	i += (int)*p;
+	p++;
+	*p = transfer(0x00);
+	i += (int)*p;
+	p++;
+	*p = transfer(test);
+	i += (int)*p;
+	p++;
+	*p = transfer(0x00);
+	i += (int)*p;
+	p++;
+	*p = transfer(0x00);	
+	i += (int)*p;
+	P2OUT &= ~BIT0;
+	p++;
+	__delay_cycles(1000);
+	*p = transfer(0x00);
+
+	packetContainer->outBufferChecksum = 0x25d; //i + *p;	
+    packetContainer->signalMaster = 1;
+
+
+	//P2OUT |= BIT7;
 
 }
 
 
+// Initialize related stuff.
 
 /**
  * function intializeUSCI()
@@ -486,6 +596,56 @@ void initGlobal() {
 		P2SEL2 &= 0;
 		P2SEL &= 0;
 
-		P2DIR |= BIT6 + BIT7;                                   // Debug LEDs
-		P2OUT = 0;
+		P2DIR |= BIT6 + BIT7 + BIT0;                                   // Debug LEDs
+		
+		P1DIR |= MOSI + SCK;
+		P1DIR &= ~MISO;
+		P1DIR &= ~BIT3; // incoming
+
+
+		P2OUT = 0; // bit0 outgoing
+}
+
+
+interrupt(PORT1_VECTOR) p1_isr(void) { 
+
+	P2OUT |= BIT7;
+ P1IFG = 0;
+ __bic_SR_register_on_exit(LPM3_bits + GIE); 		// exit low power mode  
+ return;
+  
+}  
+char transfer(char s) {
+
+    unsigned char ret=0;
+    int i;
+
+    for(i=0;i<8;i++) {
+
+
+        ret <<= 1;
+        // Put bits on the line, most significant bit first.
+        if(s & 0x80) {
+              P1OUT |= MOSI;
+        } else {
+              P1OUT &= ~MOSI;
+        }
+        P1OUT |= SCK;
+        __delay_cycles( 250 );
+
+        s <<= 1;
+
+        // Pulse the clock low and wait to send the bit.  According to
+         // the data sheet, data is transferred on the rising edge.
+        P1OUT &= ~SCK;
+         __delay_cycles( 250 );
+        // Send the clock back high and wait to set the next bit.  
+        if (P1IN & MISO) {
+          ret |= 0x01;
+        } else {
+          ret &= 0xFE;
+        }
+    }
+    return ret; 
+
 }
