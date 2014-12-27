@@ -196,10 +196,10 @@ MCUNetwork.prototype._callback = function(value) {
 	var message = {
 		timestamp 	: 	(new Date()).getTime(),
 		destination : 	value.readUInt32LE(36),
-		trigger 	:  	value.readUInt16LE(12),
-		portData 	: [	value.readUInt8(10),
-						value.readUInt8(11),
-						value.readUInt8(14)],
+		trigger 	:  	value.readUInt16LE(16),
+		portData 	: [	value.readUInt16LE(10),
+						value.readUInt16LE(12),
+						value.readUInt16LE(14)],
 		adcData 	: [	value.readUInt16LE(0x0),
 						value.readUInt16LE(0x2),
 						value.readUInt16LE(0x4),
@@ -616,17 +616,17 @@ var net = new MCUNetwork();
 
 (function($) {
 
-    net.add('node-entry',0x03).add('entry',0x01);
-    net.add('node-bedroom',0x04).add('bedroom',0x01);
+    //net.add('node-entry',0x03).add('entry',0x01);
+    net.add('node-bedroom',0x03).add('bedroom',0x01);
     net.add('sync',0x09).add('sync',0x01).add('sync','digital out 1.0').tag('sync');
    
    	// Entry interface
-    (function(i) {
+    /*(function(i) {
 		i.add('sw-1','analog in 1.3').tag("in");
 		i.add('sw-2','analog in 1.4').tag("in2");
 		i.refresh();
 	})($('entry'));
-
+*/
 
 	//Bedroom interface
     (function(i) {
@@ -672,7 +672,7 @@ var net = new MCUNetwork();
 	});
 
   
-	$(":in2").on("change",function(event) {
+/*	$(":in2").on("change",function(event) {
 
 		if (event.buttonDown && event.value > 850) {
 			var delay = event.context.timestamp-event.buttonDown||0;
@@ -694,12 +694,12 @@ var net = new MCUNetwork();
 		});
 
 	});
-
+*/
   $('spotlight-2').enable().disable().enable().disable().enable().disable().enable().disable().enable().disable();
   $('spotlight-1').enable().disable().enable().disable().enable().disable().enable().disable().enable().disable().enable();
 
 
-	setInterval(function(){ $(':sync').toggle() },2000);
+//	setInterval(function(){ $(':sync').toggle() },2000);
 
 })(net.find.bind(net));
 

@@ -21,7 +21,7 @@
 #define NODE_INTERRUPT 			 (P2IN & CS_INCOMING_PACKET)
 
 
-#define IOCFG_HW_ADDR		0x0E000
+#define IOCFG_HW_ADDR		0xE000
 
 inline void msp430SampleInputs(struct Sample * sample);
 inline void msp430ResetUSCI();

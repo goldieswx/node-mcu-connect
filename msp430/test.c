@@ -229,7 +229,7 @@ word main() {
 
 			// service adce and fill up next signalmaster if needed
 		serviceADCE(p);
-		DISABLE_INTERRUPT;
+		//DISABLE_INTERRUPT;
 			// clear micmd and make space for next one
 		clearMasterInquiry(p);
 	}
@@ -595,19 +595,18 @@ void serviceADCE(struct PacketContainer * p) {
 	 transfer(adceIn[j++]);
 
 
-	 for (i=0;i<17;i++) {
+	 for (i=0;i<19;i++) {
 	 	*adceOut = transfer(adceIn[j++]);
 	 	sum += *adceOut;
 	 	adceOut++;
 	 }
-	 
+
+ 
 	P2OUT &= ~BIT0;
 	__delay_cycles(500);
 
-	*adceOut = transfer(adceIn[j]);
-    sum += *adceOut;
-    adceOut ++;
-	*adceOut = transfer(0);
+ 	*adceOut = transfer(0);
+	sum += *adceOut;
 
 	int trigger = p->outBuffer[8];
 	p->outBufferChecksum = sum; 	
@@ -665,8 +664,8 @@ void initGlobal() {
 
 #ifdef MSP
 		WDTCTL = WDTPW + WDTHOLD;                               // Stop watchdog timer
-		BCSCTL1 = CALBC1_8MHZ;
-		DCOCTL = CALDCO_8MHZ;
+		BCSCTL1 = CALBC1_12MHZ;
+		DCOCTL = CALDCO_12MHZ;
 		BCSCTL3 |= LFXT1S_2;                                    // Set clock source to VLO (low power osc for timer)
 
 		P1REN &= 0;
@@ -682,8 +681,6 @@ void initGlobal() {
 		P1DIR |= MOSI + SCK;
 		P1DIR &= ~MISO;
 		P1DIR &= ~BIT3; // incoming
-
-
 		P2OUT = 0; // bit0 outgoing
 
 #endif

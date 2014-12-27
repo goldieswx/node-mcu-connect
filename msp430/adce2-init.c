@@ -104,7 +104,7 @@ void initializeIOConfig(struct IoConfig * ioConfig) {
 	flashIoConfig = (struct flashConfig*) IOCFG_HW_ADDR;
 
 	if ((flashIoConfig->magic == 0x4573) && (flashIoConfig->_magic = 0x7354)) {
-		memcpy(&ioConfig,&flashIoConfig->ioConfig,sizeof(struct IoConfig));
+		memcpy(ioConfig,&flashIoConfig->ioConfig,sizeof(struct IoConfig));
 	} else {
 		ioConfig->P1DIR = 0x03;
 		ioConfig->P1ADC = 0x04;

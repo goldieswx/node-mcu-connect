@@ -97,7 +97,7 @@ void 	fillSampleTrigger 	(struct Sample * new,struct Sample * old,struct IoConfi
 void 	initializeSample 	(struct Sample * sample);
 void 	initialize 			(struct IoConfig * ioConfig);
 void 	signalNode 			(int level);
-void 	fillExchange 		(struct Sample * sample,struct Exchange * exchange);
+void 	fillExchange 		(struct Sample * sample,struct Exchange * exchange,struct IoConfig * ioConfig);
 
 inline int incrementExchange(register int rx,struct Exchange * pExchange);
 inline void getADCIoUsed 	(int ioADC, int * adcIoUsed);

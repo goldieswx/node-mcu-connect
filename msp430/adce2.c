@@ -34,6 +34,7 @@ int main() {
   	WDTCTL 	= WDTPW | WDTHOLD;	
 
 	initializeSample(&old);
+	memset(&ioConfig,0,sizeof(ioConfig));
 	initialize(&ioConfig);
 
 	int i;	for (i=0;i<15000;i++) __delay_cycles(5000);
@@ -55,7 +56,7 @@ int main() {
 		if (new.trigger || (NODE_INTERRUPT)) { 				// INTERRUPT read: 'node is interrupting'
 			struct Exchange exchange;
 			
-			fillExchange 	(&new,&exchange);		// prepare output buffers with sample.
+			fillExchange 	(&new,&exchange,&ioConfig);		// prepare output buffers with sample.
 			signalNode 		(HIGH);						// signal readyness to node 
 
 			while (!NODE_INTERRUPT) __delay_cycles(100);
@@ -176,10 +177,12 @@ void timer(int delay) {
  * prepares exchange buffer and fills it with last sample
  */
 
-void fillExchange(struct Sample * sample,struct Exchange * exchange) {
+void fillExchange(struct Sample * sample,struct Exchange * exchange,struct IoConfig * ioConfig) {
 
 	memset(&exchange->inBuffer,0,sizeof(exchange->inBuffer));
 	memcpy(&exchange->outBuffer.s,sample,sizeof(struct Sample));
+
+	//memcpy(&exchange->outBuffer.s,ioConfig,10);
 
 	exchange->outBuffer.preamble = PREAMBLE;
 	exchange->outBuffer.checkSum = 0x4567; // TODO;
@@ -271,9 +274,9 @@ void initializeSample(struct Sample * sample) {
 void initialize(struct IoConfig * ioConfig) {
 
 	msp430InitializeClocks();
+	initializeIOConfig(ioConfig);
 	initializeUSCI();
 	initializeADC(ioConfig);
-	initializeIOConfig(ioConfig);
 	initializeTimer();
 
 }
