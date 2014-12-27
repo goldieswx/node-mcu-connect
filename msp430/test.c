@@ -185,7 +185,7 @@ void            prepareNextPacketCycle   (struct PacketContainer* packetContaine
 void 			initGlobal();
 void 			initializeUSCI();
 void 			setADCETrigger(word state);
-void 			serviceADCE();
+void 			serviceADCE(struct PacketContainer * p);
 word 			transfer(word s);
 void 			clearMasterInquiry (struct PacketContainer * packetContainer);
 
@@ -196,8 +196,6 @@ struct 			PacketContainer * getPacketContainer(struct PacketContainer * set);
 int rxInt (word UCA0RXBUF);
 
 #endif
-
-word test = BIT1;
 
 word main() {
 
@@ -210,36 +208,6 @@ word main() {
 
 
 	struct PacketContainer * p = getPacketContainer(NULL);
-
-/*
-	unsigned char stream[] = {0xac, 0xac, 0xa, 0x22, 
-	0x3, 0x3, 0x0, 0x0, 0x55, 0x3, 0x4, 0xff, 0x0, 0x0, 0xff, 0x0, 0x0, 
-	0xff, 0x0, 0x0, 0x0, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 
-	0x55, 0x22, 0x39, 0x4 }; 
-
-	p->signalMaster = 1;
-	p->outBuffer[0] = 0x4433;
-	p->outBuffer[9] = 0x7788;
-	p->outBufferChecksum = 0x2255;
-
-	int i;
-	for (i=0;i<sizeof(stream);i++) {
-		printf("In %x - Out %x\n", stream[i], rxInt(stream[i]));
-	}
-
-
-		for (i=0;i<sizeof(stream);i++) {
-	
-			if (i==7) clearMasterInquiry(NULL);
-			//if (i==8) 
-		printf("In %x - Out %x\n", stream[i], rxInt(stream[i]));
-	}
-		for (i=0;i<sizeof(stream);i++) {
-		printf("In %x - Out %x\n", stream[i], rxInt(stream[i]));
-	}
-
-		return 0;
-*/
 
 	while(1) {
 
@@ -260,7 +228,7 @@ word main() {
 		}  
 
 			// service adce and fill up next signalmaster if needed
-		serviceADCE();
+		serviceADCE(p);
 		DISABLE_INTERRUPT;
 			// clear micmd and make space for next one
 		clearMasterInquiry(p);
@@ -290,26 +258,7 @@ interrupt(PORT1_VECTOR) p1_isr(void) {
  	return;
   
 }  
-
-#else
-
-int rxInt (word UCA0RXBUF) {
-	
-	static word tx;
-	word clearLP;
-
-	int txRet;
-	txRet = tx;
-	tx = inspectAndIncrement(UCA0RXBUF,&clearLP);
-	if (clearLP) { printf("Clearing LP, Resuming.\n"); };
-	
-	return txRet;
-}
-
-
 #endif
-
-
 
 
 inline word inspectAndIncrement(const register word rx,word * clearLP) {
@@ -425,16 +374,10 @@ inline void debugPacket(const char * c,const struct PacketContainer * p) {
 	return;
 }
 
-/*
-void debugPacket(const char * c,const struct PacketContainer * p) {
-	printf("%s - pointer: %d, synced: %d, incomplete : %d\n",c,p->pointer,p->synced,p->incomplete);
-}
-*/
 
 void            endOfReservedEvent        (const register word rx, struct PacketContainer * packetContainer)
 {
 
-		 debugPacket("endOfReservedEvent",packetContainer);
 		 packetContainer->dataOut.chkSum = 0;                        // Reset Checksum
 }
 
@@ -444,13 +387,11 @@ void            endOfReservedEvent        (const register word rx, struct Packet
  */
 void endOfHeaderEvent           (const register word rx,  struct  PacketContainer * packetContainer) {
 
-	debugPacket("endOfHeader",packetContainer);
 	if ((0xFFFF & (*(word *)&packetContainer->dataIn)) != MI_RESCUE) { 
 		packetContainer->synced = 0; 
 		return; 
 	}  
 	packetContainer->dataOut.signalMask1 =  (packetContainer->signalMaster << nodeId);
-	//packetContainer->dataOut.cmd = (packetContainer->signalMaster << nodeId);
 
 }
 
@@ -460,8 +401,6 @@ void endOfHeaderEvent           (const register word rx,  struct  PacketContaine
 void endOfDestinationEvent      (const register word rx,  struct  PacketContainer * packetContainer) {
 
 
-	debugPacket("endOfDestinationEvent",packetContainer);
-
 	if (MASTER_REQUEST_SNCC(packetContainer))    {
 		packetContainer->pOut = (unsigned char*)packetContainer->outBuffer;                                     
 		// Stream out buffer as of now.
@@ -470,14 +409,12 @@ void endOfDestinationEvent      (const register word rx,  struct  PacketContaine
 		packetContainer->dataOut.snccCheckSum = 0x00;
 	}
 	packetContainer->startMICMDCheckSum = MASTER_SENDING_MICMD(packetContainer);
-	//printf("Master Sending CMD : %d, dest: %d \n",packetContainer->startMICMDCheckSum,packetContainer->dataIn.destinationCmd);
 
 }
 
 void packetPreCheckSumEvent        (const register word rx,  struct  PacketContainer * packetContainer) {
 
 	packetContainer->pOut = (unsigned char*)&packetContainer->dataOut.snccCheckSum   ; // Reset floating pointer to dataOut
-
 
 }
 
@@ -491,9 +428,7 @@ void packetPreCheckSumEvent        (const register word rx,  struct  PacketConta
 void packetCheckSumEvent        (const register word rx,  struct  PacketContainer * packetContainer) {
 
 
-	debugPacket("packetCheckSumEvent",packetContainer);
 	if (packetContainer->startMICMDCheckSum) DO_CHECKSUM(packetContainer,rx); // append latest byte to chksum if needed
-	//printf("CHKSUM:%x\n",packetContainer->dataOut.chkSum);
 	packetContainer->startMICMDCheckSum = 0;
 
 
@@ -507,14 +442,11 @@ void packetCheckSumEvent        (const register word rx,  struct  PacketContaine
 void endOfPacketEvent           (const register word rx, struct  PacketContainer * packetContainer) {
 
 
-	debugPacket("endOfPacketEvent",packetContainer);
 	if (MASTER_REQUEST_SNCC(packetContainer)) {
 		if (packetContainer->dataIn.snccCheckSum == packetContainer->outBufferChecksum ) {
 			packetContainer->signalMaster = 0;
-			printf("SNCC SUCCESS!\n");
 		}
 	}
-
 	  
 }
 
@@ -524,9 +456,6 @@ void endOfPacketEvent           (const register word rx, struct  PacketContainer
 
 void endOfPacketEvent2           (const register word rx, struct  PacketContainer * packetContainer) {
 
-
-	debugPacket("endOfPacketEvent2",packetContainer);
-	
 	if (packetContainer->clearMasterInquiry) {
 		packetContainer->clearMasterInquiry = 0;
 		packetContainer->masterInquiryCommand = 0;
@@ -534,8 +463,9 @@ void endOfPacketEvent2           (const register word rx, struct  PacketContaine
 		if (MASTER_SENDING_MICMD(packetContainer)) {
 			if (packetContainer->dataIn.chkSum == packetContainer->dataOut.chkSum) {
 				packetContainer->masterInquiryCommand = 1;
+				memcpy(packetContainer->inBuffer,packetContainer->dataIn.data,20);
 				if (!packetContainer->signalMaster) {
-				*packetContainer->pClearLP = 1;  /// clear low power flags on intr exit, except if there is a pending signal master, in the case don't wake up
+					*packetContainer->pClearLP = 1;  /// clear low power flags on intr exit, except if there is a pending signal master, in the case don't wake up
 				}
 			}
 		}
@@ -543,9 +473,6 @@ void endOfPacketEvent2           (const register word rx, struct  PacketContaine
 
 	packetContainer->dataIn.preamble = 0;
 	packetContainer->incomplete = 0;  // mark packet as complete (to process)
-
-	P2OUT ^= BIT7;
-  
 
 	if (packetContainer->setSignalMaster) {
 		packetContainer->signalMaster = 1;
@@ -556,7 +483,6 @@ void endOfPacketEvent2           (const register word rx, struct  PacketContaine
 			while (IFG2 & UCA0TXIFG);
 			UCA0TXBUF = 0x80 | nodeId;
 	}
-
 	  
 }
 
@@ -567,7 +493,6 @@ void endOfPacketEvent2           (const register word rx, struct  PacketContaine
  */
 void noActionEvent                      (const register word rx, const struct  PacketContainer * packetContainer) {
 	
-	debugPacket("noActionEvent",packetContainer);
 }
 
 
@@ -616,8 +541,6 @@ inline void rescue (const register word rx, struct PacketContainer * packetConta
 	*p = *(pNext); p++; 
 	*p = rx;        
 
-	//printf("rescue :: %x VS %x\n",0xFFFF & (word)*(word *)packetContainer->pIn,MI_RESCUE);
-
 	if ((0xFFFF &  *(word *)packetContainer->pIn) ==  MI_RESCUE) {
 
 		packetContainer->pIn = (unsigned char*) &packetContainer->dataIn + 1;
@@ -655,56 +578,51 @@ void setADCETrigger(word state) {
 
 }
 
-void serviceADCE() {
+void serviceADCE(struct PacketContainer * p) {
 
 #ifdef MSP
-	//P2OUT |= BIT7;
-	__delay_cycles(10000);
+	__delay_cycles(500);
 
-	struct PacketContainer * packetContainer = getPacketContainer(NULL);
+	 int sum = 0;
+	 int i,j = 0;
 	
-	int sum = 0x00;
-	int i;
-	 //packetContainer->signalMaster = 0;
-	 unsigned char * p = (unsigned char*) packetContainer->outBuffer;
+	 unsigned char * adceIn =   (unsigned char*) p->inBuffer;
+	 unsigned char * adceOut  = (unsigned char*) p->outBuffer;
+	
+	 transfer(0xAC);
+	 transfer(0xAC);
+ 	 transfer(adceIn[j++]);
+	 transfer(adceIn[j++]);
 
-	 unsigned char stream[] = {0xAC,0xAC,0x66,0,0x00,0x00,0,0x00,0x00,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
-	 stream[3] = test;
-	 stream[6] = test;
 
-	 for (i=0;i<4;i++) {
-	 	transfer(stream[i]);
-	 }
-
-	 for (i=4;i<sizeof(stream)-1;i++) {
-	 	*p = transfer(stream[i]);
-	 	sum += *p;
-	 	p++;
+	 for (i=0;i<17;i++) {
+	 	*adceOut = transfer(adceIn[j++]);
+	 	sum += *adceOut;
+	 	adceOut++;
 	 }
 	 
 	P2OUT &= ~BIT0;
-	__delay_cycles(1000);
+	__delay_cycles(500);
 
-	*p = transfer(stream[sizeof(stream)-1]);
-    sum += *p;
+	*adceOut = transfer(adceIn[j]);
+    sum += *adceOut;
+    adceOut ++;
+	*adceOut = transfer(0);
 
-	int trigger = packetContainer->outBuffer[8];
-	packetContainer->outBufferChecksum = sum; 	
+	int trigger = p->outBuffer[8];
+	p->outBufferChecksum = sum; 	
 
 	if (trigger) {
-
-		if (!packetContainer->incomplete) {
-			if (packetContainer->synced) {
+		if (!p->incomplete) {
+			if (p->synced) {
 				UCA0TXBUF = 0x80 | nodeId;
 			}
-	    	packetContainer->signalMaster = 1;
+	    	p->signalMaster = 1;
 	    } else {
-		 	packetContainer->setSignalMaster = 1;
+		 	p->setSignalMaster = 1;
 	    }
 	}
 
-
-	//P2OUT |= BIT7;
 #endif
 }
 
