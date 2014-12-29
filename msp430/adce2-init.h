@@ -23,6 +23,9 @@
 
 #define IOCFG_HW_ADDR		0xE000
 
+
+void setupUSCIPins(int state);
+
 inline void msp430SampleInputs(struct Sample * sample);
 inline void msp430ResetUSCI();
 inline void msp430StopUSCI();

@@ -38,8 +38,13 @@ inline void msp430SampleInputs(struct Sample * sample) {
 
 inline void msp430ResetUSCI() {
 
+
+  setupUSCIPins(1);
+
   UCA0CTL1 = UCSWRST;   
   UCB0CTL1 = UCSWRST;								// **Put state machine in reset**
+
+
   __delay_cycles(10);
   UCB0CTL0 |= UCCKPH  | UCCKPL | UCMSB | UCSYNC;	// 3-pin, 8-bit SPI slave
   UCB0CTL1 &= ~UCSWRST;								// **Initialize USCI state machine**
@@ -56,8 +61,11 @@ inline void msp430ResetUSCI() {
 
 inline void msp430StopUSCI() {
 
+  setupUSCIPins(0);
+
   UCA0CTL1 = UCSWRST;   
   UCB0CTL1 = UCSWRST;								// **Put state machine in reset**
+
 
 }
 
@@ -115,7 +123,18 @@ void initializeIOConfig(struct IoConfig * ioConfig) {
 		ioConfig->P2OUT = 0;
 		ioConfig->P3DIR = 0;
 		ioConfig->P3REN = 0xFF;
-		ioConfig->P3OUT = 0; 
+		ioConfig->P3OUT = 0;
+		/*ioConfig->P1DIR = 0xFF;
+		ioConfig->P1ADC = 0x00;
+		ioConfig->P1REN = 0x00;
+		ioConfig->P1OUT = 0;
+		ioConfig->P2DIR = BIT3;
+		ioConfig->P2REN = 0x0;
+		ioConfig->P2OUT = BIT3;
+		ioConfig->P3DIR = 0xFF;
+		ioConfig->P3REN = 0x00;
+		ioConfig->P3OUT = 0x00;*/
+
 	}
 
 	ioConfig->P1DIR &= availP1 & ~ioConfig->P1ADC;
@@ -143,15 +162,53 @@ void initializeIOConfig(struct IoConfig * ioConfig) {
 	P3OUT    = (P3OUT & (~availP3)) | ioConfig->P3OUT;
 
 
+	P1IE = 0;
+	P2IE = 0;
+	P1IFG = 0;
+	P2IFG = 0;
+
+}
+
+interrupt(PORT1_VECTOR) p1_isr(void) { 
+ 	return;
+}  
+
+interrupt(PORT2_VECTOR) p2_isr(void) { 
+ 	return;
+}  
+
+
+
+void setupUSCIPins(int state) {
+
+	if (state) {
+
+	  P1DIR		&=	~(BIT5 | BIT7);				// BIT5 is Master Clock. BIT7 is MOSI
+	  P1OUT     &=  ~BIT6;
+	  P1DIR  	|=   BIT6;						// BIT6 is MISO
+	  P1REN     &=  ~BIT6;
+	  P1SEL		|=	 BIT5 | BIT6 | BIT7; 		// Select BITS5 to 7 for USCI
+	  P1SEL2	|=   BIT5 | BIT6 | BIT7;
+	
+	} else {
+
+	  P1DIR		&=	~(BIT5 | BIT7);				// BIT5 is Master Clock. BIT7 is MOSI
+	  P1DIR  	&=  ~BIT6;						// BIT6 is MISO while not communicating set REN as pull down
+	  P1OUT     &=  ~BIT6;
+	  P1REN     |=  BIT6;
+	  P1SEL		|=	BIT5 | BIT7; 		// Select BITS5 to 7 for USCI
+	  P1SEL2	|=  BIT5 | BIT7;
+	  P1SEL		&=	~BIT6; 		// Select BITS5 to 7 for USCI
+	  P1SEL2	&=  ~BIT6;
+	}
+
 }
 
 
 void initializeUSCI() {
 
-  P1DIR		|=	BIT5 | BIT7;				// BIT5 is Master Clock. BIT7 is MOSI
-  P1DIR  	&= ~BIT6;						// BIT6 is MISO
-  P1SEL		|=	BIT5 | BIT6 | BIT7; 		// Select BITS5 to 7 for USCI
-  P1SEL2	|=  BIT5 | BIT6 | BIT7;
+
+  setupUSCIPins(0);
 
   P2DIR  &= ~CS_INCOMING_PACKET;			// CS_INCOMING PACKET is the Master signal triggering the SPI transfer.
   P2OUT  &= ~CS_INCOMING_PACKET;            // Outgoing,and no PullUp/Dn. Interrupt configured for Raising Edge.

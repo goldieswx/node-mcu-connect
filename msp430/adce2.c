@@ -37,7 +37,8 @@ int main() {
 	memset(&ioConfig,0,sizeof(ioConfig));
 	initialize(&ioConfig);
 
-	int i;	for (i=0;i<15000;i++) __delay_cycles(5000);
+	int i;	for (i=0;i<15000
+		;i++) __delay_cycles(5000);
 
 	signalNode 		(LOW);
 
@@ -55,18 +56,27 @@ int main() {
 	
 		if (new.trigger || (NODE_INTERRUPT)) { 				// INTERRUPT read: 'node is interrupting'
 			struct Exchange exchange;
-			
+		
+			//while(1);
+
 			fillExchange 	(&new,&exchange,&ioConfig);		// prepare output buffers with sample.
 			signalNode 		(HIGH);						// signal readyness to node 
 
 			while (!NODE_INTERRUPT) __delay_cycles(100);
 	
+			//P3OUT |= BIT4 | BIT3;
+
+
 			listen 			(&exchange);				// start USCI and enable USCI interrupt.
 			LOW_POWER_MODE	();							// go LPM and enable interrupts and wait.
+			
+			//while (1);
 			signalNode		(LOW);						// signal busyness to node
 			close			();							// stop USCI.
 			
+			//
 			processExchange	(&exchange,&ioConfig);				// process received buffer.
+			//while(1);
 		}
 	}
 }
@@ -97,6 +107,9 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 	UCB0TXBUF = tx;
 
 	tx = incrementExchange(UCB0RXBUF,NULL);
+
+	//P3OUT &= ~BIT3;
+		
 
 	if (!NODE_INTERRUPT) {
 		__bic_SR_register_on_exit(LPM3_bits + GIE); 		// exit low power mode  

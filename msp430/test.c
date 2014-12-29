@@ -42,13 +42,11 @@
 #define LONG int
 #define word short int
 
-
 #define SWITCH_LOW_POWER_MODE   
 #define ENABLE_INTERRUPT 		
 #define DISABLE_INTERRUPT
 #define RESET 					
 #define DISABLE_WATCHDOG(a)  	    
-
 
 #endif
 
@@ -60,6 +58,7 @@
 
 #define nodeId 					3
 #define MI_RESCUE				0xacac 
+#define MI_CMD                  0x220a
 
 #define USCI_CONFIG_BITS_IN     (BIT2 | BIT4)
 #define USCI_CONFIG_BITS_OUT    (BIT1)
@@ -120,7 +119,7 @@ typedef void (*Inspector) ( word rx, void  * packetContainer);
 
 struct PacketContainer {
 
-		word                                         pointer;
+		word                                     pointer;
 		// Number from 0 to sizeof(McomInPacket)-1 representing the byte number being inspected.
 		word                                     incomplete;
 		// When cleared, a packet has been sucessfully received from master.
@@ -219,21 +218,48 @@ word main() {
 			// signalMaster is 0
 		    // micmd is pending, and/or acde trigger is pendinng
 			// in any case adce needs to be talked with so let's do.
-		P2OUT |= BIT0;
+
+		//P2OUT |= BIT0;
+        P2OUT |= BIT1 ;
 
 			// wait for adce callback (if not alredy there)
-		while (!(P1IN & BIT3)) {
+		while (!(P2IN & BIT4)) { // P1IN & BIT3
 			setADCETrigger(1); // enable adce trigger (or micmd)
 			SWITCH_LOW_POWER_MODE;
 		}  
+
+
 
 			// service adce and fill up next signalmaster if needed
 		serviceADCE(p);
 		//DISABLE_INTERRUPT;
 			// clear micmd and make space for next one
-		clearMasterInquiry(p);
+		clearMasterInquiry(p); //only if processed correctly TODO
 	}
 	
+
+
+	/*while (1) {
+
+		setADCETrigger
+		LPM
+		EI 
+
+		if(micmd) { 
+			adce_chosen =  the one of the micmd
+			pxout |= bitx;
+			serviceADCE(p,adce_chosen);
+			CMI();
+		}  
+
+		if(micmd did not trigger or no micmd) {
+			serviceADCE(p,lastest used recently (array of 3))
+		}
+			
+
+	}*/
+
+
 	
 	return 0;
 }
@@ -242,6 +268,11 @@ word main() {
 interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 	static word tx;
 	word clearLP;
+	
+   if (UCA0STAT & UCOE) {
+      WDTCTL = WDTHOLD;
+   }
+
 	UCA0TXBUF = tx;
 	tx = inspectAndIncrement(UCA0RXBUF,&clearLP);
 	if (clearLP) { __bic_SR_register_on_exit(LPM3_bits + GIE); };
@@ -250,14 +281,28 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 }
 
 
-interrupt(PORT1_VECTOR) p1_isr(void) { 
+/*interrupt(PORT1_VECTOR) p1_isr(void) { 
 
-	P1IE  &= ~BIT3;
+	//P1IE  &= ~BIT3;
+	P1IE  &= ~BIT2;
+	
 	P1IFG = 0;
  	__bic_SR_register_on_exit(LPM3_bits + GIE); 		// exit low power mode  
  	return;
   
-}  
+} */
+
+interrupt(PORT2_VECTOR) p2_isr(void) { 
+
+	//P1IE  &= ~BIT3;
+	P2IE  &= ~BIT4;
+	
+	P2IFG = 0;
+ 	__bic_SR_register_on_exit(LPM3_bits + GIE); 		// exit low power mode  
+ 	return;
+  
+} 
+
 #endif
 
 
@@ -387,7 +432,7 @@ void            endOfReservedEvent        (const register word rx, struct Packet
  */
 void endOfHeaderEvent           (const register word rx,  struct  PacketContainer * packetContainer) {
 
-	if ((0xFFFF & (*(word *)&packetContainer->dataIn)) != MI_RESCUE) { 
+	if (packetContainer->dataIn.preamble != MI_RESCUE) { 
 		packetContainer->synced = 0; 
 		return; 
 	}  
@@ -400,6 +445,11 @@ void endOfHeaderEvent           (const register word rx,  struct  PacketContaine
  */
 void endOfDestinationEvent      (const register word rx,  struct  PacketContainer * packetContainer) {
 
+
+	if (packetContainer->dataIn.cmd != MI_CMD) { 
+		packetContainer->synced = 0; 
+		return; 
+	}
 
 	if (MASTER_REQUEST_SNCC(packetContainer))    {
 		packetContainer->pOut = (unsigned char*)packetContainer->outBuffer;                                     
@@ -566,14 +616,23 @@ inline void rescue (const register word rx, struct PacketContainer * packetConta
 void setADCETrigger(word state) {
 
 #ifdef MSP
-	P1IES = ~BIT3;
+/*	P1IES = ~BIT3;
  	if(state) {
 		P1IE  |= BIT3;
 		P1IFG = P1IN & BIT3;
  	} else {
 		P1IE  &= ~BIT3;
 		P1IFG = 0;
+ 	}*/
+    P2IES = ~BIT4;
+ 	if(state) {
+		P2IE  |= BIT4;
+		P2IFG = P2IN & BIT4;
+ 	} else {
+		P2IE  &= ~BIT4;
+		P2IFG = 0;
  	}
+		
 #endif
 
 }
@@ -581,7 +640,8 @@ void setADCETrigger(word state) {
 void serviceADCE(struct PacketContainer * p) {
 
 #ifdef MSP
-	__delay_cycles(500);
+	P2OUT |= BIT7;
+	__delay_cycles(15000);
 
 	 int sum = 0;
 	 int i,j = 0;
@@ -600,9 +660,10 @@ void serviceADCE(struct PacketContainer * p) {
 	 	sum += *adceOut;
 	 	adceOut++;
 	 }
-
  
-	P2OUT &= ~BIT0;
+	//P2OUT &= ~BIT0;
+	P2OUT &= ~BIT1;
+
 	__delay_cycles(500);
 
  	*adceOut = transfer(0);
@@ -676,12 +737,16 @@ void initGlobal() {
 		P2SEL2 &= 0;
 		P2SEL &= 0;
 
-		P2DIR |= BIT6 + BIT7 + BIT0;                                   // Debug LEDs
+		P2DIR |= BIT6 + BIT7 + BIT0 + BIT1;                                   // Debug LEDs
 		
 		P1DIR |= MOSI + SCK;
 		P1DIR &= ~MISO;
-		P1DIR &= ~BIT3; // incoming
-		P2OUT = 0; // bit0 outgoing
+		P1DIR &= ~BIT3; // incoming ADCE
+		P2DIR &= ~BIT4; // incoming ADCE
+		
+		P2IE = 0;
+
+		P2OUT = 0; // bit0 outgoing  // bit1 outgoing
 
 #endif
 }
