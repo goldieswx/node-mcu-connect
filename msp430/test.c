@@ -162,7 +162,6 @@ struct PacketContainer {
 
 };
 
-
 word             initializePacketContainer(struct PacketContainer * packetContainer);
 
 word             incrementPacket(const register word rx, struct PacketContainer  * packetContainer);
@@ -183,12 +182,18 @@ void            prepareNextPacketCycle   (struct PacketContainer* packetContaine
 
 void 			initGlobal();
 void 			initializeUSCI();
-void 			setADCETrigger(word state);
-void 			serviceADCE(struct PacketContainer * p);
 word 			transfer(word s);
 void 			clearMasterInquiry (struct PacketContainer * packetContainer);
-
 struct 			PacketContainer * getPacketContainer(struct PacketContainer * set);
+
+void 			adceSetTrigger(int state, int adceId);
+int 			adceSignalCmd(struct PacketContainer * p); 
+int 			adceSignalTriggerAny();
+void 			adceServiceTrigger(struct PacketContainer * p, int adceId);
+int 			adceService(unsigned char * adceIn, unsigned char * adceOut, int adceId);
+void 			adceServiceCmd(struct PacketContainer * p, int adceId);
+
+
 
 #ifndef MSP
 
@@ -204,65 +209,53 @@ word main() {
 	initializeUSCI();
 	inspectAndIncrement(0,NULL); // initialize static container.
 
-
-
 	struct PacketContainer * p = getPacketContainer(NULL);
 
 	while(1) {
 
-		setADCETrigger(1); 
+		adceSetTrigger(1,0xFF); // enable trigger from all extensions. 
 		SWITCH_LOW_POWER_MODE;  
 		ENABLE_INTERRUPT;
+		while (p->signalMaster);
 
 			// few things are certain at this point
 			// signalMaster is 0
 		    // micmd is pending, and/or acde trigger is pendinng
 			// in any case adce needs to be talked with so let's do.
 
-		//P2OUT |= BIT0;
-        P2OUT |= BIT1 ;
+		if (p->masterInquiryCommand) {
+			int adceId = adceSignalCmd(p);  // 1 => P2OUT |= BIT0; 2 => P2OUT |= BIT1 
+			switch (adceId) {
+				case 1 : 
+						while (!(P1IN & BIT3)); /* { // P1IN & BIT3
+						adceSetTrigger(1,adceID); // enable adce trigger (or micmd)
+							SWITCH_LOW_POWER_MODE;
+						} */
+						break; 
+				case 2 : 
+						while (!(P2IN & BIT4)); /* { // P1IN & BIT3
+							adceSetTrigger(1,adceID); // enable adce trigger (or micmd)
+							SWITCH_LOW_POWER_MODE;
+						} */
+						break;
 
-			// wait for adce callback (if not alredy there)
-		while (!(P2IN & BIT4)) { // P1IN & BIT3
-			setADCETrigger(1); // enable adce trigger (or micmd)
-			SWITCH_LOW_POWER_MODE;
-		}  
-
-
-
-			// service adce and fill up next signalmaster if needed
-		serviceADCE(p);
-		//DISABLE_INTERRUPT;
-			// clear micmd and make space for next one
-		clearMasterInquiry(p); //only if processed correctly TODO
-	}
-	
-
-
-	/*while (1) {
-
-		setADCETrigger
-		LPM
-		EI 
-
-		if(micmd) { 
-			adce_chosen =  the one of the micmd
-			pxout |= bitx;
-			serviceADCE(p,adce_chosen);
-			CMI();
-		}  
-
-		if(micmd did not trigger or no micmd) {
-			serviceADCE(p,lastest used recently (array of 3))
+			}
+			ENABLE_INTERRUPT;
+			adceServiceCmd(p,adceId);
+			clearMasterInquiry(p); //only if processed correctly TODO
+		} else {
+			if ((P1IN & BIT3) || (P2IN & BIT4)) {
+				int adceId = adceSignalTriggerAny();
+				adceServiceTrigger(p,adceId);
+			}
 		}
-			
-
-	}*/
-
-
-	
+		
+	}
 	return 0;
 }
+
+
+
 
 #ifdef MSP
 interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
@@ -281,20 +274,18 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 }
 
 
-/*interrupt(PORT1_VECTOR) p1_isr(void) { 
+interrupt(PORT1_VECTOR) p1_isr(void) { 
 
-	//P1IE  &= ~BIT3;
-	P1IE  &= ~BIT2;
+	P1IE  &= ~BIT3;
 	
 	P1IFG = 0;
  	__bic_SR_register_on_exit(LPM3_bits + GIE); 		// exit low power mode  
  	return;
   
-} */
+} 
 
 interrupt(PORT2_VECTOR) p2_isr(void) { 
 
-	//P1IE  &= ~BIT3;
 	P2IE  &= ~BIT4;
 	
 	P2IFG = 0;
@@ -613,64 +604,81 @@ inline void rescue (const register word rx, struct PacketContainer * packetConta
 
 // ADCE RELATED STUFF
 
-void setADCETrigger(word state) {
+void adceSetTrigger(int state, int adceId) {
 
-#ifdef MSP
-/*	P1IES = ~BIT3;
- 	if(state) {
-		P1IE  |= BIT3;
-		P1IFG = P1IN & BIT3;
- 	} else {
-		P1IE  &= ~BIT3;
-		P1IFG = 0;
- 	}*/
-    P2IES = ~BIT4;
- 	if(state) {
-		P2IE  |= BIT4;
-		P2IFG = P2IN & BIT4;
- 	} else {
-		P2IE  &= ~BIT4;
-		P2IFG = 0;
- 	}
-		
-#endif
+	if (adceId & 0x01) {
+		P1IES = ~BIT3;
+ 		if(state) {
+			P1IE  |= BIT3;
+			P1IFG = P1IN & BIT3;
+ 		} else {
+			P1IE  &= ~BIT3;
+			P1IFG = 0;
+	 	}
+	}
+
+	if (adceId & 0x02) {
+		P2IES = ~BIT4;
+		if(state) {
+			P2IE  |= BIT4;
+			P2IFG = P2IN & BIT4;
+		} else {
+			P2IE  &= ~BIT4;
+			P2IFG = 0;
+		}
+	}
 
 }
 
-void serviceADCE(struct PacketContainer * p) {
 
-#ifdef MSP
-	P2OUT |= BIT7;
-	__delay_cycles(15000);
 
-	 int sum = 0;
-	 int i,j = 0;
+int adceSignalCmd(struct PacketContainer * p) {
+
+	if (!p->masterInquiryCommand) return 1;
+
+	int cmdId = *((char*)p->inBuffer); 
+	switch(cmdId) {
+		case 0x55:
+		case 0x56:
+		case 0x57:
+			cmdId -= 0x55;
+			break;
+		case 0x66:
+		case 0x67:
+		case 0x68:
+			cmdId -= 0x66;
+			break;
+		default:
+			cmdId = 0;
+	};
+
+
+	int adceId = 1 << cmdId; 
+    //1 => P2OUT |= BIT0; 2 => P2OUT |= BIT1 
+	P2OUT |= adceId;
+	return adceId;
+}
+
+
+int adceSignalTriggerAny() {
+
+	int adceId = 0;
+	if (P1IN & BIT3) adceId = 1;
+	if (P2IN & BIT4) adceId = 2;
+
+	P2OUT |= adceId;
+
+	return adceId;
+}
+
+
+void adceServiceTrigger(struct PacketContainer * p, int adceId) {
+
+	if (!adceId) return;
+
+	p->outBufferChecksum = adceService(NULL,(unsigned char*) p->outBuffer,adceId);
 	
-	 unsigned char * adceIn =   (unsigned char*) p->inBuffer;
-	 unsigned char * adceOut  = (unsigned char*) p->outBuffer;
-	
-	 transfer(0xAC);
-	 transfer(0xAC);
- 	 transfer(adceIn[j++]);
-	 transfer(adceIn[j++]);
-
-
-	 for (i=0;i<19;i++) {
-	 	*adceOut = transfer(adceIn[j++]);
-	 	sum += *adceOut;
-	 	adceOut++;
-	 }
- 
-	//P2OUT &= ~BIT0;
-	P2OUT &= ~BIT1;
-
-	__delay_cycles(500);
-
- 	*adceOut = transfer(0);
-	sum += *adceOut;
-
 	int trigger = p->outBuffer[8];
-	p->outBufferChecksum = sum; 	
 
 	if (trigger) {
 		if (!p->incomplete) {
@@ -683,7 +691,72 @@ void serviceADCE(struct PacketContainer * p) {
 	    }
 	}
 
-#endif
+}
+
+
+int adceService(unsigned char * adceIn, unsigned char * adceOut, int adceId) {
+
+	__delay_cycles(1500);
+
+	 int sum = 0;
+	 int i,j = 0;
+	
+	
+	 transfer(0xAC);
+	 transfer(0xAC);
+
+	 if (adceIn) { 	 
+	 	 transfer(adceIn[j++]);
+		 transfer(adceIn[j++]);
+
+		 for (i=0;i<19;i++) {
+		 	*adceOut = transfer(adceIn[j++]);
+		 	sum += *adceOut;
+		 	adceOut++;
+		 }
+	 } else {
+	 	 transfer(0);
+		 transfer(0);
+
+		 for (i=0;i<19;i++) {
+		 	*adceOut = transfer(0);
+		 	sum += *adceOut;
+		 	adceOut++;
+		 }
+ 	 }
+
+	//P2OUT &= ~BIT0;
+	//P2OUT &= ~BIT1;
+	P2OUT &= ~adceId;
+
+	__delay_cycles(500);
+
+ 	*adceOut = transfer(0);
+	sum += *adceOut;
+
+	return sum;
+
+}
+
+
+
+void adceServiceCmd(struct PacketContainer * p, int adceId) {
+
+
+	p->outBufferChecksum = adceService((unsigned char*) p->inBuffer,(unsigned char*) p->outBuffer,adceId);
+	int trigger = p->outBuffer[8];
+
+	if (trigger) {
+		if (!p->incomplete) {
+			if (p->synced) {
+				UCA0TXBUF = 0x80 | nodeId;
+			}
+	    	p->signalMaster = 1;
+	    } else {
+		 	p->setSignalMaster = 1;
+	    }
+	}
+
 }
 
 
