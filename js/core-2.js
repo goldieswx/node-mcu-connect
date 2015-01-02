@@ -205,7 +205,7 @@ MCUNetwork.prototype._callback = function(value) {
 						value.readUInt16LE(0x4),
 						value.readUInt16LE(0x6),
 						value.readUInt16LE(0x8)],
-		interfaceId	:	1
+		interfaceId	:	value.readUInt8(19)
 	}
 	this._dispatchMessage(message);
 }
@@ -264,11 +264,12 @@ MCUInterface.getThrottleMessageQueue = function(self) {
 		var state;
 		var aggreatedMessage = new Buffer("012345678901234567891234"); // see adce.c@processMsg for details 
 		aggreatedMessage.fill(0);
-		aggreatedMessage.writeUInt32LE(0x66,0);
+		aggreatedMessage.writeUInt32LE(0x66+self.id,0);
 		aggreatedMessage.writeUInt32LE(self.node.id,20);
 
 		_.remove(self._outMessageQueue,function(item){
-			if (item[0] == 0x66) {
+console.log(item);
+			if (item[0] == (0x66+self.id)) {
 				state = state || [item[1],item[2],item[3]];
 				state[0] |= item[1];
 				state[1] |= item[2];
@@ -281,6 +282,10 @@ MCUInterface.getThrottleMessageQueue = function(self) {
 			}         
 		});
 
+
+
+		if(state) { 
+
 		aggreatedMessage[1] = 0xff & state[0];
 		aggreatedMessage[2] = 0xff & state[1];
 		aggreatedMessage[3] = 0xff & state[2];
@@ -288,7 +293,7 @@ MCUInterface.getThrottleMessageQueue = function(self) {
 		aggreatedMessage[5] = 0xff & state[1];
 		aggreatedMessage[6] = 0xff & state[2];
 
-		if(state) { self._network._sendMessage(aggreatedMessage); console.log(aggreatedMessage); }
+			self._network._sendMessage(aggreatedMessage); console.log(aggreatedMessage); }
 
 	},30,{leading:false,trailing:true}); 
 
@@ -339,15 +344,15 @@ MCUInterface.prototype.refresh = function() {
     		}
     });
 
-	this._network._sendMessage(MCUInterface.getRefreshMessage(config,this.node.id));
+	this._network._sendMessage(MCUInterface.getRefreshMessage(config,this.node.id,this.id));
 
 };
 
-MCUInterface.getRefreshMessage = function(config,id) {
+MCUInterface.getRefreshMessage = function(config,nodeId,interfaceId) {
 
 	var msg = new Buffer("                        ");
 	msg.fill(0);
-	msg.writeUInt8(0x55,0);
+	msg.writeUInt8(0x55+interfaceId,0);
 	msg.writeUInt8(config.portDIR[0],1); 
 	msg.writeUInt8(config.portADC,2); 
 	msg.writeUInt8(config.portREN[0],3); 
@@ -358,7 +363,7 @@ MCUInterface.getRefreshMessage = function(config,id) {
 	msg.writeUInt8(config.portDIR[2],8); 
 	msg.writeUInt8(config.portREN[2],9); 
 	msg.writeUInt8(config.portOUT[2],10); 
-	msg.writeUInt32LE(id,20);
+	msg.writeUInt32LE(nodeId,20);
 
 	return msg;
 }
@@ -527,7 +532,7 @@ MCUIo.prototype.enable = function(value) {
 	value = (value)?1:0;
 
 	if (_.isUndefined(this.value) || (this.value != value)) {
-    this._interface._outMessageQueue.push(MCUIo.getMessageIoWriteDigital(this.hardwareKeys,this.node.id,value));
+    this._interface._outMessageQueue.push(MCUIo.getMessageIoWriteDigital(this.hardwareKeys,this.node.id,this._interface.id,value));
 		this._interface.throttleMessageQueue();
 		this.value = value;
 	}
@@ -538,7 +543,7 @@ MCUIo.prototype.enable = function(value) {
 MCUIo.prototype.disable = function() {
 
 	if (_.isUndefined(this.value) || (this.value)) {
-    this._interface._outMessageQueue.push(MCUIo.getMessageIoWriteDigital(this.hardwareKeys,this.node.id,0));
+    this._interface._outMessageQueue.push(MCUIo.getMessageIoWriteDigital(this.hardwareKeys,this.node.id,this._interface.id,0));
     this._interface.throttleMessageQueue();
 		this.value = 0;
 	}
@@ -553,15 +558,20 @@ MCUIo.getValueFromContext = function(hardwareKeys,message) {
 };
 
 
-MCUIo.getMessageIoWriteDigital = function(hardwareKeys,ioKey,value) {
+MCUIo.getMessageIoWriteDigital = function(hardwareKeys,nodeId,interfaceId,value) {
 
     var msg = new Buffer("012345678901234567891234"); // see adce.c@processMsg for details 
 	var andAddrStart = 3; 
 	var orAddrStart = 0;
 
 	msg.fill(0);
-    msg.writeUInt32LE(0x66,0);
-    msg.writeUInt32LE(ioKey,20);
+    msg.writeUInt32LE(0x66+interfaceId,0);
+    msg.writeUInt32LE(nodeId,20);
+
+    // and all (other) ports (so to not disable them).
+    msg[4] = 0xFF;
+	msg[5] = 0xFF;
+    msg[6] = 0xFF;
 
     if (value) {
     	msg.writeUInt8 (0xFF & hardwareKeys.portMask,orAddrStart + hardwareKeys.port );
@@ -600,7 +610,7 @@ MCUIo.getPortMask = function(stringMask) {
 			ret.trigger 		= 1 << (4+mapping.port); // 1<<5 for port 1, <<6 for 2 ...
 			ret.portMask 		= mapping.mask;
 			if(mapping.port > 1) {
-				ret.portMask <<= 3; // avail P2.x and P3.x is BIT3..BIT7 instead of BIT0..BIT4
+			//	ret.portMask <<= 3; // avail P2.x and P3.x is BIT3..BIT7 instead of BIT0..BIT4
 			}
 	}
 	return ret;
@@ -617,17 +627,27 @@ var net = new MCUNetwork();
 (function($) {
 
     //net.add('node-entry',0x03).add('entry',0x01);
-    net.add('node-bedroom',0x03).add('bedroom',0x01);
-    net.add('sync',0x09).add('sync',0x01).add('sync','digital out 1.0').tag('sync');
+      net.add('new-node',0x03).add('itf',0x01).add('itf0',0x00); 
+   //net.add('sync',0x09).add('sync',0x01).add('sync','digital out 1.0').tag('sync');
    
-   	// Entry interface
-    /*(function(i) {
-		i.add('sw-1','analog in 1.3').tag("in");
-		i.add('sw-2','analog in 1.4').tag("in2");
-		i.refresh();
-	})($('entry'));
-*/
 
+   	// Entry interface
+    (function(i) {
+		i.add('lg-1','digital out 2.3').tag("out");
+		i.add('lg-2','digital out 3.4').tag("out");
+		i.add('lg-3','digital out 3.3').tag("out");
+		i.refresh();
+	})($('itf'));
+
+
+	var arrow = [$('lg-1'),$('lg-2'),$('lg-3')];
+    var x = 0;
+
+//	setInterval(function(){ $(':sync').toggle() },2000);
+	setInterval(function(){ $(':out').disable(); (arrow[x++]).enable(1); x%=3; },1000);
+
+	return;
+   	
 	//Bedroom interface
     (function(i) {
 	    i.add('sw-3',		'analog in 1.2').tag("in");
@@ -671,30 +691,6 @@ var net = new MCUNetwork();
 
 	});
 
-  
-/*	$(":in2").on("change",function(event) {
-
-		if (event.buttonDown && event.value > 850) {
-			var delay = event.context.timestamp-event.buttonDown||0;
-			event.buttonDown = 0;
-			event.clearableTimer.cancel();
-			$('spotlight-2').enable(event.filters.timedAverage.value > 450)
-			console.log('button-up2',delay,event.filters.timedAverage.value);
-
-			return;
-		}
-		if (event.value > 850) { return};
-
-		event.timedAverageFilter();
-		event.buttonDown = event.buttonDown || event.context.timestamp;
-		//  https://github.com/kriskowal/q#propagation
-		event.clearableTimer.start(2000).then(function(){  
-			$(':out').enable(event.filters.timedAverage.value > 450); 
-			console.log('long push',event.filters.timedAverage.value > 450) 
-		});
-
-	});
-*/
   $('spotlight-2').enable().disable().enable().disable().enable().disable().enable().disable().enable().disable();
   $('spotlight-1').enable().disable().enable().disable().enable().disable().enable().disable().enable().disable().enable();
 

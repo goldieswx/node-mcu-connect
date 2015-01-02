@@ -224,7 +224,7 @@ word main() {
 		if (!p->masterInquiryCommand) SWITCH_LOW_POWER_MODE;  
 		adceSetTrigger(0,0xFF);
 		ENABLE_INTERRUPT;
-		while (p->signalMaster) { P2OUT ^= BIT7; __delay_cycles(5000); }
+		while (p->signalMaster) { P2OUT ^= BIT7; __delay_cycles(100); }
 
 			// few things are certain at this point
 			// signalMaster is 0
@@ -755,7 +755,8 @@ int adceService(unsigned char * adceIn, unsigned char * adceOut, int adceId) {
 
 	__delay_cycles(500);
 
- 	*adceOut = transfer(0);
+ 	transfer(0);
+ 	*adceOut = adceId;
 	sum += *adceOut;
 
 	return sum;
