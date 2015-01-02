@@ -211,12 +211,20 @@ word main() {
 
 	struct PacketContainer * p = getPacketContainer(NULL);
 
+	adceSetTrigger(1,0xFF); // enable trigger from all extensions. 
+
 	while(1) {
 
+		P2OUT |= BIT7;
+
+
+
+		DISABLE_INTERRUPT;
 		adceSetTrigger(1,0xFF); // enable trigger from all extensions. 
-		SWITCH_LOW_POWER_MODE;  
+		if (!p->masterInquiryCommand) SWITCH_LOW_POWER_MODE;  
+		adceSetTrigger(0,0xFF);
 		ENABLE_INTERRUPT;
-		while (p->signalMaster);
+		while (p->signalMaster) { P2OUT ^= BIT7; __delay_cycles(5000); }
 
 			// few things are certain at this point
 			// signalMaster is 0
@@ -227,25 +235,27 @@ word main() {
 			int adceId = adceSignalCmd(p);  // 1 => P2OUT |= BIT0; 2 => P2OUT |= BIT1 
 			switch (adceId) {
 				case 1 : 
-						while (!(P1IN & BIT3)); /* { // P1IN & BIT3
+						while (!(P1IN & BIT3)) { P2OUT ^= BIT7; __delay_cycles(5000); } /* { // P1IN & BIT3
 						adceSetTrigger(1,adceID); // enable adce trigger (or micmd)
 							SWITCH_LOW_POWER_MODE;
 						} */
 						break; 
 				case 2 : 
-						while (!(P2IN & BIT4)); /* { // P1IN & BIT3
+						while (!(P2IN & BIT4))  { P2OUT ^= BIT7; __delay_cycles(5000); } /* { // P1IN & BIT3
 							adceSetTrigger(1,adceID); // enable adce trigger (or micmd)
 							SWITCH_LOW_POWER_MODE;
 						} */
 						break;
 
 			}
-			ENABLE_INTERRUPT;
+			//ENABLE_INTERRUPT;
+			P2OUT &= ~BIT7;
 			adceServiceCmd(p,adceId);
 			clearMasterInquiry(p); //only if processed correctly TODO
 		} else {
 			if ((P1IN & BIT3) || (P2IN & BIT4)) {
 				int adceId = adceSignalTriggerAny();
+				P2OUT &= ~BIT7;
 				adceServiceTrigger(p,adceId);
 			}
 		}
@@ -497,16 +507,27 @@ void endOfPacketEvent           (const register word rx, struct  PacketContainer
 
 void endOfPacketEvent2           (const register word rx, struct  PacketContainer * packetContainer) {
 
+
 	if (packetContainer->clearMasterInquiry) {
 		packetContainer->clearMasterInquiry = 0;
 		packetContainer->masterInquiryCommand = 0;
 	} else {
+	
+		if (packetContainer->masterInquiryCommand) {
+			// previous unprocessed micmd, this can happen, if there was a signalmaster packet left (below) and we didnt wake (wake later)
+			if (!packetContainer->signalMaster)	*packetContainer->pClearLP = 1;
+		}
+
 		if (MASTER_SENDING_MICMD(packetContainer)) {
 			if (packetContainer->dataIn.chkSum == packetContainer->dataOut.chkSum) {
 				packetContainer->masterInquiryCommand = 1;
 				memcpy(packetContainer->inBuffer,packetContainer->dataIn.data,20);
 				if (!packetContainer->signalMaster) {
+					// we don't wake up now, but then wake later sice we're lpm.
 					*packetContainer->pClearLP = 1;  /// clear low power flags on intr exit, except if there is a pending signal master, in the case don't wake up
+					P2OUT &= ~BIT6;
+				} else {
+					P2OUT |= BIT6;
 				}
 			}
 		}
@@ -521,7 +542,7 @@ void endOfPacketEvent2           (const register word rx, struct  PacketContaine
 	}
 
 	if (packetContainer->synced && packetContainer->signalMaster) {
-			while (IFG2 & UCA0TXIFG);
+			while (IFG2 & UCA0TXIFG)  { P2OUT ^= BIT7; __delay_cycles(5000); } 
 			UCA0TXBUF = 0x80 | nodeId;
 	}
 	  
@@ -613,7 +634,7 @@ void adceSetTrigger(int state, int adceId) {
 			P1IFG = P1IN & BIT3;
  		} else {
 			P1IE  &= ~BIT3;
-			P1IFG = 0;
+			P1IFG &= ~BIT3;
 	 	}
 	}
 
@@ -624,9 +645,10 @@ void adceSetTrigger(int state, int adceId) {
 			P2IFG = P2IN & BIT4;
 		} else {
 			P2IE  &= ~BIT4;
-			P2IFG = 0;
+			P2IFG &= ~BIT4;
 		}
 	}
+
 
 }
 
@@ -642,11 +664,13 @@ int adceSignalCmd(struct PacketContainer * p) {
 		case 0x56:
 		case 0x57:
 			cmdId -= 0x55;
+			*((char*)p->inBuffer) = 0x55;
 			break;
 		case 0x66:
 		case 0x67:
 		case 0x68:
 			cmdId -= 0x66;
+			*((char*)p->inBuffer) = 0x66;
 			break;
 		default:
 			cmdId = 0;
@@ -818,6 +842,7 @@ void initGlobal() {
 		P2DIR &= ~BIT4; // incoming ADCE
 		
 		P2IE = 0;
+		P1IE = 0;
 
 		P2OUT = 0; // bit0 outgoing  // bit1 outgoing
 
