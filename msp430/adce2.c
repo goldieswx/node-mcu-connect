@@ -37,14 +37,16 @@ int main() {
 	memset(&ioConfig,0,sizeof(ioConfig));
 	initialize(&ioConfig);
 
-	int i;	for (i=0;i<15000
-		;i++) __delay_cycles(5000);
-
 	signalNode 		(LOW);
+
+	int i;	for (i=0;i<10
+		;i++) __delay_cycles(10000);
+
+	
 
 	while(1) { 
 		
-		timer(300);										// wait
+		timer(30);										// wait
 		LOW_POWER_MODE();								// go LPM and enable interrupts and wait.
 		struct Sample new;						
 		initializeSample(&new);							// initialize new sample structure

@@ -13,6 +13,8 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>. 
 */
 
+
+
 var util = require('util');
 var dgram = require('dgram');
 var _ = require('lodash-node');
@@ -26,7 +28,15 @@ var MCUObject = function(key) {
   this.childType = "child";
   this.tags = [];
 
+  this._selectors = [];
+
 };
+
+MCUObject.prototype._cacheSelector = function(selector,value) {
+
+	this._selectors.push({"selector":selector,"value":value});
+	return value;
+}
 
 
 /**
@@ -38,6 +48,11 @@ var MCUObject = function(key) {
 
 MCUObject.prototype.find = function(selector) {
 
+	var cached = _.find(this._selectors,{"selector":selector});
+	if (cached) {
+		return cached.value;	
+	} 
+
   // split expression by spaces and recursively call ourselves
   // to reduce the result subset by subset
   var expression  = selector.split(' ');
@@ -46,7 +61,7 @@ MCUObject.prototype.find = function(selector) {
 	 _.each(expression,function(item){
 		tmp = tmp.find(item);
 	 });
-	 return tmp;
+	 return this._cacheSelector(selector,tmp);
   }
 
   // treat simpler case where selector is just one string ([key]:[[tag]:[tag2]])
@@ -65,6 +80,7 @@ MCUObject.prototype.find = function(selector) {
 	 } 
   }
   
+  var oldSelector = selector;
   var selector = selector.split(":");
   tags = selector.splice(1);
   var key = selector;
@@ -80,7 +96,7 @@ MCUObject.prototype.find = function(selector) {
 	 ret = children[0];
   }
   
-  return ret;
+  return this._cacheSelector(oldSelector,ret);
 
 };
 
@@ -205,7 +221,7 @@ MCUNetwork.prototype._callback = function(value) {
 						value.readUInt16LE(0x4),
 						value.readUInt16LE(0x6),
 						value.readUInt16LE(0x8)],
-		interfaceId	:	value.readUInt8(19)
+		interfaceId	:	value.readUInt8(19)-1
 	}
 	this._dispatchMessage(message);
 }
@@ -239,7 +255,10 @@ MCUNode.prototype._callback = function(message) {
 		this._cachedInterfaceList[message.interfaceId] = _.find(this.children,{id:message.interfaceId});
 	}
 
-	this._cachedInterfaceList[message.interfaceId]._callback(message);
+	var _interface = this._cachedInterfaceList[message.interfaceId];
+	if (_interface) { _interface._callback(message); } else {
+		console.log('unknown interface ',message);
+	}
 
 };
 
@@ -268,7 +287,6 @@ MCUInterface.getThrottleMessageQueue = function(self) {
 		aggreatedMessage.writeUInt32LE(self.node.id,20);
 
 		_.remove(self._outMessageQueue,function(item){
-console.log(item);
 			if (item[0] == (0x66+self.id)) {
 				state = state || [item[1],item[2],item[3]];
 				state[0] |= item[1];
@@ -277,12 +295,12 @@ console.log(item);
 				state[0] &= item[4];
 				state[1] &= item[5];
 				state[2] &= item[6];
+				
 			} else {
 				self._network._sendMessage(item); 
 			}         
+			return true;
 		});
-
-
 
 		if(state) { 
 
@@ -293,7 +311,7 @@ console.log(item);
 		aggreatedMessage[5] = 0xff & state[1];
 		aggreatedMessage[6] = 0xff & state[2];
 
-			self._network._sendMessage(aggreatedMessage); console.log(aggreatedMessage); }
+		self._network._sendMessage(aggreatedMessage); }
 
 	},30,{leading:false,trailing:true}); 
 
@@ -375,8 +393,8 @@ MCUInterface.prototype._callback = function(message) {
 	// the ios to callback
  	var ioId = message.trigger;
 	_.each(this.children,function(item){
-        
-		if ((item.hardwareKeys.trigger & message.trigger) && (item.hardwareKeys.ignorePortMask || (item.hardwareKeys.portMask & message.portData[item.port-1]))) {
+		//if ((item.hardwareKeys.trigger & message.trigger) && (item.hardwareKeys.ignorePortMask || (item.hardwareKeys.portMask & message.portData[item.hardwareKeys.port-1]))) {
+		if (item.hardwareKeys.trigger & message.trigger) {
 			item._callback(message);
 		}
 	});
@@ -504,11 +522,14 @@ MCUIo.prototype._callback = function(message) {
       switch(key) {
           case "change": 
             _.each(item,function(changeEvent){
-              changeEvent.context = message;
-              changeEvent.previousValue = changeEvent.value;
               changeEvent.value = MCUIo.getValueFromContext(self.hardwareKeys,message);
-              changeEvent.callback(changeEvent); 
-              changeEvent.previousContext = message; 
+              if (changeEvent.value != changeEvent.previousValue) {
+	              changeEvent.context = message;
+	              changeEvent.previousValue = changeEvent.value;
+	              changeEvent.callback(changeEvent); 
+	              changeEvent.previousContext = message; 
+	              this.value = changeEvent.value;
+	          }
             });
           break;
       }
@@ -532,8 +553,14 @@ MCUIo.prototype.enable = function(value) {
 	value = (value)?1:0;
 
 	if (_.isUndefined(this.value) || (this.value != value)) {
-    this._interface._outMessageQueue.push(MCUIo.getMessageIoWriteDigital(this.hardwareKeys,this.node.id,this._interface.id,value));
+  	
+  	    this._interface._outMessageQueue.push(MCUIo.getMessageIoWriteDigital(this.hardwareKeys,this.node.id,this._interface.id,value));
 		this._interface.throttleMessageQueue();
+
+		//var msg = MCUIo.getMessageIoWriteDigital(this.hardwareKeys,this.node.id,this._interface.id,value);
+		//this._network._sendMessage(msg);
+		//console.log(msg);
+
 		this.value = value;
 	}
   return this;
@@ -554,7 +581,8 @@ MCUIo.prototype.disable = function() {
 MCUIo.getValueFromContext = function(hardwareKeys,message) {
 
       if (!_.isUndefined(hardwareKeys.analogTrigger)) { return message.adcData[hardwareKeys.analogTrigger]; }
-      return null;
+      return (hardwareKeys.portMask & message.portData[hardwareKeys.port-1])?1:0;
+
 };
 
 
@@ -627,72 +655,45 @@ var net = new MCUNetwork();
 (function($) {
 
     //net.add('node-entry',0x03).add('entry',0x01);
-      net.add('new-node',0x03).add('itf',0x01).add('itf0',0x00); 
+      net.add('new-node',0x03).add('itf',0x01);
+      $('new-node').add('itf0',0x00); 
    //net.add('sync',0x09).add('sync',0x01).add('sync','digital out 1.0').tag('sync');
    
 
    	// Entry interface
     (function(i) {
+		i.add('i0','digital in 1.3').tag("in");
+		i.refresh();
+	})($('itf0'));
+
+    (function(i) {
 		i.add('lg-1','digital out 2.3').tag("out");
 		i.add('lg-2','digital out 3.4').tag("out");
 		i.add('lg-3','digital out 3.3').tag("out");
+		i.add('i1','digital in 1.3').tag("in");
 		i.refresh();
 	})($('itf'));
 
 
+
 	var arrow = [$('lg-1'),$('lg-2'),$('lg-3')];
     var x = 0;
+    	
+    $('i1').on('change',function(e){
+    	console.log('i1',e.value);
+    });
+
+    $('i0').on('change',function(e){
+    	console.log('i0',e.value);
+    });
+
 
 //	setInterval(function(){ $(':sync').toggle() },2000);
-	setInterval(function(){ $(':out').disable(); (arrow[x++]).enable(1); x%=3; },1000);
+	setInterval(function(){ $(':out').enable(0); (arrow[x++]).enable(1); x%=3; },85);
 
 	return;
    	
-	//Bedroom interface
-    (function(i) {
-	    i.add('sw-3',		'analog in 1.2').tag("in");
-		i.add('spotlight-1','digital out 1.1').tag("out");
-		i.add('spotlight-2','digital out 1.0').tag("out");
-        i.refresh();
-	})($('bedroom'));
-
-	var blink = function(event) {
-
-		if (event.blink && event.blink.active) { return; }
-		event.blink = { numRepeats : 0, active:1 };
-
-		var clearInt = setInterval(function(){ $('spotlight-1').toggle(); event.blink.numRepeats++; if (event.blink.numRepeats > 15) { clearInterval(clearInt); event.blink.active=0; } },50);
-	}
-
-    // IO Logic
-	$(":in").on("change",function(event) {
-
-		if (event.buttonDown && event.value > 850) {
-		
-			var delay = event.context.timestamp-event.buttonDown||0;
-			event.buttonDown = 0;
-			console.log('button-up',delay);
-			event.clearableTimer.cancel();
-			return;
-		}
-		if (event.value > 850) { return};
-
-		console.log('button down 1',event.value);
-		event.buttonDown = event.buttonDown || event.context.timestamp;
-
-		event.clearableTimer.start(4000).then(function(){ 
-		 	blink(event); 
-		});
-
-    	event.timedAverageFilter();
-		event.throttle(function() { 
-			 $('spotlight-1').enable(event.filters.timedAverage.value < 450)
-		}, 50);
-
-	});
-
-  $('spotlight-2').enable().disable().enable().disable().enable().disable().enable().disable().enable().disable();
-  $('spotlight-1').enable().disable().enable().disable().enable().disable().enable().disable().enable().disable().enable();
+	
 
 
 //	setInterval(function(){ $(':sync').toggle() },2000);
@@ -716,3 +717,5 @@ var  messageToBuffer= function(message) {
 	return buffer;
 };
 */
+
+

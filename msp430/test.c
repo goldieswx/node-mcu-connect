@@ -201,6 +201,30 @@ int rxInt (word UCA0RXBUF);
 
 #endif
 
+inline void msp430ResetUSCI() {
+
+
+//  setupUSCIPins(1);
+
+  UCA0CTL1 = UCSWRST;   
+  UCB0CTL1 = UCSWRST;								// **Put state machine in reset**
+
+
+  __delay_cycles(10);
+  UCA0CTL0 |= UCCKPH  | UCMSB | UCSYNC;	// 3-pin, 8-bit SPI slave
+  UCA0CTL1 &= ~UCSWRST;								// **Initialize USCI state machine**
+
+  while(IFG2 & UCA0RXIFG);							// Wait ifg2 flag on rx 
+
+  IE2 |= UCA0RXIE;									// Enable USCI0 RX interrupt
+  IFG2 &= ~UCA0RXIFG;
+
+  UCA0RXBUF;
+  UCA0TXBUF = 0x00;
+
+}
+
+
 word main() {
 
     DISABLE_WATCHDOG();
@@ -541,8 +565,10 @@ void endOfPacketEvent2           (const register word rx, struct  PacketContaine
 		packetContainer->setSignalMaster = 0;
 	}
 
+	msp430ResetUSCI();
+
 	if (packetContainer->synced && packetContainer->signalMaster) {
-			while (IFG2 & UCA0TXIFG)  { P2OUT ^= BIT7; __delay_cycles(5000); } 
+			while (IFG2 & UCA0TXIFG)  { P2OUT ^= BIT7; __delay_cycles(50); } 
 			UCA0TXBUF = 0x80 | nodeId;
 	}
 	  
