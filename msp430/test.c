@@ -239,18 +239,15 @@ word main() {
 
 	while(1) {
 
-		P2OUT |= BIT7;
-
-
-
 		DISABLE_INTERRUPT;
 		adceSetTrigger(1,0xFF); // enable trigger from all extensions. 
 		if (!p->masterInquiryCommand) SWITCH_LOW_POWER_MODE;  
 		adceSetTrigger(0,0xFF);
 		ENABLE_INTERRUPT;
+		
 		while (p->signalMaster) { P2OUT ^= BIT7; __delay_cycles(100); }
 
-			// few things are certain at this point
+			// a few things are certain at this point
 			// signalMaster is 0
 		    // micmd is pending, and/or acde trigger is pendinng
 			// in any case adce needs to be talked with so let's do.
@@ -259,31 +256,20 @@ word main() {
 			int adceId = adceSignalCmd(p);  // 1 => P2OUT |= BIT0; 2 => P2OUT |= BIT1 
 			switch (adceId) {
 				case 1 : 
-						while (!(P1IN & BIT3)) { P2OUT ^= BIT7; __delay_cycles(5000); } /* { // P1IN & BIT3
-						adceSetTrigger(1,adceID); // enable adce trigger (or micmd)
-							SWITCH_LOW_POWER_MODE;
-						} */
+						while (!(P1IN & BIT3)) { __delay_cycles(5000); } // P1IN & BIT3
 						break; 
 				case 2 : 
-						while (!(P2IN & BIT4))  { P2OUT ^= BIT7; __delay_cycles(5000); } /* { // P1IN & BIT3
-							adceSetTrigger(1,adceID); // enable adce trigger (or micmd)
-							SWITCH_LOW_POWER_MODE;
-						} */
+						while (!(P2IN & BIT4))  { __delay_cycles(5000); } // P1IN & BIT3
 						break;
-
 			}
-			//ENABLE_INTERRUPT;
-			P2OUT &= ~BIT7;
 			adceServiceCmd(p,adceId);
 			clearMasterInquiry(p); //only if processed correctly TODO
 		} else {
 			if ((P1IN & BIT3) || (P2IN & BIT4)) {
 				int adceId = adceSignalTriggerAny();
-				P2OUT &= ~BIT7;
 				adceServiceTrigger(p,adceId);
 			}
 		}
-		
 	}
 	return 0;
 }
@@ -548,7 +534,10 @@ void endOfPacketEvent2           (const register word rx, struct  PacketContaine
 				memcpy(packetContainer->inBuffer,packetContainer->dataIn.data,20);
 				if (!packetContainer->signalMaster) {
 					// we don't wake up now, but then wake later sice we're lpm.
-					*packetContainer->pClearLP = 1;  /// clear low power flags on intr exit, except if there is a pending signal master, in the case don't wake up
+					*packetContainer->pClearLP = 1;  /// clear low power flags on intr exit, 
+					// except if there is a pending signal master, in that case don't wake up
+					// since adce may then send an outward message -- and we'll have two messages
+					// to transmit which we do not want.
 					P2OUT &= ~BIT6;
 				} else {
 					P2OUT |= BIT6;
