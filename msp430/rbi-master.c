@@ -192,6 +192,18 @@ int canRetry(message *q) {
 // wait to be recalled if necessary.
 
 
+void bcm2835_spi_transfern2 (unsigned char * p,int count) {
+
+      bcm2835_spi_transfern (p,count);
+      int i = 0;
+
+      for (i=0;i<count;i++) {
+         p[i] ^= 0xFF;
+     }
+
+
+}
+
 int sendMessage(message * outQueue,message * inQueues, int * pNumSNCCRequests) {
 
 	McomInPacket pck;
@@ -203,7 +215,7 @@ int sendMessage(message * outQueue,message * inQueues, int * pNumSNCCRequests) {
 	pck.cmd = MI_CMD;
         printf("HDR:\n");
 	// send preamble and get the first answer
-	printBuffer2(ppck,SIZEOF_MCOM_OUT_HEADER);  bcm2835_spi_transfern (ppck,SIZEOF_MCOM_OUT_HEADER); printf("-");  printBuffer2(ppck,SIZEOF_MCOM_OUT_HEADER);
+	printBuffer2(ppck,SIZEOF_MCOM_OUT_HEADER);  bcm2835_spi_transfern2 (ppck,SIZEOF_MCOM_OUT_HEADER); printf("-");  printBuffer2(ppck,SIZEOF_MCOM_OUT_HEADER);
 
 	// send first bytes to preprocess, if no sncc request is pending,
 	// we'll try to insert the request in this signalmask already
@@ -234,7 +246,7 @@ int sendMessage(message * outQueue,message * inQueues, int * pNumSNCCRequests) {
 	pck.__reserved_1 = 0;
 	pck.__reserved_2 = 0;
         printf("PL:\n");
-	printBuffer2(ppck,SIZEOF_MCOM_OUT_PAYLOAD);  printf("-"); bcm2835_spi_transfern (ppck,SIZEOF_MCOM_OUT_PAYLOAD); printBuffer2(ppck,SIZEOF_MCOM_OUT_PAYLOAD);
+	printBuffer2(ppck,SIZEOF_MCOM_OUT_PAYLOAD);  printf("-"); bcm2835_spi_transfern2 (ppck,SIZEOF_MCOM_OUT_PAYLOAD); printBuffer2(ppck,SIZEOF_MCOM_OUT_PAYLOAD);
 	ppck += SIZEOF_MCOM_OUT_PAYLOAD;
 
 	int checkSumSNCC;
@@ -244,8 +256,8 @@ int sendMessage(message * outQueue,message * inQueues, int * pNumSNCCRequests) {
 	}
 
         printf("CHK:\n");
-	printBuffer2(ppck,SIZEOF_MCOM_OUT_CHK); printf("-"); bcm2835_spi_transfern (ppck,SIZEOF_MCOM_OUT_CHK);  printBuffer2(ppck,SIZEOF_MCOM_OUT_CHK);
-        usleep(500);
+	printBuffer2(ppck,SIZEOF_MCOM_OUT_CHK); printf("-"); bcm2835_spi_transfern2 (ppck,SIZEOF_MCOM_OUT_CHK);  printBuffer2(ppck,SIZEOF_MCOM_OUT_CHK);
+        usleep(6000);
 
 	if(outQueue) {
 		if (pck.chkSum == checkSum) {
@@ -433,7 +445,7 @@ int main(int argc, char **argv)
   bcm2835_spi_begin();
   bcm2835_spi_setBitOrder(BCM2835_SPI_BIT_ORDER_MSBFIRST);      
   bcm2835_spi_setDataMode(BCM2835_SPI_MODE0);                   
-  bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_2048); 
+  bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_4096); 
   bcm2835_spi_chipSelect(BCM2835_SPI_CS0);                      
   bcm2835_spi_setChipSelectPolarity(BCM2835_SPI_CS0, LOW); 
   
@@ -459,7 +471,7 @@ int main(int argc, char **argv)
 	while (1)  {
 
 		while (!insertNewCmds((message**)outQueues)) { // give the opportunity to get new buffers from udp.
-			if (bcm2835_gpio_lev(latch)||numSNCCRequests) { // either a node is requesting a sncc packet 
+			if ((!bcm2835_gpio_lev(latch))||numSNCCRequests) { // either a node is requesting a sncc packet 
 				//  or we have more snccRequests to service
 				sendMessage(NULL,inQueues,&numSNCCRequests);
 			} else {
