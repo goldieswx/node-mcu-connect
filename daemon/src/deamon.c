@@ -30,89 +30,8 @@
 #include "fcntl.h"
 #include "fifo.h"
 
-#define word short
-#define latch  RPI_GPIO_P1_22
-
-#define MI_PREAMBLE 0b10101100
-#define MI_DOUBLE_PREAMBLE 0xACAC
-#define MI_CMD 8714
-
-#define BIT0  0x01
-#define BIT1  0x02
-#define BIT2  0x04
-#define BIT3  0x08
-#define BIT4  0x10
-#define BIT5  0x20
-#define BIT6  0x40
-#define BIT7  0x80
-
-#define BUFLEN 512
-#define PORT 9930
-
-#define MI_STATUS_QUEUED 0x03
-#define MI_STATUS_TRANSFERRED 0x04
-#define MI_STATUS_DROPPED 0x08
-
-
-#define SNCC_SIGNAL_RECEIVED  0x05
-#define SNCC_PREAMBLE_RECEIVED 0x06
-
-#define MCOM_DATA_LEN 20
-#define MCOM_NODE_QUEUE_LEN 10
-#define MCOM_MAX_NODES 16
-
-#define MAX_TRANSFER_ERRORS_MESSAGE  5
-
-typedef struct _UDPMessage {
-
-	unsigned char data [MCOM_DATA_LEN] ;
-	int   destination;
-
-} UDPMessage;
-
-
-typedef struct _message {
-	unsigned char data [MCOM_DATA_LEN] ;
-	int   expectedChecksum;
-	int   receivedChecksum;
-	int   status;
-	int   transferError;
-	int   destination;
-	unsigned long  noRetryUntil;
-} message;
-
-typedef struct _McomInPacket {
-  unsigned char preamble_1;
-  unsigned char preamble_2;
-  unsigned word cmd;
-  unsigned char destinationCmd;
-  unsigned char destinationSncc;
-  unsigned char __reserved_1;
-  unsigned char __reserved_2;
-  unsigned char data[MCOM_DATA_LEN];
-  unsigned word snccCheckSum;
-  unsigned word chkSum;
-} McomInPacket;
-
-typedef struct _McomOutPacket {
-  unsigned char preamble_1;
-  unsigned char preamble_2;
-  unsigned word cmd;
-  unsigned char signalMask2;
-  unsigned char signalMask1;
-  unsigned char __reserved_1;
-  unsigned char __reserved_2;
-  unsigned char data[MCOM_DATA_LEN];
-  unsigned word snccCheckSum;
-  unsigned word chkSum;
-} McomOutPacket;
-
-#define SIZEOF_MCOM_OUT_PAYLOAD  (MCOM_DATA_LEN+4*sizeof(char))
-#define SIZEOF_MCOM_OUT_HEADER   (2*sizeof(char)+sizeof(word))
-#define SIZEOF_MCOM_OUT_CHK      (2*sizeof(word))
 
 message * outQueues[MCOM_MAX_NODES][MCOM_NODE_QUEUE_LEN]; // ten buffer pointers per device;
-
 
 message inQueues [MCOM_MAX_NODES];
 int     lastNodeServiced = 0;
@@ -128,10 +47,6 @@ struct sockaddr_in si_other;
 fifo_t * outQueuePool;
 
 
-/* functions */
-void debugMessage(message * m);
-void _memcpy( void* dest, void *src, int len);
-int dataCheckSum (unsigned char * req, int reqLen);
 
 /* impl */
 int onMessageReceived(message * q) {

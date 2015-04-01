@@ -74,8 +74,6 @@
 				((pc)->dataOut.chkSum += (rx))
 
 
-
-
 #define PTR_END_OF_HEADER               (2)     // Header ends after preamble
 #define PTR_END_OF_DESTINATION          (PTR_END_OF_HEADER + 5)     // Desgination ends after destinationSNCC
 #define PTR_END_OF_RESERVED             (PTR_END_OF_DESTINATION + 1)     
