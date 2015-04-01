@@ -20,9 +20,7 @@
 #define LOW_POWER_MODE(a)    (__bis_SR_register(LPM3_bits + GIE))
 #define NODE_INTERRUPT 			 (P2IN & CS_INCOMING_PACKET)
 
-
 #define IOCFG_HW_ADDR		0xE000
-
 
 void setupUSCIPins(int state);
 
