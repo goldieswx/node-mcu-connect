@@ -14,7 +14,7 @@
 */
 
 
-var MCU = require('core.js');
+var MCU = require('core');
 
 /* test area */
 
@@ -22,40 +22,31 @@ var net = new MCU.Network();
 
 (function($) {
 
-    //net.add('node-entry',0x03).add('entry',0x01);
-      net.add('new-node',0x03).add('itf',0x01);
+      net.add('new-node',0x03);
       $('new-node').add('itf0',0x00); 
-   //net.add('sync',0x09).add('sync',0x01).add('sync','digital out 1.0').tag('sync');
-   
+
    	// Entry interface
-    (function(i) {
-		i.add('i0','digital in 1.3').tag("in");
+	(function(i) {
+		i.add('button-1','digital in 1.3').tag("in");
+		i.add('led-1','digital out 2.3').tag("out");
+		i.add('led-2','digital out 3.4').tag("out");
+		i.add('led-3','digital out 3.3').tag("out");
+		i.add('slider-1','analog in 1.3').tag("in");
 		i.refresh();
 	})($('itf0'));
 
-    (function(i) {
-		i.add('lg-1','digital out 2.3').tag("out");
-		i.add('lg-2','digital out 3.4').tag("out");
-		i.add('lg-3','digital out 3.3').tag("out");
-		i.add('i1','digital in 1.3').tag("in");
-		i.refresh();
-	})($('itf'));
+	$('button-1').on('change',function(e){
+	    console.log('you pushed button 1 [',e.value,']');
+	});
+	
+	$('slider-1').on('change',function(e){
+	    console.log('slider 1 has now value: ',e.value);
+	});
 
+    	var x = 0;
+	var ledArray = [$('led-1'),$('led-2'),$('led-3')];
 
-
-	var arrow = [$('lg-1'),$('lg-2'),$('lg-3')];
-    var x = 0;
-    	
-    $('i1').on('change',function(e){
-    	console.log('i1',e.value);
-    });
-
-    $('i0').on('change',function(e){
-    	console.log('i0',e.value);
-    });
-
-
-	setInterval(function(){ $(':out').enable(0); (arrow[x++]).enable(1); x%=3; },85);
+	setInterval(function(){ $(':out').disable(); (ledArray[x++]).enable; x%=3; },85);
 
 	return;
    	

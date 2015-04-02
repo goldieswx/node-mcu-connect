@@ -13,6 +13,12 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>. 
 */
 
+var _     = require('lodash-node');
+var util  = require('util');
+var dgram = require('dgram');
+
+var MCUObject = require('./Object');
+
 var MCUNetwork = function() {
 
   var self = this;
@@ -94,3 +100,6 @@ MCUNetwork.prototype._callback = function(value) {
 	}
 	this._dispatchMessage(message);
 }
+
+
+module.exports = MCUNetwork;

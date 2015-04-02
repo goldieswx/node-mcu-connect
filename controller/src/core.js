@@ -14,9 +14,9 @@
 */
 
 
+module.exports = {
 
-var util = require('util');
-var dgram = require('dgram');
-var _ = require('lodash-node');
-var Q = require('q');
+    Network: require('./MCU/Newtwork')
+
+};
 

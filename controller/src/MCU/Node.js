@@ -13,6 +13,11 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>. 
 */
 
+var _     = require('lodash-node');
+var util  = require('util');
+
+var MCUObject = require('./Object');
+
 var MCUNode = function() {
 
    this.superClass = MCUObject.prototype;
@@ -48,3 +53,5 @@ MCUNode.prototype._callback = function(message) {
 	}
 
 };
+
+module.exports = MCUNode;
