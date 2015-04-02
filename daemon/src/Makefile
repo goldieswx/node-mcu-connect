@@ -4,8 +4,8 @@ OBJ=daemon.o ../../common/src/fifo.o
 %.o: %.c $(DEPS)
 	$(CC) -c -o $@ $< $(CFLAGS)
 
-dmcuconnect: $(OBJ) 
+mcuconnectd: $(OBJ) 
 	gcc -o $@ $^ $(CFLAGS)
 
 clean: 
-	rm -f *.o dmcuconnect
+	rm -f *.o mcuconnectd
