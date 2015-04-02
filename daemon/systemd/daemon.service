@@ -1,5 +1,5 @@
-#systemD users: 
-#drop this file under /etc/systemd/system and "systemctl enable daemon" "systemctl start daemon"
+# SystemD users : 
+# Drop this file under /etc/systemd/system and "systemctl enable mcuconnectd" "systemctl start mcuconnectd"
 
 [Unit]
 Description=Home system regulation
@@ -7,10 +7,7 @@ After=network.target
 
 [Service]
 Type=simple
-#ExecStartPre=/bin/rm -f /var/run/node-mcu-daemon.pid
-#ExecStart=/usr/bin/node /home/dja/tp.js
-ExecStart=/path/to/daemon > /dev/null
-#PIDFile=/var/run/node-mcu-daemon.pid
+ExecStart=/path/to/deamon/mcuconnectd > /dev/null
 Restart=always
 
 [Install]
