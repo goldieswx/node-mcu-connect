@@ -1,6 +1,6 @@
 /*
     node-mcu-connect . node.js UDP Interface for embedded devices.
-    Copyright (C) 2013-4 David Jakubowski
+    Copyright (C) 2013-5 David Jakubowski
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -72,17 +72,21 @@ inline void msp430StopUSCI() {
 inline void msp430NotifyNode(int level) {
 
 	if (level) {
-		P3OUT |= CS_NOTIFY_MASTER;
+		P2OUT |= CS_NOTIFY_MASTER;
 	} else {
-		P3OUT &= ~CS_NOTIFY_MASTER;
+		P2OUT &= ~CS_NOTIFY_MASTER;
 	}
 }
 
 inline void msp430StartTimer(int delay) {
 
-	TA0CCR0 = delay; 
-	TA0CTL = TASSEL_1 | MC_1 ;             // Clock source ACLK
-	TA0CCTL1 = CCIE ;                      // Timer A interrupt enable
+	//TA0CCR0 = delay; 
+	//TA0CTL = TASSEL_1 | MC_1 ;             // Clock source ACLK
+	//TA0CCTL1 = CCIE ;                      // Timer A interrupt enable
+
+	IFG1&=~WDTIFG;
+	WDTCTL = WDTPW+WDTCNTCL+WDTTMSEL+WDTIS1;
+	IE1 |= WDTIE;
 
 }
 
@@ -210,20 +214,20 @@ void initializeUSCI() {
 
   setupUSCIPins(0);
 
-  P2DIR  &= ~CS_INCOMING_PACKET;			// CS_INCOMING PACKET is the Master signal triggering the SPI transfer.
-  P2OUT  &= ~CS_INCOMING_PACKET;            // Outgoing,and no PullUp/Dn. Interrupt configured for Raising Edge.
-  P2REN  &= ~CS_INCOMING_PACKET;            
-  P2SEL  &= ~CS_INCOMING_PACKET;
-  P2SEL2 &= ~CS_INCOMING_PACKET;
+  P3DIR  &= ~CS_INCOMING_PACKET;			// CS_INCOMING PACKET is the Master signal triggering the SPI transfer.
+  P3OUT  &= ~CS_INCOMING_PACKET;            // Outgoing,and no PullUp/Dn. Interrupt configured for Raising Edge.
+  P3REN  &= ~CS_INCOMING_PACKET;            
+  P3SEL  &= ~CS_INCOMING_PACKET;
+  P3SEL2 &= ~CS_INCOMING_PACKET;
 
   P2IES = 0;
   P2IFG = 0;
 
-  P3DIR  |= CS_NOTIFY_MASTER;
-  P3OUT  &= ~CS_NOTIFY_MASTER;
-  P3REN  &= ~CS_NOTIFY_MASTER;
-  P3SEL  &= ~CS_NOTIFY_MASTER;
-  P3SEL2 &= ~CS_NOTIFY_MASTER; 
+  P2DIR  |= CS_NOTIFY_MASTER;
+  P2OUT  &= ~CS_NOTIFY_MASTER;
+  P2REN  &= ~CS_NOTIFY_MASTER;
+  P2SEL  &= ~CS_NOTIFY_MASTER;
+  P2SEL2 &= ~CS_NOTIFY_MASTER; 
 
 }
 
@@ -244,6 +248,7 @@ void initializeADC(struct IoConfig * ioConfig) {
 }
 
 void initializeTimer() {
-  TA0R = 0;								// Reset timer counter.
-  TA0CCR0 = 80;                         // Count to this, then interrupt; About 8ms. 
+  //TA0R = 0;								// Reset timer counter.
+  //TA0CCR0 = 80;                         // Count to this, then interrupt; About 8ms. 
+  // now done with WDT+ to spare timers for PWM
 }

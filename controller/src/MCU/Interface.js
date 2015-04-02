@@ -69,6 +69,18 @@ MCUInterface.getThrottleMessageQueue = function(self) {
 };
 
 
+MCUInterface.getPWMMessage = function(nodeId,interfaceId,dutyCycle) {
+
+	var msg = new Buffer("                        ");
+	msg.fill(0);
+	msg.writeUInt8(0x44+interfaceId,0);
+	msg.writeUInt8(0x01,1);
+	msg.writeUInt16LE(dutyCycle,2); 
+	msg.writeUInt32LE(nodeId,20);
+
+	return msg;
+}
+
 MCUInterface.prototype.add = function(key,hardwareKeys) {
 
    var child = new MCUIo();
@@ -90,7 +102,7 @@ MCUInterface.prototype.refresh = function() {
 
 	// loop through all children and see what io they use and how
 	var hardwareKeyList = _.pluck(this.children,'hardwareKeys');
-    var config = { portDIR: [0,0,0], portADC: 0, portREN: [0xFF,0xFF,0xFF], portOUT: [0,0,0]};
+    var config = { portDIR: [0,0,0], portADC: 0, portREN: [0x00,0x00,0x00], portOUT: [0,0,0]};
 
     _.each(hardwareKeyList,function(item){
     		if (item.direction == "out") { // Digital out
@@ -102,16 +114,22 @@ MCUInterface.prototype.refresh = function() {
     				config.portADC |= item.configMask;
 	    			config.portOUT[item.port-1] &= (0xFF & ~item.configMask); // disable out flag
     				config.portDIR[item.port-1] &= (0xFF & ~item.configMask); // enable output flag
-    				config.portREN[item.port-1] |= (0xFF & ~item.configMask); // disable pullup/dn flag
+    				config.portREN[item.port-1] &= (0xFF & ~item.configMask); // disable pullup/dn flag
     			} else { // Digital in
     				config.portDIR[item.port-1] &= (0xFF & ~item.portMask); // disable output flag
-    				config.portREN[item.port-1] |= item.portMask; // enable pulldn flag
+    				config.portREN[item.port-1] &= (0xFF & ~item.portMask); // disble pulldn flag
     				config.portOUT[item.port-1] &= (0xFF & ~item.portMask); // pull dn
     			}
     		}
     });
 
 	this._network._sendMessage(MCUInterface.getRefreshMessage(config,this.node.id,this.id));
+
+};
+
+MCUInterface.prototype.pwm = function(dutyCycle) {
+
+   this._network._sendMessage(MCUInterface.getPWMMessage(this.node.id,this.id,dutyCycle));
 
 };
 

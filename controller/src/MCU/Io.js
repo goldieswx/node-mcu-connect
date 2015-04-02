@@ -27,6 +27,16 @@ var MCUIo = function() {
 util.inherits(MCUIo,MCUObject);
 
 
+MCUIo.prototype.toggle = function() {
+
+		if (this.value) {
+			this.disable();
+		} else {
+			this.enable();
+		}
+    return this;
+};
+
 /**
  * MCUIo::on (eventType,callback)
  * 

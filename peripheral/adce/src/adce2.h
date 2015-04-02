@@ -38,6 +38,7 @@
 #define LOW 	0
 
 
+
 /* data struct */
 
 struct IoConfig {
@@ -52,6 +53,19 @@ struct IoConfig {
 	unsigned char P3REN;
 	unsigned char P3OUT;
 };
+
+struct CustomCmd {
+	unsigned char CMDID;
+	unsigned int  DATA[9];
+};
+
+struct CustomCmdDataPwmMessage { // max 18 bytes;
+
+	unsigned int action; // set_duty_cycle_1,set_frequency_1  
+	unsigned int data[4];
+
+};
+
 
 struct flashConfig {
 	unsigned int  magic;
@@ -105,4 +119,3 @@ inline void getADCIoUsed 	(int ioADC, int * adcIoUsed);
 void 	listen 				(struct Exchange * exchange);
 void 	close 				();
 void 	processExchange 	(struct Exchange * exchange,struct IoConfig * ioConfig);
-

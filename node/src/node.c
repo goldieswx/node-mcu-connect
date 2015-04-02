@@ -56,7 +56,7 @@
 
 #define printf(a)				
 
-#define nodeId 					3
+#define nodeId 					5
 #define MI_RESCUE				0xacac 
 #define MI_CMD                  0x220a
 
@@ -72,6 +72,8 @@
 
 #define DO_CHECKSUM(pc,rx) \
 				((pc)->dataOut.chkSum += (rx))
+
+
 
 
 #define PTR_END_OF_HEADER               (2)     // Header ends after preamble
@@ -263,7 +265,7 @@ word main() {
 			adceServiceCmd(p,adceId);
 			clearMasterInquiry(p); //only if processed correctly TODO
 		} else {
-			if ((P1IN & BIT3) || (P2IN & BIT4)) {
+			if ((P1IN & BIT3) /*|| (P2IN & BIT4)*/) {
 				int adceId = adceSignalTriggerAny();
 				adceServiceTrigger(p,adceId);
 			}
@@ -684,6 +686,12 @@ int adceSignalCmd(struct PacketContainer * p) {
 		case 0x68:
 			cmdId -= 0x66;
 			*((char*)p->inBuffer) = 0x66;
+			break;
+		case 0x44:
+		case 0x45:
+		case 0x46:
+			cmdId -= 0x44;
+			*((char*)p->inBuffer) = 0x44;
 			break;
 		default:
 			cmdId = 0;
