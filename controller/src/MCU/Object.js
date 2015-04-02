@@ -13,6 +13,7 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>. 
 */
 
+var _     = require('lodash-node');
 
 var MCUObject = function(key) {
 
@@ -131,3 +132,4 @@ MCUObject.prototype.enable = function(val) {
 
 }
 
+module.exports = MCUObject;

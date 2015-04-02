@@ -14,7 +14,7 @@
 */
 
 
-var MCU = require('core.js');
+var MCU = require('core');
 
 /* test area */
 

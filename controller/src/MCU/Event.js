@@ -13,6 +13,8 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>. 
 */
 
+var _     = require('lodash-node');
+var Q     = require('q');
 
 var MCUEvent = function(fn) {
 
@@ -101,3 +103,5 @@ MCUEvent._clearableTimer = function() {
 	};
  
 }
+
+module.events = MCUEvent;
