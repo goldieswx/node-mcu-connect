@@ -15,27 +15,32 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <http://www.gnu.org/licenses/>. 
     
+           
 */
 
+#define IOCFG_HW_ADDR       0xE000
 
-#define ADCE_LPM_BITS  LPM0_bits
-    
-#define LOW_POWER_MODE(a)    (__bis_SR_register(LPM0_bits + GIE))
-#define NODE_INTERRUPT           (P3IN & CS_INCOMING_PACKET)
+struct IoConfig {
+        unsigned char P1DIR;
+        unsigned char P1ADC;
+        unsigned char P1REN;
+        unsigned char P1OUT;
+        unsigned char P2DIR;
+        unsigned char P2REN;
+        unsigned char P2OUT;
+        unsigned char P3DIR;
+        unsigned char P3REN;
+        unsigned char P3OUT;
+};
+
+struct flashConfig {
+        unsigned int  magic;
+        struct IoConfig ioConfig;
+        unsigned int  _magic;
+};
 
 
-void setupUSCIPins(int state);
 
-inline void msp430SampleInputs(struct Sample * sample);
-inline void msp430ResetUSCI();
-inline void msp430StopUSCI();
-inline void msp430NotifyNode(int level);
-
-inline void msp430StartTimer(int delay); 
-inline void msp430BitMaskPorts (char * bitMasks, struct IoConfig * ioConfig);
-inline void msp430InitializeClocks();
-
-void initializeIOConfig(struct IoConfig * ioConfig);
-void initializeUSCI();
-void initializeADC(struct IoConfig * ioConfig);
-void initializeTimer();
+void flash_erase(int *addr);
+void flash_write(int *dest, int *src, unsigned int size);
+void flashConfig(struct IoConfig * p);

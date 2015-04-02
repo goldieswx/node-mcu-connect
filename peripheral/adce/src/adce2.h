@@ -41,18 +41,6 @@
 
 /* data struct */
 
-struct IoConfig {
-	unsigned char P1DIR;
-	unsigned char P1ADC;
-	unsigned char P1REN;
-	unsigned char P1OUT;
-	unsigned char P2DIR;
-	unsigned char P2REN;
-	unsigned char P2OUT;
-	unsigned char P3DIR;
-	unsigned char P3REN;
-	unsigned char P3OUT;
-};
 
 struct CustomCmd {
 	unsigned char CMDID;
@@ -67,11 +55,6 @@ struct CustomCmdDataPwmMessage { // max 18 bytes;
 };
 
 
-struct flashConfig {
-	unsigned int  magic;
-	struct IoConfig ioConfig;
-	unsigned int  _magic;
-};
 
 
 struct Sample {

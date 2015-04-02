@@ -20,9 +20,10 @@
 #include "msp430g2553.h"
 #include <legacymsp430.h>
 
+
+#include "msp-utils.h"
 #include "adce2.h"
 #include "adce2-init.h"
-#include "msp-utils.h"
 #include "string.h"
 
 
