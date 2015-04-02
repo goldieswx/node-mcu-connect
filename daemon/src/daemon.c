@@ -50,14 +50,14 @@ fifo_t * outQueuePool;
 
 
 /* impl */
-int onMessageReceived(message * q) {
+int onMessageReceived(struct message * q) {
 
   //printf("Received\n");
   //debugMessage(q);
-	sendto(clientSocket, q, sizeof(message), 0, (struct sockaddr* ) &si_other, slen);
+	sendto(clientSocket, q, sizeof(struct message), 0, (struct sockaddr* ) &si_other, slen);
 }
 
-int onMessageSent(message * q) {
+int onMessageSent(struct message * q) {
 
 //  printf("Transferred\n");
 
@@ -68,7 +68,7 @@ fifo_t * initOutQueuePool() {
 	fifo_t * pool = fifo_new();
 	int i;
 	for(i=0;i<20;i++) {
-		message * m = (message*)malloc(sizeof(message));
+		struct message * m = (struct message*)malloc(sizeof(struct message));
 		m->status = 0;
     	m->transferError = 0;
     	m->destination = 0;
@@ -87,13 +87,13 @@ unsigned long getTickCount() {
 
 }
 
-void setRetryDelay(message * q) {
+void setRetryDelay(struct message * q) {
 
  	q->noRetryUntil = getTickCount()+50;
 
 }
 
-int canRetry(message *q) {
+int canRetry(struct message *q) {
 
 	return q && (!(q->transferError) || (getTickCount() >= q->noRetryUntil));
 
@@ -120,7 +120,7 @@ void bcm2835_spi_transfern2 (unsigned char * p,int count) {
 
 }
 
-int sendMessage(message * outQueue,message * inQueues, int * pNumSNCCRequests) {
+int sendMessage(struct message * outQueue,struct message * inQueues, int * pNumSNCCRequests) {
 
 	McomInPacket pck;
 	char* ppck = (char*)&pck; 
@@ -197,7 +197,7 @@ int sendMessage(message * outQueue,message * inQueues, int * pNumSNCCRequests) {
 /**
  * Process the pointer list for one node.
  */ 
-int processNodeQueue(message ** q) {
+int processNodeQueue(struct message ** q) {
 	int i;
 	// pop first valid pointer which message has been transferred 
 	if ((*q) && (((*q)->status == MI_STATUS_TRANSFERRED) || ((*q)->status == MI_STATUS_DROPPED))) {
@@ -214,14 +214,14 @@ int processNodeQueue(message ** q) {
 }
 
 
-void onMessageDropped (message *q) {
+void onMessageDropped (struct message *q) {
 
   printf("Dropped");
   debugMessage(q);
 
 }
 
-void dropMessageOnExcessiveErrors (message ** q) {
+void dropMessageOnExcessiveErrors (struct message ** q) {
 
 	if (*q) {
 		if ((*q)->transferError >= MAX_TRANSFER_ERRORS_MESSAGE) {
@@ -236,16 +236,16 @@ void dropMessageOnExcessiveErrors (message ** q) {
 
 
 // process udp queue.
-int insertNewCmds(message ** outQueues) {
+int insertNewCmds(struct message ** outQueues) {
  
 	UDPMessage buf;
     //static message m;
-	message * m;
+	struct message * m;
 
     if (recvfrom (sockfd, &buf, sizeof(UDPMessage), 0, (struct sockaddr*)&cli_addr, &slen) == sizeof(UDPMessage)) {
 		if (buf.destination <= MCOM_MAX_NODES) {
 			int i,index = (MCOM_NODE_QUEUE_LEN*buf.destination);
-			message * q;
+			struct message * q;
 			for (i=0;i<MCOM_NODE_QUEUE_LEN;i++) {
 				if (outQueues[index]== NULL) {
 				  	m = fifo_remove(outQueuePool);
@@ -272,7 +272,7 @@ int insertNewCmds(message ** outQueues) {
 
 		
 // check the snccrequest queue, choose the next node to signal, if any;
-int preProcessSNCCmessage(McomOutPacket* pck, message * inQueues,int * pNumSNCCRequests,message ** inQueue) {
+int preProcessSNCCmessage(McomOutPacket* pck, struct message * inQueues,int * pNumSNCCRequests,struct message ** inQueue) {
 
    if (*pNumSNCCRequests) {
          // do not favor a particular node, hence loop from
@@ -305,7 +305,7 @@ int preProcessSNCCmessage(McomOutPacket* pck, message * inQueues,int * pNumSNCCR
 }
 
 // update snccrequest queue, in respect to what happened during transfer.
-int postProcessSNCCmessage(McomOutPacket* pck,message * inQueues,message * inQueue,int * pNumSNCCRequests) {
+int postProcessSNCCmessage(McomOutPacket* pck,struct message * inQueues,struct message * inQueue,int * pNumSNCCRequests) {
 
   
 	  int processedNode = 0;
@@ -365,14 +365,14 @@ int main(int argc, char **argv)
   bcm2835_spi_chipSelect(BCM2835_SPI_CS0);                      
   bcm2835_spi_setChipSelectPolarity(BCM2835_SPI_CS0, LOW); 
   
-  memset(outQueues,0,MCOM_MAX_NODES*MCOM_NODE_QUEUE_LEN*sizeof(message*));
-  memset(inQueues,0,MCOM_MAX_NODES*sizeof(message));
+  memset(outQueues,0,MCOM_MAX_NODES*MCOM_NODE_QUEUE_LEN*sizeof(struct message*));
+  memset(inQueues,0,MCOM_MAX_NODES*sizeof(struct message));
 
   McomOutPacket r;
   int i;
 
-  message m;
-  memset(&m,0,sizeof(message));
+  struct message m;
+  memset(&m,0,sizeof(struct message));
 
   printf("init pool\n");
   outQueuePool = initOutQueuePool();
@@ -386,7 +386,7 @@ int main(int argc, char **argv)
 
 	while (1)  {
 
-		while (!insertNewCmds((message**)outQueues)) { // give the opportunity to get new buffers from udp.
+		while (!insertNewCmds((struct message**)outQueues)) { // give the opportunity to get new buffers from udp.
 			if ((!bcm2835_gpio_lev(latch))||numSNCCRequests) { // either a node is requesting a sncc packet 
 				//  or we have more snccRequests to service
 				sendMessage(NULL,inQueues,&numSNCCRequests);
@@ -404,7 +404,7 @@ int main(int argc, char **argv)
 			int onlyTransferErrors = 1;
 
 			for(i=0;i<MCOM_MAX_NODES;i++) {
-				message ** q = outQueues[i]; 
+				struct message ** q = outQueues[i]; 
 
 				if (*q != NULL) {
 					if(canRetry(*q)) sendMessage(*q,inQueues,&numSNCCRequests);         
@@ -422,7 +422,7 @@ int main(int argc, char **argv)
 			}
 			if (transferErrorsPresent) {
 				if (onlyTransferErrors) {
-					insertNewCmds((message**)outQueues);
+					insertNewCmds((struct message**)outQueues);
 					usleep(750); 
 				} 
 			} 
@@ -446,7 +446,7 @@ int dataCheckSum (unsigned char * req, int reqLen) {
 	return chk;
 }
 
-void debugMessage(message * m) {
+void debugMessage(struct message * m) {
 
 	unsigned char data [20];
 
