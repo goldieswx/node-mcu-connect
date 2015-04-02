@@ -16,10 +16,12 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>. 
     
 */
-    
-#define LOW_POWER_MODE(a)    (__bis_SR_register(LPM3_bits + GIE))
-#define NODE_INTERRUPT 			 (P2IN & CS_INCOMING_PACKET)
 
+
+#define ADCE_LPM_BITS  LPM0_bits
+    
+#define LOW_POWER_MODE(a)    (__bis_SR_register(LPM0_bits + GIE))
+#define NODE_INTERRUPT 			 (P3IN & CS_INCOMING_PACKET)
 
 #define IOCFG_HW_ADDR		0xE000
 

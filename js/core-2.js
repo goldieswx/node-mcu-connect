@@ -138,6 +138,17 @@ MCUObject.prototype.enable = function(val) {
 }
 
 
+MCUObject.prototype.toggle = function() {
+
+    if (this.childType == "mixed-multiple") {
+       _.each(this.children,function(item){
+           item.toggle();
+       });
+    }
+
+}
+
+
 
 var MCUNetwork = function() {
 
@@ -276,6 +287,20 @@ var MCUInterface = function() {
 
 util.inherits(MCUInterface,MCUObject);
 
+MCUInterface.getPWMMessage = function(nodeId,interfaceId,dutyCycle) {
+
+	var msg = new Buffer("                        ");
+	msg.fill(0);
+	msg.writeUInt8(0x44+interfaceId,0);
+	msg.writeUInt8(0x01,1);
+	msg.writeUInt16LE(dutyCycle,2); 
+	msg.writeUInt32LE(nodeId,20);
+
+	return msg;
+}
+
+
+
 
 MCUInterface.getThrottleMessageQueue = function(self) {
 
@@ -341,7 +366,7 @@ MCUInterface.prototype.refresh = function() {
 
 	// loop through all children and see what io they use and how
 	var hardwareKeyList = _.pluck(this.children,'hardwareKeys');
-    var config = { portDIR: [0,0,0], portADC: 0, portREN: [0xFF,0xFF,0xFF], portOUT: [0,0,0]};
+    var config = { portDIR: [0,0,0], portADC: 0, portREN: [0x00,0x00,0x00], portOUT: [0,0,0]};
 
     _.each(hardwareKeyList,function(item){
     		if (item.direction == "out") { // Digital out
@@ -353,16 +378,23 @@ MCUInterface.prototype.refresh = function() {
     				config.portADC |= item.configMask;
 	    			config.portOUT[item.port-1] &= (0xFF & ~item.configMask); // disable out flag
     				config.portDIR[item.port-1] &= (0xFF & ~item.configMask); // enable output flag
-    				config.portREN[item.port-1] |= (0xFF & ~item.configMask); // disable pullup/dn flag
+    				config.portREN[item.port-1] &= (0xFF & ~item.configMask); // disable pullup/dn flag
     			} else { // Digital in
     				config.portDIR[item.port-1] &= (0xFF & ~item.portMask); // disable output flag
-    				config.portREN[item.port-1] |= item.portMask; // enable pulldn flag
+    				config.portREN[item.port-1] &= (0xFF & ~item.portMask); // disble pulldn flag
     				config.portOUT[item.port-1] &= (0xFF & ~item.portMask); // pull dn
     			}
     		}
     });
 
 	this._network._sendMessage(MCUInterface.getRefreshMessage(config,this.node.id,this.id));
+
+};
+
+
+MCUInterface.prototype.pwm = function(dutyCycle) {
+
+   this._network._sendMessage(MCUInterface.getPWMMessage(this.node.id,this.id,dutyCycle));
 
 };
 
@@ -654,49 +686,127 @@ var net = new MCUNetwork();
 
 (function($) {
 
-    //net.add('node-entry',0x03).add('entry',0x01);
-      net.add('new-node',0x03).add('itf',0x01);
-      $('new-node').add('itf0',0x00); 
-   //net.add('sync',0x09).add('sync',0x01).add('sync','digital out 1.0').tag('sync');
+//      net.add('new-node',0x05);
+//      $('new-node').add('itf0',0x00); 
+
+
+      net.add('node-3',0x03);
+      $('node-3').add('itf1',0x00); 
+    
+     // net.add('sync',0x09).add('sync',0x01).add('sync','digital out 1.0').tag('sync');
    
 
-   	// Entry interface
     (function(i) {
-		i.add('i0','digital in 1.3').tag("in");
-		i.refresh();
+		
+
+
+i.add('zi0','digital out 1.0');
+i.add('zi1','digital out 1.1');
+i.add('zi2','digital out 1.2');
+i.add('zi3','digital out 1.3');
+i.add('zi4','digital out 1.4');
+i.add('led3','digital out 2.3').tag('leds');
+i.add('zspot','digital out 2.4');
+i.add('zi7','digital out 2.5');
+i.add('zi8','digital out 2.6');
+i.add('zi9','digital out 2.7');
+i.add('led1','digital out 3.3').tag('leds');
+i.add('led2','digital in 3.4').tag('leds');
+i.add('zi12','digital out 3.5');
+i.add('zi13','digital out 3.6');
+i.add('zi14','digital out 3.7');
+i.refresh();
+	})($('itf1'));
+
+
+   	// Entry interface
+ /*   (function(i) {
+		
+
+
+i.add('i0','digital out 1.0').tag("out");
+i.add('i1','digital out 1.1').tag("out");
+i.add('i2','digital out 1.2').tag("out");
+i.add('i3','analog in 1.3').tag("group-interrupteur-1");
+i.add('i4','digital in 1.4').tag("group-interrupteur-1");
+i.add('lampe-bureau','digital out 2.3').tag("appareil");
+i.add('spot','digital out 2.4').tag("appareil");
+i.add('i7','digital out 2.5').tag("out");
+i.add('i8','digital out 2.6').tag("out");
+i.add('i9','digital out 2.7').tag("out");
+i.add('j2','digital out 3.3').tag("cuisine");
+i.add('j1','digital out 3.4').tag("cuisine");
+i.add('i12','digital out 3.5').tag("out");
+i.add('i13','digital out 3.6').tag("out");
+i.add('i14','digital out 3.7').tag("outx");
+i.refresh();
 	})($('itf0'));
 
-    (function(i) {
-		i.add('lg-1','digital out 2.3').tag("out");
-		i.add('lg-2','digital out 3.4').tag("out");
-		i.add('lg-3','digital out 3.3').tag("out");
-		i.add('i1','digital in 1.3').tag("in");
-		i.refresh();
-	})($('itf'));
+*/
 
 
-
-	var arrow = [$('lg-1'),$('lg-2'),$('lg-3')];
-    var x = 0;
+	var arrow = [$('j0'),$('j1'),$('j2')];
+  //  var x = 0;
     	
-    $('i1').on('change',function(e){
-    	console.log('i1',e.value);
-    });
-
-    $('i0').on('change',function(e){
-    	console.log('i0',e.value);
+    $('led2').on('change',function(e){
+    	console.log('3.4',e.value);
     });
 
 
+
+
+$('zi0').enable(1);
+
+var kk = 1;
+
+setInterval(function() {
+  // $('zi0').toggle(); 
+
+  var ki = Math.sin(kk*2*3.14159/3000);
+  ki = Math.round((ki*ki)*3000);
+
+  $('itf1').pwm(ki);
+//$('itf1').pwm();
+	kk +=1;
+	kk %= 3000;
+}
+,30);
+
+/*	$('lampe-bureau').disable();
+	$('spot').enable();
+
+	var clear;
+
+	var fn = function(e){
+    	if (e.value != 1 ) {
+    		var i = 0;
+    		clearInterval(clear);
+    		clear = setInterval(function() {
+				$(':appareil').toggle();
+				$(':leds').toggle();
+
+				i++;
+				if (i > 5) { clearInterval(clear); }
+    		},200);
+    		
+    		 
+    	}
+    	console.log('i4',"HELLOOOOOO",e.value);
+    }
+
+
+	$(':group-interrupteur-1').on("change",fn);
+
+  $('j0').enable(0);
+ 
+*/
+
+//  $('i6').enable(0);
+
+
 //	setInterval(function(){ $(':sync').toggle() },2000);
-	setInterval(function(){ $(':out').enable(0); (arrow[x++]).enable(1); x%=3; },85);
-
-	return;
-   	
-	
-
-
-//	setInterval(function(){ $(':sync').toggle() },2000);
+    var x = 0;
+	//setInterval(function(){ $(':out').enable(0);  arrow[x].enable(1); x++; x%=3; }, 200);
 
 })(net.find.bind(net));
 

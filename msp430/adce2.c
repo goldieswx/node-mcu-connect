@@ -92,7 +92,7 @@ int main() {
 interrupt(ADC10_VECTOR) ADC10_ISR (void) { 
    
 	ADC10CTL0 &= ~ADC10IFG;
-	__bic_SR_register_on_exit(LPM3_bits + GIE); 		// exit low power mode  
+	__bic_SR_register_on_exit(ADCE_LPM_BITS + GIE); 		// exit low power mode  
 	return;
 
 }
@@ -114,9 +114,9 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
 		
 
 	if (!NODE_INTERRUPT) {
-		__bic_SR_register_on_exit(LPM3_bits + GIE); 		// exit low power mode  
+		__bic_SR_register_on_exit(ADCE_LPM_BITS + GIE); 		// exit low power mode  
 	} else {
-		__bis_SR_register_on_exit(LPM3_bits); 
+		__bis_SR_register_on_exit(ADCE_LPM_BITS); 
 	}
 	return;
 }
@@ -126,14 +126,29 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
  * Interrupt service routine.
  */
 
-interrupt(TIMER0_A1_VECTOR) ta1_isr(void) {
+/*interrupt(TIMER0_A1_VECTOR) ta1_isr(void) {
 
 	TA0CTL = TACLR;										// stop & clear timer
 	TA0CCTL1 &= 0;										// also disable timer interrupt & clear flag
 
 	__bic_SR_register_on_exit(LPM3_bits + GIE); 		// exit low power mode  
 	return;
+}*/
+
+
+/**
+ * WDT Timer
+ * Interrupt service routine.
+ */
+interrupt(WDT_VECTOR) WDT_ISR(void) {
+
+	WDTCTL = WDTPW+WDTHOLD;
+   	__bic_SR_register_on_exit(ADCE_LPM_BITS + GIE); 
+	IFG1&=~WDTIFG;
+
+	return;
 }
+
 
 
 inline int incrementExchange(register int rx,struct Exchange * pExchange) {
@@ -254,14 +269,46 @@ void fillSampleTrigger(struct Sample * new,struct Sample * old,struct IoConfig *
 }
 
 
+void customCmdProcessPwmMessage(struct CustomCmdDataPwmMessage * msg) {
+
+	static int initialized;
+
+	if (!initialized) {
+		CCTL1 = OUTMOD_7; // CCR1 reset/set
+		CCR0 = 3000;
+		TACTL = TASSEL_2 + MC_1; // SMCLK, up mode
+		P1SEL = BIT2;
+		P1SEL2 &= ~BIT2;
+
+		initialized++;
+	}
+
+	CCR1 = msg->action;
+
+}
+
+
+void customCmd(struct CustomCmd* cmd) {
+
+	switch(cmd->CMDID) {
+		case 0x01 : 
+			customCmdProcessPwmMessage((struct CustomCmdDataPwmMessage *) cmd->DATA);
+	}
+
+}
+
+
 void processExchange(struct Exchange * exchange,struct IoConfig * ioConfig) {
 
 	char * pExchangeBuf = (char*)exchange->inBuffer.inData;
 	switch (*pExchangeBuf) {
+		case  0x44 : 
+			customCmd((struct CustomCmd*)++pExchangeBuf);
+            return;
 		case  0x55 :
 		    flashConfig((struct IoConfig*)++pExchangeBuf);
 		  	return;
-		case 0x66 :
+		case  0x66 :
 			msp430BitMaskPorts(++pExchangeBuf,ioConfig);
 			return;
 	}
