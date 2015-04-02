@@ -1,6 +1,11 @@
 CFLAGS=-lbcm2835 -I../../common/src
+OBJ=daemon.o ../../common/src/fifo.o
 
+%.o: %.c $(DEPS)
+	$(CC) -c -o $@ $< $(CFLAGS)
 
-all: daemon.c ../../common/src/fifo.c
-	gcc $(CFLAGS) -o mydaemon daemon.c .
+dmcuconnect: $(OBJ) 
+	gcc -o $@ $^ $(CFLAGS)
 
+clean: 
+	rm -f *.o dmcuconnect

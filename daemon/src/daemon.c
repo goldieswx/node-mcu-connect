@@ -30,7 +30,9 @@
 #include "fcntl.h"
 #include "fifo.h"
 
+#include "stdint.h"
 #include "network.h"
+#include "daemon.h"
 
 struct message * outQueues[MCOM_MAX_NODES][MCOM_NODE_QUEUE_LEN]; // ten buffer pointers per device;
 
@@ -122,9 +124,9 @@ void bcm2835_spi_transfern2 (unsigned char * p,int count) {
 
 int sendMessage(struct message * outQueue,struct message * inQueues, int * pNumSNCCRequests) {
 
-	McomInPacket pck;
+	struct McomInPacket pck;
 	char* ppck = (char*)&pck; 
-	message * inQueue = NULL;
+	struct message * inQueue = NULL;
 
 	pck.preamble_1 = MI_PREAMBLE;
 	pck.preamble_2 = MI_PREAMBLE;
@@ -238,11 +240,11 @@ void dropMessageOnExcessiveErrors (struct message ** q) {
 // process udp queue.
 int insertNewCmds(struct message ** outQueues) {
  
-	UDPMessage buf;
+	struct UDPMessage buf;
     //static message m;
 	struct message * m;
 
-    if (recvfrom (sockfd, &buf, sizeof(UDPMessage), 0, (struct sockaddr*)&cli_addr, &slen) == sizeof(UDPMessage)) {
+    if (recvfrom (sockfd, &buf, sizeof(struct UDPMessage), 0, (struct sockaddr*)&cli_addr, &slen) == sizeof(struct UDPMessage)) {
 		if (buf.destination <= MCOM_MAX_NODES) {
 			int i,index = (MCOM_NODE_QUEUE_LEN*buf.destination);
 			struct message * q;
@@ -255,7 +257,7 @@ int insertNewCmds(struct message ** outQueues) {
 						//onMessageDropped(NULL); 
 						return 0; 
 					}
-					_memcpy(m->data,&buf,sizeof(UDPMessage));
+					_memcpy(m->data,&buf,sizeof(struct UDPMessage));
 	    			m->status = 0;
     				m->transferError = 0;
     				m->destination = buf.destination;
@@ -272,7 +274,7 @@ int insertNewCmds(struct message ** outQueues) {
 
 		
 // check the snccrequest queue, choose the next node to signal, if any;
-int preProcessSNCCmessage(McomOutPacket* pck, struct message * inQueues,int * pNumSNCCRequests,struct message ** inQueue) {
+int preProcessSNCCmessage(struct McomOutPacket* pck, struct message * inQueues,int * pNumSNCCRequests,struct message ** inQueue) {
 
    if (*pNumSNCCRequests) {
          // do not favor a particular node, hence loop from
@@ -305,7 +307,7 @@ int preProcessSNCCmessage(McomOutPacket* pck, struct message * inQueues,int * pN
 }
 
 // update snccrequest queue, in respect to what happened during transfer.
-int postProcessSNCCmessage(McomOutPacket* pck,struct message * inQueues,struct message * inQueue,int * pNumSNCCRequests) {
+int postProcessSNCCmessage(struct McomOutPacket* pck,struct message * inQueues,struct message * inQueue,int * pNumSNCCRequests) {
 
   
 	  int processedNode = 0;
@@ -368,7 +370,7 @@ int main(int argc, char **argv)
   memset(outQueues,0,MCOM_MAX_NODES*MCOM_NODE_QUEUE_LEN*sizeof(struct message*));
   memset(inQueues,0,MCOM_MAX_NODES*sizeof(struct message));
 
-  McomOutPacket r;
+  struct McomOutPacket r;
   int i;
 
   struct message m;
@@ -381,7 +383,7 @@ int main(int argc, char **argv)
 
   int           numSNCCRequests = 0;
   int           allMsgProcessed;
-  McomInPacket  pck;
+  struct McomInPacket  pck;
  
 
 	while (1)  {

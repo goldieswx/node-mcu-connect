@@ -61,6 +61,6 @@ struct message {
 
 
 /* functions */
-void 	debugMessage(message * m);
+void 	debugMessage(struct message * m);
 void 	_memcpy( void* dest, void *src, int len);
 int 	dataCheckSum (unsigned char * req, int reqLen);
