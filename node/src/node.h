@@ -19,11 +19,9 @@
 #define LONG uint32_t 
 #define word uint16_t
 
-#define nodeId 					5
-
-#define USCI_CONFIG_BITS_IN     (BIT2 | BIT4)
-#define USCI_CONFIG_BITS_OUT    (BIT1)
-#define USCI_CONFIG_BITS        (USCI_CONFIG_BITS_IN | USCI_CONFIG_BITS_OUT)
+//#ifndef nodeId
+//	#define nodeId 					5
+//#endif
 
 #define MASTER_REQUEST_SNCC(pc) \
 				(((pc)->dataIn.destinationSncc == nodeId) && ((pc)->signalMaster))
@@ -35,8 +33,6 @@
 				((pc)->dataOut.chkSum += (rx))
 
 
-
-
 #define PTR_END_OF_HEADER               (2)     // Header ends after preamble
 #define PTR_END_OF_DESTINATION          (PTR_END_OF_HEADER + 5)     // Desgination ends after destinationSNCC
 #define PTR_END_OF_RESERVED             (PTR_END_OF_DESTINATION + 1)     
@@ -45,16 +41,11 @@
 #define PTR_END_OF_PACKET               (PTR_END_OF_CHECKSUM + 2) // out lags 2 bytes behind in (therefore 4-2 = 2).
 #define PTR_END_OF_PACKET2              (PTR_END_OF_CHECKSUM + 4) // out lags 2 bytes behind in (therefore 4-2 = 2).
 
-
-
 #define MOSI  BIT7 
 #define MISO  BIT6
 #define SCK   BIT5
 
-
-
 typedef void (*Inspector) ( word rx, void  * packetContainer);
-
 
 struct PacketContainer {
 
@@ -132,4 +123,3 @@ int 			adceSignalTriggerAny();
 void 			adceServiceTrigger(struct PacketContainer * p, int adceId);
 int 			adceService(unsigned char * adceIn, unsigned char * adceOut, int adceId);
 void 			adceServiceCmd(struct PacketContainer * p, int adceId);
-

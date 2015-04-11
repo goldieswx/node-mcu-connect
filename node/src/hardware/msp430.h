@@ -1,5 +1,10 @@
 #ifdef MSP
 
+
+#define USCI_CONFIG_BITS_IN     (BIT2 | BIT4)
+#define USCI_CONFIG_BITS_OUT    (BIT1)
+#define USCI_CONFIG_BITS        (USCI_CONFIG_BITS_IN | USCI_CONFIG_BITS_OUT)
+
 #define SWITCH_LOW_POWER_MODE   			__bis_SR_register(LPM3_bits + GIE)
 
 #define ENABLE_INTERRUPT 					__enable_interrupt()
