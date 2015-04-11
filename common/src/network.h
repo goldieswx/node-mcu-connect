@@ -17,6 +17,7 @@
 	along with this program.  If not, see <http://www.gnu.org/licenses/>. 
 */
 
+#include "inttypes.h"
 
 #define SIZEOF_MCOM_OUT_PAYLOAD  (MCOM_DATA_LEN+4*sizeof(char))
 #define SIZEOF_MCOM_OUT_HEADER   (2*sizeof(char)+sizeof(word))
@@ -24,15 +25,24 @@
 
 #define MI_PREAMBLE 				0b10101100
 #define MI_DOUBLE_PREAMBLE 			0xACAC
-#define MI_CMD 						8714
+#define MI_RESCUE					0xACAC 
+#define MI_CMD                  	0x220a
+
 
 #define MCOM_DATA_LEN 				20
 #define MCOM_NODE_QUEUE_LEN 		10
 #define MCOM_MAX_NODES 				16
 
 struct McomInPacket {
-	uint8_t 	preamble_1;
-	uint8_t 	preamble_2;
+
+	union
+	{
+	    uint8_t i8[2];
+	    uint16_t i16;
+	} preamble;
+
+//	uint8_t 	preamble_1;
+//	uint8_t 	preamble_2;
 	uint16_t 	cmd;
 	uint8_t 	destinationCmd;
 	uint8_t 	destinationSncc;
@@ -44,8 +54,16 @@ struct McomInPacket {
 };
 
 struct McomOutPacket {
-	uint8_t		 preamble_1;
-	uint8_t		 preamble_2;
+
+	union
+	{
+	    uint8_t i8[2];
+	    uint16_t i16;
+	} preamble;
+
+
+//	uint8_t		 preamble_1;
+//	uint8_t		 preamble_2;
 	uint16_t	 cmd;
 	uint8_t 	signalMask2;
 	uint8_t 	signalMask1;
@@ -56,3 +74,4 @@ struct McomOutPacket {
 	uint16_t 	chkSum;
 };
 
+uint16_t crc16  (uint16_t crc, uint8_t data); 

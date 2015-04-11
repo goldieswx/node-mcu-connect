@@ -128,8 +128,8 @@ int sendMessage(struct message * outQueue,struct message * inQueues, int * pNumS
 	char* ppck = (char*)&pck; 
 	struct message * inQueue = NULL;
 
-	pck.preamble_1 = MI_PREAMBLE;
-	pck.preamble_2 = MI_PREAMBLE;
+	pck.preamble.i16 = MI_DOUBLE_PREAMBLE;
+
 	pck.cmd = MI_CMD;
         printf("HDR:\n");
 	// send preamble and get the first answer
@@ -293,8 +293,8 @@ int preProcessSNCCmessage(struct McomOutPacket* pck, struct message * inQueues,i
    	 	// provided they were alone to do so, we can (if no outqueue)
    		// already inquiry them in the same packet.
 
-   		if (pck->preamble_1) {
-   			int probableNode = pck->preamble_1 & 0x7F; // strip off nofify bit
+   		if (pck->preamble.i8[0]) {
+   			int probableNode = pck->preamble.i8[0] & 0x7F; // strip off nofify bit
    			if (probableNode && probableNode< MCOM_MAX_NODES) {
           //printf("sncc preamble received from node: [%x]\n",probableNode);
    				*inQueue = &(inQueues[probableNode]);
@@ -442,8 +442,8 @@ int dataCheckSum (unsigned char * req, int reqLen) {
 	// proceess chksum on reqlen, append (2B) chksum after reqLen, return checksum;
 	unsigned short chk = 0;
 	while (reqLen--) {
-	   chk += *req++;
-	}
+	   chk =  crc16(chk, *req++);  
+	}	
 	//chk = ~chk;
 	return chk;
 }
