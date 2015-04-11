@@ -83,6 +83,7 @@ void hwInitializeUSCI() {
 
 }
 
+/* Transfer one byte to EXT(any ext) by spi */
 
 word hwTransfer(word s) {
 
@@ -118,6 +119,72 @@ word hwTransfer(word s) {
     return ret; 
 
 }
+
+
+inline void hwExtSetClearInterrupt(int state, int extId) {
+
+  if (extId & 0x01) {
+    P1IES = ~BIT3;
+    if(state) {
+      P1IE  |= BIT3;
+      P1IFG = P1IN & BIT3;
+    } else {
+      P1IE  &= ~BIT3;
+      P1IFG &= ~BIT3;
+    }
+  }
+
+  if (extId & 0x02) {
+    P2IES = ~BIT4;
+    if(state) {
+      P2IE  |= BIT4;
+      P2IFG = P2IN & BIT4;
+    } else {
+      P2IE  &= ~BIT4;
+      P2IFG &= ~BIT4;
+    }
+  }
+
+}
+
+
+interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
+
+  static word tx;
+  word clearLP;
+  
+   if (UCA0STAT & UCOE) {
+      WDTCTL = WDTHOLD;
+   }
+
+  UCA0TXBUF = tx;
+  tx = inspectAndIncrement(UCA0RXBUF,&clearLP);
+
+  if (clearLP) { __bic_SR_register_on_exit(LPM3_bits + GIE); };
+  return;
+
+}
+
+
+interrupt(PORT1_VECTOR) p1_isr(void) { 
+
+  P1IE  &= ~BIT3;
+  
+  P1IFG = 0;
+  __bic_SR_register_on_exit(LPM3_bits + GIE);     // exit low power mode  
+  return;
+  
+} 
+
+interrupt(PORT2_VECTOR) p2_isr(void) { 
+
+  P2IE  &= ~BIT4;
+
+  P2IFG = 0;
+  __bic_SR_register_on_exit(LPM3_bits + GIE);     // exit low power mode  
+  return;
+  
+} 
 
 
 #endif
