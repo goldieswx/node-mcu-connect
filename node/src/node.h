@@ -30,7 +30,9 @@
 				(((pc)->dataIn.destinationCmd == nodeId) && (!(pc)->masterInquiryCommand))
 
 #define DO_CHECKSUM(pc,rx) \
-				((pc)->dataOut.chkSum += (rx))
+		       { (pc)->dataOut.chkSum =  crc16((pc)->dataOut.chkSum, rx); }
+
+//				((pc)->dataOut.chkSum += (rx))
 
 
 #define PTR_END_OF_HEADER               (2)     // Header ends after preamble

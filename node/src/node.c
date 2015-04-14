@@ -479,7 +479,7 @@ int adceService(unsigned char * adceIn, unsigned char * adceOut, int adceId) {
 
 	DELAY(1500);
 
-	 int sum = 0;
+	 uint16_t sum = 0;
 	 int i,j = 0;
 	
 	
@@ -492,7 +492,7 @@ int adceService(unsigned char * adceIn, unsigned char * adceOut, int adceId) {
 
 		 for (i=0;i<19;i++) {
 		 	*adceOut = hwTransfer(adceIn[j++]);
-		 	sum += *adceOut;
+		 	sum = crc16(sum,*adceOut);
 		 	adceOut++;
 		 }
 	 } else {
@@ -501,7 +501,7 @@ int adceService(unsigned char * adceIn, unsigned char * adceOut, int adceId) {
 
 		 for (i=0;i<19;i++) {
 		 	*adceOut = hwTransfer(0);
-		 	sum += *adceOut;
+		 	sum = crc16(sum,*adceOut);
 		 	adceOut++;
 		 }
  	 }
@@ -514,7 +514,7 @@ int adceService(unsigned char * adceIn, unsigned char * adceOut, int adceId) {
 
  	hwTransfer(0);
  	*adceOut = adceId;
-	sum += *adceOut;
+	sum = crc16(sum,*adceOut);
 
 	return sum;
 
