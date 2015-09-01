@@ -44,12 +44,12 @@ MCUInterface.getThrottleMessageQueue = function(self) {
 		_.remove(self._outMessageQueue,function(item){
 			if (item[0] == (0x66+self.id)) {
 				state = state || [0x00,0x00,0x00,0xFF,0xFF,0xFF]; // everything unchanged.
-				state[3] ^= ~item[4]; // toggle changed bits
-				state[4] ^= ~item[5];
-				state[5] ^= ~item[6];
-				state[0] ^= item[1] ^ state[3]; // toggle changed bits expect if reset
-				state[1] ^= item[2] ^ state[4];
-				state[2] ^= item[3] ^ state[5];
+				state[3] ^= ~item[1] ^ item[4]; // toggle changed bits
+				state[4] ^= ~item[2] ^ item[5];
+				state[5] ^= ~item[3] ^ item[6];
+				state[0] ^= item[1] ^ ~item[4]; // toggle changed bits 
+				state[1] ^= item[2] ^ ~item[5];
+				state[2] ^= item[3] ^ ~item[6];
 
 			} else {
 				self._network._sendMessage(item); 
