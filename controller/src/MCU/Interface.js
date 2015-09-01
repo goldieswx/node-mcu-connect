@@ -32,6 +32,10 @@ var MCUInterface = function() {
 
 util.inherits(MCUInterface,MCUObject);
 
+/**
+ * Repack all digital out events in one single event on each throttle
+ */
+
 MCUInterface.getThrottleMessageQueue = function(self) {
 
 	return _.throttle(function(){
@@ -44,13 +48,13 @@ MCUInterface.getThrottleMessageQueue = function(self) {
 		_.remove(self._outMessageQueue,function(item){
 			if (item[0] == (0x66+self.id)) {
 				state = state || [0x00,0x00,0x00,0xFF,0xFF,0xFF]; // everything unchanged.
-				item = [~item[1] ^ item[4],~item[2] ^ item[5],~item[3] ^ item[6]];
-				state[3] ^= item[0]; // toggle changed bits
-				state[4] ^= item[1];
-				state[5] ^= item[2];
-				state[0] ^= item[0]; // toggle changed bits 
-				state[1] ^= item[1];
-				state[2] ^= item[2];
+				var j;
+				for (j=0;j<3;j++) {
+					state[j] |= (item[j+1] & item[j+4]);
+					state[j] &= (item[j+4]);
+					state[j+3] |= (item[j+4]);
+					state[j+3] &= (item[j+1] | item[j+4]);
+				}
 
 			} else {
 				self._network._sendMessage(item); 
