@@ -36,7 +36,7 @@
 
 
 #define PTR_END_OF_HEADER               (2)     // Header ends after preamble
-#define PTR_END_OF_DESTINATION          (PTR_END_OF_HEADER + 5)     // Desgination ends after destinationSNCC
+#define PTR_END_OF_DESTINATION          (PTR_END_OF_HEADER + 9)     // Desgination ends after destinationSNCC
 #define PTR_END_OF_RESERVED             (PTR_END_OF_DESTINATION + 1)     
 #define PTR_END_OF_CHECKSUM_PRE         (PTR_END_OF_DESTINATION  + 20)
 #define PTR_END_OF_CHECKSUM             (PTR_END_OF_DESTINATION  + 21)

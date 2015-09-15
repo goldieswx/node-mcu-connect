@@ -19,7 +19,7 @@
 
 
 #define availP1 (BIT0|BIT1|BIT2|BIT3|BIT4)	// max available usage of P1
-#define availP2 (BIT3|BIT4|BIT5|BIT6|BIT7)  // max available usage of P2
+#define availP2 (BIT1|BIT3|BIT4|BIT5|BIT6|BIT7)  // max available usage of P2
 #define availP3 (BIT3|BIT4|BIT5|BIT6|BIT7)  // max available usage of P3
 
 #define MOSI			BIT7 

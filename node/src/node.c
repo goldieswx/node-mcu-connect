@@ -226,6 +226,7 @@ void endOfDestinationEvent      (const register word rx,  struct  PacketContaine
 		packetContainer->dataOut.snccCheckSum = packetContainer->outBufferChecksum;
 	} else {
 		packetContainer->dataOut.snccCheckSum = 0x00;
+		//->dataOut buffer is always 0x00s (optimization to aviod conditions) so output is blanked in this condition.
 	}
 	packetContainer->startMICMDCheckSum = MASTER_SENDING_MICMD(packetContainer);
 

@@ -1,6 +1,6 @@
 /*
 	node-mcu-connect . node.js UDP Interface for embedded devices.
-	Copyright (C) 2013-4 David Jakubowski
+	Copyright (C) 2013-5 David Jakubowski
 
 	This program is free software: you can redistribute it and/or modify
 	it under the terms of the GNU General Public License as published by
@@ -330,7 +330,7 @@ int postProcessSNCCmessage(struct McomOutPacket* pck,struct message * inQueues,s
 	  *pNumSNCCRequests = 0; // recaculate num of open sncc requests
 	
 
-	  for(i=0;i<8;i++) {
+	  for(i=0;i<(8*sizeof(signalmask_t));i++) {
 	  		if (pck->signalMask1 & j) {
         	if ((inQueue == NULL) || (i != inQueue->destination)) { // ignore signal of 'just processed' node 
 	  											  // (can't (already) request another one)

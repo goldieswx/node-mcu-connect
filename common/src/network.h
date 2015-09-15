@@ -31,7 +31,10 @@
 
 #define MCOM_DATA_LEN 				20
 #define MCOM_NODE_QUEUE_LEN 		10
-#define MCOM_MAX_NODES 				16
+#define MCOM_MAX_NODES 				32
+
+typedef uint32_t signalmask_t;
+
 
 struct McomInPacket {
 
@@ -45,7 +48,8 @@ struct McomInPacket {
 //	uint8_t 	preamble_2;
 	uint16_t 	cmd;
 	uint8_t 	destinationCmd;
-	uint8_t 	destinationSncc;
+	uint8_t 	__padding_1; //keep struct alignment
+	signalmask_t 	destinationSncc;
 	uint8_t 	__reserved_1;
 	uint8_t 	__reserved_2;
 	uint8_t 	data[MCOM_DATA_LEN];
@@ -66,7 +70,8 @@ struct McomOutPacket {
 //	uint8_t		 preamble_2;
 	uint16_t	 cmd;
 	uint8_t 	signalMask2;
-	uint8_t 	signalMask1;
+	uint8_t 	__padding_1; //keep struct alignment
+	signalmask_t 	signalMask1;
 	uint8_t 	__reserved_1;
 	uint8_t 	__reserved_2;
 	uint8_t 	data[MCOM_DATA_LEN];
