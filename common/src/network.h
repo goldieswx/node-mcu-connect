@@ -20,14 +20,19 @@
 #include "inttypes.h"
 
 
-typedef uint32_t signalmask_t;
-typedef uint8_t  padding_t;
+//typedef uint32_t signalmask_t;
+//typedef uint8_t  padding_t;
+
+
+typedef uint8_t signalmask_t;
+#define  padding_t_len 0
+
 
 #define MCOM_DATA_LEN 				20
 #define MCOM_NODE_QUEUE_LEN 		10
 #define MCOM_MAX_NODES 				32
 
-#define SIZEOF_MCOM_OUT_PAYLOAD  (MCOM_DATA_LEN+(3*sizeof(uint8_t))+sizeof(signalmask_t)+sizeof(padding_t))
+#define SIZEOF_MCOM_OUT_PAYLOAD  (MCOM_DATA_LEN+(3*sizeof(uint8_t))+sizeof(signalmask_t)+padding_t_len)
 #define SIZEOF_MCOM_OUT_HEADER   (2*sizeof(uint8_t)+sizeof(uint16_t))
 #define SIZEOF_MCOM_OUT_CHK      (2*sizeof(uint16_t))
 
@@ -50,7 +55,7 @@ struct McomInPacket {
 //	uint8_t 	preamble_2;
 	uint16_t 	cmd;
 	uint8_t 	destinationCmd;
-	padding_t 	    __padding_1; //keep struct alignment
+	uint8_t 	    __padding_1[padding_t_len]; //keep struct alignment
 	signalmask_t 	destinationSncc;
 	uint8_t 	__reserved_1;
 	uint8_t 	__reserved_2;
@@ -72,7 +77,7 @@ struct McomOutPacket {
 //	uint8_t		 preamble_2;
 	uint16_t	 cmd;
 	uint8_t 	signalMask2;
-	padding_t 	__padding_1; //keep struct alignment
+	uint8_t 	    __padding_1[padding_t_len]; //keep struct alignment
 	signalmask_t 	signalMask1;
 	uint8_t 	__reserved_1;
 	uint8_t 	__reserved_2;
