@@ -24,8 +24,8 @@
 //typedef uint8_t  padding_t;
 
 
-typedef uint8_t signalmask_t;
-#define  padding_t_len 0
+typedef uint32_t signalmask_t;
+#define  padding_t_len 3
 
 
 #define MCOM_DATA_LEN 				20

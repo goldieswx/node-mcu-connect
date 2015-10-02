@@ -205,7 +205,7 @@ void endOfHeaderEvent           (const register word rx,  struct  PacketContaine
 		packetContainer->synced = 0; 
 		return; 
 	}  
-	packetContainer->dataOut.signalMask1 =  (packetContainer->signalMaster << nodeId);
+	packetContainer->dataOut.signalMask1 =  (((signalmask_t)packetContainer->signalMaster) << nodeId);
 
 }
 
