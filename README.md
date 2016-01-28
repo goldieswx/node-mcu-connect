@@ -37,8 +37,8 @@ The transmission uses a 3 wire synchronous SPI scheme.
 That is : 
 
 * A Clock line (master to node)
-* MISO
-* MOSI
+* MISO (Master In Slave Out)
+* MOSI (Master Out Slave In)
 
     	[node-3]-----[node-4]-------[master]-----[node-1]-----[node-2]
 		      				    +	
@@ -71,8 +71,8 @@ at that time the master node will send a dummy packet to enable the data transfe
 This has the following form, master <=> node <=> extension.
 
 		[master]-----[node]
-				=====[extension1]
-				=====[extension2]
+					+=====[extension1]
+					+=====[extension2]
 
 
 (Quinoha supports two (three) extensions on each node).
