@@ -70,10 +70,10 @@ at that time the master node will send a dummy packet to enable the data transfe
 
 This has the following form, master <=> node <=> extension.
 
-`	[master]-----[node]
-`			=====[extension1]
-`			=====[extension2]
-`
+		[master]-----[node]
+				=====[extension1]
+				=====[extension2]
+
 
 (Quinoha supports two (three) extensions on each node).
 
