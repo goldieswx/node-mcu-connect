@@ -40,12 +40,12 @@ That is :
 * MOSI
 
 
-	[node-3]-----[node-4]-------[master]-----[node-1]-----[node-2]
-						    +	
-						    |
-						 [node-5]
-						   ...	
-
+`	[node-3]-----[node-4]-------[master]-----[node-1]-----[node-2]
+`						    +	
+`						    |
+`						 [node-5]
+`						   ...	
+`
 
 #### Note ####
 
@@ -70,9 +70,10 @@ at that time the master node will send a dummy packet to enable the data transfe
 
 This has the following form, master <=> node <=> extension.
 
-	[master]-----[node]
-			=====[extension1]
-			=====[extension2]
+`	[master]-----[node]
+`			=====[extension1]
+`			=====[extension2]
+`
 
 (Quinoha supports two (three) extensions on each node).
 
