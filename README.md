@@ -84,7 +84,7 @@ This has the following form, master <=> node <=> extension.
 The extensions are the reason of existence of this project. They are the I/Os at the final chain end point.
 
 The Quinoha ADCE extension supports 
-* a total 15 total I/Os.
+* a total 12 total I/Os.
 * 5 10-bit ADCs
 * 4 PWM channels (2 dual channels)
 * Remote code upload and execution in integrated flash for faster (parallel) execution.
@@ -92,3 +92,45 @@ The Quinoha ADCE extension supports
  
 Extensions are tied to a single node, with a common SPI bus and a dedicated CTS/RTS channel; up to two (or three) extensions can be wired to a single node.
 
+
+### Quinoha Node Hardware and pinout ###
+
+#####[Basic]#####
+- MSP430G2553 20PIN
+ 
+  P1.1  to Rasbperry GPIO MOSI
+  P1.2  to Raspberry GPIO CLK
+  P1.4  to Raspberry GPIO MISO Pulled up (inverted logically).
+
+  P1.5  to Extension BUS CLK
+  P1.6  to Extension BUS MISO
+  P1.7  to Extension BUS MOSI
+  P2.1  to Extension 1   RTS
+  P2.2  to Extension 1   CTS
+  P2.3  to Extension 2   RTS
+  P2.4  to Extension 2   CTS  
+  
+
+### Quinoha ADCE Hardware and pinout ###
+
+#####[Basic]#####
+- MSP430G2553 28PIN
+
+  P1.5  to Extension BUS CLK
+  P1.6  to Extension BUS MISO
+  P1.7  to Extension BUS MOSI
+  P2.1  to Extension 1   RTS
+  P2.2  to Extension 1   CTS
+
+  P1.0  I/O,ADC
+  P1.1  I/O,ADC
+  P1.2  I/O,ADC
+  P1.3  I/O,ADC
+  P1.4  I/O,ADC
+  Px.X  I/O,PWM
+  Px.X  I/O,PWM
+  Px.X  I/O,PWM
+  Px.X  I/O,PWM
+  Px.x  I/O
+  Px.x  I/O
+  Px.x  I/O  
