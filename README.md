@@ -79,4 +79,16 @@ This has the following form, master <=> node <=> extension.
 
 ### Extension ###
 
+#####[Quinoha ADCE]#####
+
+The extensions are the reason of existence of this project. They are the I/Os at the final chain end point.
+
+The Quinoha ADCE extension supports 
+* a total 15 total I/Os.
+* 5 10-bit ADCs
+* 4 PWM channels (2 dual channels)
+* Remote code upload and execution in integrated flash for faster (parallel) execution.
+* Bi directional communication with master.
+ 
+Extensions are tied to a single node, with a common SPI bus and a dedicated CTS/RTS channel; up to two (or three) extensions can be wired to a single node.
 
