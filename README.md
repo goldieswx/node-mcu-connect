@@ -140,3 +140,18 @@ Extensions are tied to a single node, with a common SPI bus and a dedicated CTS/
   Px.x  I/O
   Px.x  I/O  
 ```
+
+#####[Hardware specifications]#####
+
+- Quinoha Nodes and ADCE fit both on a single dual-sided PCB 
+- 3.5cmx2.5cm including RS485 transceivers and current regulators.
+- 14-pin header (2.54 mm header)
+- VCC Input from 5v to 10v DC
+- Average power consumption is <1mA at idle. <10mA average load; absolute maximum 250mA if current is drawn from all I/Os. 
+- second extension header
+- debug/flash program headers for ADCE and Node.
+
+
+
+Hardware prototypes available on request. Contact me.
+
