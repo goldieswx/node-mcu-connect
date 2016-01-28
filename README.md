@@ -40,7 +40,6 @@ That is :
 * MISO
 * MOSI
 
-
     	[node-3]-----[node-4]-------[master]-----[node-1]-----[node-2]
 		      				    +	
 					      	    |
