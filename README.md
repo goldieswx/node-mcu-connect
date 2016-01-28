@@ -40,11 +40,11 @@ That is :
 * MISO (Master In Slave Out)
 * MOSI (Master Out Slave In)
 
-    	[node-3]-----[node-4]-------[master]-----[node-1]-----[node-2]
-		      				    +	
-					      	    |
-						       [node-5]
-						          ...	
+             [node-3]-----[node-4]-------[master]-----[node-1]-----[node-2]
+                                                         +	
+                                                         |
+                                                      [node-5]
+                                                         ...	
 
 
 #### Note ####
