@@ -80,6 +80,14 @@ This has the following form, master <=> node <=> extension.
 
 (Quinoha supports two (three) extensions on each node, ADCE [Analog/Digital common extension] is the code name of the implemented implementation). 
 
+### Performance ###
+
+Throughput of 115kbps is acheived using the msp430g2553 as node (network) chip. The chip doesn't contain nor a FIFO buffer and a DMA buffer, so it cannot do many more. Maybe not the perfect tool for the job (I guess a cortex M0 might have been better suited).
+
+Packet latency of about 1ms can be expected one way at 115kbps.
+
+The chip performs flawlessly though and throughput is not the primary goal of the project. Which is "making a control network".
+
 ### Extension ###
 
 #####[Quinoha ADCE]#####
