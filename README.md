@@ -40,12 +40,13 @@ That is :
 * MISO (Master In Slave Out)
 * MOSI (Master Out Slave In)
 
+```
              [node-3]-----[node-4]-------[master]-----[node-1]-----[node-2]
                                                          +	
                                                          |
                                                       [node-5]
                                                          ...	
-
+```
 
 #### Note ####
 
@@ -70,10 +71,12 @@ at that time the master node will send a dummy packet to enable the data transfe
 
 This has the following form, master <=> node <=> extension.
 
+```
                                                                   +=====[extension1]
                  [master]-----[node1]--------------------------[node2]
                                  +=====[extension1]
                                  +=====[extension2]
+```
 
 (Quinoha supports two (three) extensions on each node, ADCE [Analog/Digital common extension] is the code name of the implemented implementation). 
 
@@ -97,7 +100,8 @@ Extensions are tied to a single node, with a common SPI bus and a dedicated CTS/
 
 #####[Basic]#####
 - MSP430G2553 20PIN
- 
+
+``` 
   P1.1  to Rasbperry GPIO MOSI
   P1.2  to Raspberry GPIO CLK
   P1.4  to Raspberry GPIO MISO Pulled up (inverted logically).
@@ -109,13 +113,14 @@ Extensions are tied to a single node, with a common SPI bus and a dedicated CTS/
   P2.2  to Extension 1   CTS
   P2.3  to Extension 2   RTS
   P2.4  to Extension 2   CTS  
-  
+```  
 
 ### Quinoha ADCE Hardware and pinout ###
 
 #####[Basic]#####
 - MSP430G2553 28PIN
 
+```
   P1.5  to Extension BUS CLK
   P1.6  to Extension BUS MISO
   P1.7  to Extension BUS MOSI
@@ -134,3 +139,4 @@ Extensions are tied to a single node, with a common SPI bus and a dedicated CTS/
   Px.x  I/O
   Px.x  I/O
   Px.x  I/O  
+```
