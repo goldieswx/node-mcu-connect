@@ -71,3 +71,6 @@ This has the following form, master <=> node <=> extension.
 	[master]-----[node]
 			=====[extension1]
 			=====[extension2]
+
+(Quinoha supports two (three) extensions on each node).
+
