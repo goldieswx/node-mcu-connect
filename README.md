@@ -35,9 +35,9 @@ transmission over huge distances and difficult environments.
 
 The transmission uses a 3 wire synchronous SPI scheme. 
 That is : 
-	* A Clock line (master to node)
-	* MISO
-	* MOSI
+* A Clock line (master to node)
+* MISO
+* MOSI
 
 	[node-3]-----[node-4]-------[master]-----[node-1]-----[node-2]
 						    +	
