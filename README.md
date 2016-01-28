@@ -17,7 +17,7 @@ This project is open source, licensed under GPLv3 terms (http://www.gnu.org/lice
 
 
 
-Hardware.
+### Hardware ###
 
 There is currently one hardware implementation (TI MSP430G2x value line). 
 We'll call the Quinoha implementation.
@@ -25,7 +25,7 @@ We'll call the Quinoha implementation.
 The codebase however is well decoupled from hardware and may be ported to any microcrontroller similar or better.
 
 
-Network topology.
+### Network topology ###
 
 The topology is Mesh networking. 
 One master node (called master) controls one or several slave nodes (called nodes).
@@ -33,10 +33,11 @@ Which makes it compatible with RS-485 tranceivers, which allow inexpensive and (
 transmission over huge distances and difficult environments. 
 
 
-The transmission uses a 3 wire synchronous SPI scheme. That is : 
-	- A Clock line (master to node)
-	- MISO
-	- MOSI
+The transmission uses a 3 wire synchronous SPI scheme. 
+That is : 
+	* A Clock line (master to node)
+	* MISO
+	* MOSI
 
 	[node-3]-----[node-4]-------[master]-----[node-1]-----[node-2]
 						    +	
@@ -44,15 +45,15 @@ The transmission uses a 3 wire synchronous SPI scheme. That is :
 						 [node-5]
 						   ...	
 
-Note: 
+#### Note ####
 
 QuinoHa uses the three SPI lines over rs-485 and a power line (4 wire pairs), 
 which makes it pratical to use it fully powered with a single CAT5 transmission cable. 
 
 
-Network protocol.
+### Network protocol ###
 
-[Basic]
+#####[Basic]#####
 
 Small packets (around 40Bytes) are broadcast to the network synchronously on request from master to node. 
 Packets are targeted to a particular node.
@@ -63,10 +64,10 @@ Any node can request a talkback transfer at any time, by either pulling the righ
 or if nothing is being transmitted, pull MOSI high when no clock is being pulsed, 
 at that time the master node will send a dummy packet to enable the data transfer.
 
-[Hardware topology]
+### Hardware topology ###
 
 This has the following form, master <=> node <=> extension.
 
-[master]-----[node]
-		=====[extension1]
-		=====[extension2]
+	[master]-----[node]
+			=====[extension1]
+			=====[extension2]
