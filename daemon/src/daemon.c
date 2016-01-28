@@ -1,6 +1,6 @@
 /*
 	node-mcu-connect . node.js UDP Interface for embedded devices.
-	Copyright (C) 2013-4 David Jakubowski
+	Copyright (C) 2013-5 David Jakubowski
 
 	This program is free software: you can redistribute it and/or modify
 	it under the terms of the GNU General Public License as published by
@@ -128,8 +128,8 @@ int sendMessage(struct message * outQueue,struct message * inQueues, int * pNumS
 	char* ppck = (char*)&pck; 
 	struct message * inQueue = NULL;
 
-	pck.preamble_1 = MI_PREAMBLE;
-	pck.preamble_2 = MI_PREAMBLE;
+	pck.preamble.i16 = MI_DOUBLE_PREAMBLE;
+
 	pck.cmd = MI_CMD;
         printf("HDR:\n");
 	// send preamble and get the first answer
@@ -293,8 +293,8 @@ int preProcessSNCCmessage(struct McomOutPacket* pck, struct message * inQueues,i
    	 	// provided they were alone to do so, we can (if no outqueue)
    		// already inquiry them in the same packet.
 
-   		if (pck->preamble_1) {
-   			int probableNode = pck->preamble_1 & 0x7F; // strip off nofify bit
+   		if (pck->preamble.i8[0]) {
+   			int probableNode = pck->preamble.i8[0] & 0x7F; // strip off nofify bit
    			if (probableNode && probableNode< MCOM_MAX_NODES) {
           //printf("sncc preamble received from node: [%x]\n",probableNode);
    				*inQueue = &(inQueues[probableNode]);
@@ -330,7 +330,7 @@ int postProcessSNCCmessage(struct McomOutPacket* pck,struct message * inQueues,s
 	  *pNumSNCCRequests = 0; // recaculate num of open sncc requests
 	
 
-	  for(i=0;i<8;i++) {
+	  for(i=0;i<(8*sizeof(signalmask_t));i++) {
 	  		if (pck->signalMask1 & j) {
         	if ((inQueue == NULL) || (i != inQueue->destination)) { // ignore signal of 'just processed' node 
 	  											  // (can't (already) request another one)
@@ -442,8 +442,8 @@ int dataCheckSum (unsigned char * req, int reqLen) {
 	// proceess chksum on reqlen, append (2B) chksum after reqLen, return checksum;
 	unsigned short chk = 0;
 	while (reqLen--) {
-	   chk += *req++;
-	}
+	   chk =  crc16(chk, *req++);  
+	}	
 	//chk = ~chk;
 	return chk;
 }

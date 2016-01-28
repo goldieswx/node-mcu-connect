@@ -32,6 +32,10 @@ var MCUInterface = function() {
 
 util.inherits(MCUInterface,MCUObject);
 
+/**
+ * Repack all digital out events in one single event on each throttle
+ */
+
 MCUInterface.getThrottleMessageQueue = function(self) {
 
 	return _.throttle(function(){
@@ -43,14 +47,15 @@ MCUInterface.getThrottleMessageQueue = function(self) {
 
 		_.remove(self._outMessageQueue,function(item){
 			if (item[0] == (0x66+self.id)) {
-				state = state || [item[1],item[2],item[3]];
-				state[0] |= item[1];
-				state[1] |= item[2];
-				state[2] |= item[3];
-				state[0] &= item[4];
-				state[1] &= item[5];
-				state[2] &= item[6];
-				
+				state = state || [0x00,0x00,0x00,0xFF,0xFF,0xFF]; // everything unchanged.
+				var j;
+				for (j=0;j<3;j++) {
+					state[j] |= (item[j+1] & item[j+4]);
+					state[j] &= (item[j+4]);
+					state[j+3] |= (item[j+4]);
+					state[j+3] &= (item[j+1] | item[j+4]);
+				}
+
 			} else {
 				self._network._sendMessage(item); 
 			}         
@@ -62,9 +67,9 @@ MCUInterface.getThrottleMessageQueue = function(self) {
 		aggreatedMessage[1] = 0xff & state[0];
 		aggreatedMessage[2] = 0xff & state[1];
 		aggreatedMessage[3] = 0xff & state[2];
-		aggreatedMessage[4] = 0xff & state[0];
-		aggreatedMessage[5] = 0xff & state[1];
-		aggreatedMessage[6] = 0xff & state[2];
+		aggreatedMessage[4] = 0xff & state[3];
+		aggreatedMessage[5] = 0xff & state[4];
+		aggreatedMessage[6] = 0xff & state[5];
 
 		self._network._sendMessage(aggreatedMessage); }
 
