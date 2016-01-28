@@ -10,7 +10,7 @@ The network is composed of nodes connected and powered through a RS-422/485 mult
 - Nodes supports up to three extensions (bi-directional and SPI wired to the node) which can be addressed through the controller. (written in javaScript)
 - Code for msp430g2x nodes devices and extensions is available, hardware dependent instructions decoupled.  (written in C)
 
-- Wiring schematics ready but not yet available.
+- Wiring schematics available.
 
 This project is open source, licensed under GPLv3 terms (http://www.gnu.org/licenses/).
 
