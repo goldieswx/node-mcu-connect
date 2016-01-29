@@ -278,5 +278,6 @@ Hardware available. Contact me for further info.
 * Home automation.
 * Sensor network.
 * Device interfacing.
-
+* IoT network.
+ 
 
