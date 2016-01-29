@@ -16,15 +16,42 @@ This project is open source, licensed under GPLv3 terms (http://www.gnu.org/lice
 
 ### Software ###
 
-#### [hello world] ####
-
-The primitive end goal is to drive an I/O to a logical level (up or down). That's done with :
-```
-  $('myIo').enable();
-```
-
-
 #### [basics] ####
+
+A primitive end goal is to drive an I/O as output to a logical level (up or down). 
+IOs are implemented on what is called an extension (see the hardware overview for more details).
+
+The controller (see /controller , Javascript based) handles this the following way :
+```
+  $('my-io').enable();
+```
+Another goal is to subsctibe to an I/O as input changes
+```
+  $('button-1').on('change',function(e){
+	    console.log('button 1 state is now :', e.value);
+	});
+```
+
+Before this can be done, the network has to be setup, the nodes needs to be identified and mapped as well as the extensions.
+
+```
+var net = new MCU.Network();
+
+    // define node with hardware id #0x17, mapped to "my-new-node" key
+    net.add('my-new-node',0x17);                            
+
+    // define extension connected to extension #0.
+    net.find("my-new-node").add('my-ext-0",0x00);   
+
+    // define IOs on this extension.
+    net.find("my-ext-0").add('button-1','digital in 1.3');
+    net.find("my-io").add('button-1','digital out 1.4');
+    net.find("my-analog-io").add('button-1','analog in 1.2');
+
+   	
+})(net.find.bind(net));
+```
+
 
 #### scripting ####
 
