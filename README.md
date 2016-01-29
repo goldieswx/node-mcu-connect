@@ -273,3 +273,10 @@ Extensions are tied to a single node, with a common SPI bus and a dedicated CTS/
 
 Hardware available. Contact me for further info.
 
+#### Applications ####
+
+* Home automation.
+* Sensor network.
+* Device interfacing.
+
+
