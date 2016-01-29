@@ -77,7 +77,6 @@ The controller framework support chains which allow the following shortcuts
 })(net.find.bind(net));
 ```
 
-
 #### Architecture ####
 
 The software has the following structure
@@ -88,6 +87,33 @@ daemon                      [unix daemon, interface with nodes]   [C]
 node                        [firmware, interface with extensions] [C]
 extension(adce)             [firmware, extension firmware]        [C]
 ```
+
+### Compiling the firmware ###
+
+You need the msp-gcc cross compiler packages, and the msp-gdb debug tools as well. Once downloaded there are two firmware to build.
+
+##### Node #####
+
+Under node/src type
+```
+$ make
+```
+This will generate a node firmware, the default has an hardware Id=1. Hardware ids identifies the node on the network and node ids must be unique on a network. Available IDs range from 1 to 31. use the NODEID option to create hardware with different ids. 
+
+Next, plug the MSP430g2553 (20pin) node chip and upload it. 
+```
+$ mspdebug rf2500 "prog node.o"
+```
+
+##### Adce #####
+
+Under peripheral/adce/src type 
+```
+$ make
+```
+
+plug the second MSP430g2553 chip (28pin) 
+$ mspdebug rf2500 "prog node.o"
 
 
 ### Hardware ###
