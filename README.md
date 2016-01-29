@@ -107,7 +107,7 @@ $ mspdebug rf2500 "prog node.o"
 
 Transfer must be successful to continue. 
 
-##### Adce #####
+##### Extension (adce) #####
 
 Under peripheral/adce/src type 
 ```
