@@ -21,7 +21,7 @@ This project is open source, licensed under GPLv3 terms (http://www.gnu.org/lice
 A primitive end goal is to drive an I/O as output to a logical level (up or down). 
 IOs are implemented on what is called an extension (see the hardware overview for more details).
 
-The controller (see /controller , Javascript based) handles this the following way :
+To handle this, use the controller framework  :
 ```
   $('my-io').enable();  // sets my-io to logical high.
 ```
