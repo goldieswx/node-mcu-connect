@@ -78,10 +78,16 @@ The controller framework support chains which allow the following shortcuts
 ```
 
 
-#### scripting ####
+#### Architecture ####
 
+The software has the following structure
 
-
+```
+controller                  [high level script, brain]            [Javascript]
+daemon                      [unix daemon, interface with nodes]   [C]
+node                        [firmware, interface with extensions] [C]
+extension(adce)             [firmware, extension firmware]        [C]
+```
 
 
 ### Hardware ###
