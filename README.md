@@ -184,13 +184,13 @@ This has the following form, master <=> node <=> extension.
 
 ### Performance ###
 
-A throughput of 128kbps is acheived using the msp430g2553 as node (network) chip. The chip doesn't contain nor a FIFO buffer and a DMA buffer, but it manages pretty well decently. (it might be interesting to try a cortex M0 port).
+A throughput of 128kbps is acheived using the msp430g2553 as node (network) chip. The chip doesn't contain nor a FIFO buffer nor a DMA buffer, but it manages pretty well decently. (might be interesting to try a cortex M0 port; but that's another debate).
 
 Packet latency of about 1ms can be expected (one way) at 120kbps at idle. Theoretically, this makes about 400 packets per second. Altough nothing forbids it, the network is not supposed to grow over 30 nodes (at the time you reach that much nodes, favor multiple paralleled networks). 
 
 Average network size is 10-15 nodes so this would mean a very resonable 25ms/35ms latency at full load.
 
-The chip performs flawlessly though and throughput is not the primary goal of the project. 
+The chip performs flawlessly though and throughput is not the primary goal of the project, and since the node/extension firmware is open, it should allow some creativity. 
 
 ### Extension ###
 
