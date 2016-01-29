@@ -267,6 +267,5 @@ Illustration: Top of a Quinoha PCB (node, regulation and transmission, second ex
 Illustration: Bottom of a Quinoha PCB, (extension/adce with IO header facing down).
 ![Quinoha node+adce in one tiny PCB](https://cloud.githubusercontent.com/assets/3940546/12674196/e77ea77c-c681-11e5-9aae-cec3009014a5.png)
 
-
 Hardware available. Contact me for further info.
 
