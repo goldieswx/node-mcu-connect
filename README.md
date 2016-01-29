@@ -35,20 +35,45 @@ Another goal is to subsctibe to an I/O as input changes
 Before this can be done, the network has to be setup, the nodes needs to be identified and mapped as well as the extensions.
 
 ```
-var net = new MCU.Network();
+   var net = new MCU.Network();
 
-    // define node with hardware id #0x17, mapped to "my-new-node" key
-    net.add('my-new-node',0x17);                            
+   // define node with hardware id #0x17, mapped to "my-new-node" key
+   net.add('my-new-node',0x17);                            
 
-    // define extension connected to extension #0.
-    net.find("my-new-node").add('my-ext-0",0x00);   
+   // define extension connected to extension #0.
+   net.find("my-new-node").add('my-ext-0",0x00);   
 
-    // define IOs on this extension.
-    net.find("my-ext-0").add('button-1','digital in 1.3');
-    net.find("my-io").add('button-1','digital out 1.4');
-    net.find("my-analog-io").add('button-1','analog in 1.2');
+   // define IOs on this extension.
+   net.find("my-ext-0").add('button-1','digital in 1.3');
+   net.find("my-ext-0").add('my-io','digital out 1.4');
+   net.find("my-ext-0").add('my-analog-io-1','analog in 1.2');
+   
+   // upload IO mapping and IO state to the extension.
+   net.find("my-ext-0").refresh();
+```
 
-   	
+The controller framework support chains which allow the following shortcuts
+```
+(function($) {
+	net.add('my-new-node',0x17);   
+	$('my-new-node').add('my-ext-0",0x00);   
+
+	// Map IOs
+	(function(i) {
+		i.add('button-1','digital in 1.3');
+		i.add('my-analog-io-1','analog in 1.2');
+		i.add('my-io-1','digital out 2.1').tag("out");
+		i.add('my-io-2','digital out 2.2').tag("out").tag("foo");
+		i.add('my-io-3','digital out 2.3').tag("out");
+		i.refresh();
+	})($('my-ext-0'));
+
+	// disable all IO tagged with out defined on the network
+	$(':out').disable();
+
+	// disable all IO tagged with out under my-ext-0
+	$('my-ext-0:out').disable();
+
 })(net.find.bind(net));
 ```
 
