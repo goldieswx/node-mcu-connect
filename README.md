@@ -77,6 +77,11 @@ The controller framework support chains which allow the following shortcuts
 })(net.find.bind(net));
 ```
 
+Before firing up the controller make sure the daemon is compiled, running, and that the node is connected and at least an extension is wired to it and that both chip have their firmware uploaded (see further). 
+
+At present time, few documentation on controller functionality is available. 
+
+
 #### Architecture ####
 
 The software has the following structure
@@ -126,6 +131,14 @@ this is codenamed Quinoha.
 
 The codebase however is well decoupled from hardware and may be ported to any microcrontroller similar or better.
 
+### Compiling the daemon ###
+
+Under daemon/src type 
+```
+$ make
+```
+
+Run  **mcuconnectd** as a deamon, a sample systemd configuration is supplied.
 
 ### Network topology ###
 
