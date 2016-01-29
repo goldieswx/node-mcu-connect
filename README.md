@@ -102,7 +102,7 @@ This will generate a node firmware, the default has an hardware Id=1. Hardware i
 
 Next, plug the MSP430g2553 (20pin) node chip and upload it. 
 ```
-$ mspdebug rf2500 "prog node.o"
+$ mspdebug rf2500 "prog node.elf"
 ```
 
 Transfer must be successful to continue. 
@@ -115,7 +115,7 @@ $ make
 ```
 Plug the second MSP430g2553 chip (28pin) then type:
 ```
-$ mspdebug rf2500 "prog node.o"
+$ mspdebug rf2500 "prog adce.elf"
 ```
 Ensure the upload was successful before going further.
 
