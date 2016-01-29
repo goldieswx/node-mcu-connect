@@ -1,7 +1,7 @@
 node-mcu-connect 
 ================
 
-nodeMcuConnect is an open source framework whose goal is to setup an ultra low power, low latency microcontroller network controller (..matter of taste but I hate the IoT terminology).
+nodeMcuConnect is an open source framework whose goal is to setup an ultra low power, low latency microcontroller network controller. 
 
 The network is composed of nodes connected and powered through a RS-422/485 multipoint interface, handled by a master node.
 
@@ -10,7 +10,7 @@ The network is composed of nodes connected and powered through a RS-422/485 mult
 - Nodes supports up to three extensions (bi-directional and SPI wired to the node) which can be addressed through the controller. (written in javaScript)
 - Code for msp430g2x nodes devices and extensions is available, hardware dependent instructions decoupled.  (written in C)
 
-- Wiring schematics available.
+- Wiring schematics and Hardware available.
 
 This project is open source, licensed under GPLv3 terms (http://www.gnu.org/licenses/).
 
@@ -18,7 +18,7 @@ This project is open source, licensed under GPLv3 terms (http://www.gnu.org/lice
 
 #### [basics] ####
 
-A primitive end goal is to drive an I/O as output to a logical level (up or down). 
+A first end goal is to drive an I/O as output to a logical level (up or down). 
 IOs are implemented on what is called an extension (see the hardware overview for more details).
 
 To handle this, use the controller framework  :
@@ -184,11 +184,13 @@ This has the following form, master <=> node <=> extension.
 
 ### Performance ###
 
-Throughput of 120kbps is acheived using the msp430g2553 as node (network) chip. The chip doesn't contain nor a FIFO buffer and a DMA buffer, so it cannot do many more. Maybe not the perfect tool for the job (I guess a cortex M0 might have been better suited).
+A throughput of 128kbps is acheived using the msp430g2553 as node (network) chip. The chip doesn't contain nor a FIFO buffer and a DMA buffer, but it manages pretty well decently. (it might be interesting to try a cortex M0 port).
 
-Packet latency of about 1ms can be expected (one way) at 120kbps. Theoretically, this makes about 400 packets per second. Altough possible the network is not supposed to grow over 30 nodes (at that time, favor multiple paralleled networks). Average network size is 10-15 nodes so this would mean a very resonable 25ms/35ms latency at full load.
+Packet latency of about 1ms can be expected (one way) at 120kbps at idle. Theoretically, this makes about 400 packets per second. Altough nothing forbids it, the network is not supposed to grow over 30 nodes (at the time you reach that much nodes, favor multiple paralleled networks). 
 
-The chip performs flawlessly though and throughput is not the primary goal of the project. Which is "making a control network".
+Average network size is 10-15 nodes so this would mean a very resonable 25ms/35ms latency at full load.
+
+The chip performs flawlessly though and throughput is not the primary goal of the project. 
 
 ### Extension ###
 
