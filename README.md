@@ -261,10 +261,12 @@ Extensions are tied to a single node, with a common SPI bus and a dedicated CTS/
 - second extension header
 - debug/flash program headers for ADCE and Node.
 
-Illustration: Top of a Quinoha PCB (node, regulation and transmission, second extension header, cascade header).
+**Illustration:** Top of a Quinoha PCB (node, regulation and transmission, second extension header, cascade header).
+
 ![Quinoha node+adce in one tiny PCB](https://cloud.githubusercontent.com/assets/3940546/12674227/16323516-c682-11e5-87e5-7d13fe4a9403.png)
 
-Illustration: Bottom of a Quinoha PCB, (extension/adce with IO header facing down).
+**Illustration:** Bottom of a Quinoha PCB, (extension/adce with IO header facing down).
+
 ![Quinoha node+adce in one tiny PCB](https://cloud.githubusercontent.com/assets/3940546/12674196/e77ea77c-c681-11e5-9aae-cec3009014a5.png)
 
 Hardware available. Contact me for further info.
