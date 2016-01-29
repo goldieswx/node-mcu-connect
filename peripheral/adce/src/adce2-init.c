@@ -142,20 +142,22 @@ void initializeIOConfig(struct IoConfig * ioConfig) {
 
 	}
 
-	ioConfig->P1DIR &= availP1 & ~ioConfig->P1ADC;
+	ioConfig->P1DIR &= availP1;
 	ioConfig->P1ADC &= availP1;
-	ioConfig->P1REN &= (availP1 & ~ioConfig->P1ADC & ~ioConfig->P1DIR);
-	ioConfig->P1OUT &= (availP1 & ~ioConfig->P1ADC);
+	ioConfig->P1REN &= availP1;
+	ioConfig->P1OUT &= availP1;
 	ioConfig->P2DIR &= availP2;
-	ioConfig->P2REN &= availP2 & ~ioConfig->P2DIR;
+	ioConfig->P2REN &= availP2;
 	ioConfig->P2OUT &= availP2;
 	ioConfig->P3DIR &= availP3;
-	ioConfig->P3REN &= availP3 & ~ioConfig->P3DIR;
+	ioConfig->P3REN &= availP3;
 	ioConfig->P3OUT &= availP3;
 
 	P1DIR    = (P1DIR & (~availP1)) | ioConfig->P1DIR;
 	P1SEL    = (P1SEL & (~availP1)) | ioConfig->P1ADC;
 	P1SEL2   = (P1SEL2 & (~availP1));
+		P2SEL2   = (P2SEL2 & (~availP2));
+			P3SEL2   = (P3SEL2 & (~availP3));
 	ADC10AE0 = ioConfig->P1ADC;
 	P1REN    = (P1REN & (~availP1)) | ioConfig->P1REN;
 	P1OUT    = (P1OUT & (~availP1)) | ioConfig->P1OUT;

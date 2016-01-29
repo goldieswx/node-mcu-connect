@@ -270,21 +270,70 @@ void fillSampleTrigger(struct Sample * new,struct Sample * old,struct IoConfig *
 }
 
 
+void pwmInitializeChannels(struct CustomCmdDataPwmMessage * msg) {
+
+	/*
+		data[0] bit0 => set/reset TA0
+		data[0] bit1 => set/reset TA1
+      	data[1] = duty cycle TA0
+     	data[2] = duty cycle TA1
+
+		// adce hardware pwm ettings
+		//3.5 3.6  ta0.1 ta0.2
+		//2.1 3.3  ta1.1 ta1.2
+	*/
+
+		if (msg->data[1]) TA0CCR0 = msg->data[1] ;		// 3000 Duty cycle
+		if (msg->data[2]) TA1CCR0 = msg->data[2] ;		// 3000 Duty cycle
+
+		if (msg->data[0] & PWM_INIT_SET) {
+    		TA0CCTL1 = OUTMOD_7; 		// CCR1 reset/set
+      		TA0CTL = TASSEL_2 + MC_1;	// SMCLK, up mode
+    	} else {
+			 TA0CTL = TASSEL_2 + MC_0; // stop timer
+ 		}
+
+		if (msg->data[1] & PWM_INIT_SET) {
+    		TA1CCTL1 = OUTMOD_7; 		// CCR1 reset/set
+    		TA1CTL = TASSEL_2 + MC_1;	// SMCLK, up mode
+    	} else {
+			 TA1CTL = TASSEL_2 + MC_0; // stop timer
+ 		}
+
+}
+
+
+void pwmSetChannelValues(struct CustomCmdDataPwmMessage * msg) {
+
+	// data 0  TA0CCR1
+	// data 1  TA0CCR2
+	// data 2  TA1CCR1
+	// data 4  TA1CCR2
+
+	if (msg->data[0] != 0xFFFF) TA0CCR1 = msg->data[0];
+	if (msg->data[1] != 0xFFFF) TA0CCR2 = msg->data[1];
+	if (msg->data[2] != 0xFFFF) TA1CCR1 = msg->data[2];
+	if (msg->data[3] != 0xFFFF) TA1CCR2 = msg->data[3];
+
+
+}
+
 void customCmdProcessPwmMessage(struct CustomCmdDataPwmMessage * msg) {
 
-	static int initialized;
+	static int initializedChannels;
 
-	if (!initialized) {
-		CCTL1 = OUTMOD_7; // CCR1 reset/set
-		CCR0 = 3000;
-		TACTL = TASSEL_2 + MC_1; // SMCLK, up mode
-		P1SEL = BIT2;
-		P1SEL2 &= ~BIT2;
+	switch (msg->action) {
+		case PWM_SET_DUTY_CYCLE:
+			//setDutyCycle intializes nonzero duty cycle channels
+			pwmInitializeChannels(msg);
+			break;
+		case PWM_SET_VALUE:
+			pwmSetChannelValues(msg);
+			break;
+	};
+	if (msg->action ==)
 
-		initialized++;
-	}
-
-	CCR1 = msg->action;
+	TA0CCR1 = msg->data[0];
 
 }
 
@@ -294,6 +343,8 @@ void customCmd(struct CustomCmd* cmd) {
 	switch(cmd->CMDID) {
 		case 0x01 : 
 			customCmdProcessPwmMessage((struct CustomCmdDataPwmMessage *) cmd->DATA);
+
+
 	}
 
 }
