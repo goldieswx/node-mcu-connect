@@ -25,7 +25,7 @@ The controller (see /controller , Javascript based) handles this the following w
 ```
   $('my-io').enable();  // sets my-io to logical high.
 ```
-Another goal is to subsctibe to an I/O as input changes
+Another goal is to subscribe to an I/O as input changes
 ```
   $('button-1').on('change',function(e){
 	    console.log('button 1 state is now :', e.value);
@@ -83,7 +83,7 @@ The controller framework support chains which allow the following shortcuts
 The software has the following structure
 
 ```
-controller                  [high level script, brain]            [Javascript]
+controller                  [high level script, master]            [Javascript]
 daemon                      [unix daemon, interface with nodes]   [C]
 node                        [firmware, interface with extensions] [C]
 extension(adce)             [firmware, extension firmware]        [C]
