@@ -149,9 +149,9 @@ This has the following form, master <=> node <=> extension.
 
 ### Performance ###
 
-Throughput of 115kbps is acheived using the msp430g2553 as node (network) chip. The chip doesn't contain nor a FIFO buffer and a DMA buffer, so it cannot do many more. Maybe not the perfect tool for the job (I guess a cortex M0 might have been better suited).
+Throughput of 120kbps is acheived using the msp430g2553 as node (network) chip. The chip doesn't contain nor a FIFO buffer and a DMA buffer, so it cannot do many more. Maybe not the perfect tool for the job (I guess a cortex M0 might have been better suited).
 
-Packet latency of about 1ms can be expected one way at 115kbps.
+Packet latency of about 1ms can be expected (one way) at 120kbps. Theoretically, this makes about 400 packets per second. Altough possible the network is not supposed to grow over 30 nodes (at that time, favor multiple paralleled networks). Average network size is 10-15 nodes so this would mean a very resonable 25ms/35ms latency at full load.
 
 The chip performs flawlessly though and throughput is not the primary goal of the project. Which is "making a control network".
 
