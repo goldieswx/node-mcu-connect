@@ -23,7 +23,7 @@ IOs are implemented on what is called an extension (see the hardware overview fo
 
 The controller (see /controller , Javascript based) handles this the following way :
 ```
-  $('my-io').enable();
+  $('my-io').enable();  // sets my-io to logical high.
 ```
 Another goal is to subsctibe to an I/O as input changes
 ```
@@ -68,10 +68,10 @@ The controller framework support chains which allow the following shortcuts
 		i.refresh();
 	})($('my-ext-0'));
 
-	// disable all IO tagged with out defined on the network
+	// disable all IO tagged with out defined on the network (logical low)
 	$(':out').disable();
 
-	// disable all IO tagged with out under my-ext-0
+	// disable all IO tagged with out under my-ext-0 (logical low)
 	$('my-ext-0:out').disable();
 
 })(net.find.bind(net));
