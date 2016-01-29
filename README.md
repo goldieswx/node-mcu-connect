@@ -261,7 +261,7 @@ Extensions are tied to a single node, with a common SPI bus and a dedicated CTS/
 - second extension header
 - debug/flash program headers for ADCE and Node.
 
-
+![Quinoha node+adce in one tiny PCB](url-to-image)
 
 Hardware prototypes available on request. Contact me.
 
