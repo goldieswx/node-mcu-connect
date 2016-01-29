@@ -79,7 +79,7 @@ The controller framework support chains which allow the following shortcuts
 
 Before firing up the controller make sure the daemon is compiled, running, and that the node is connected and at least an extension is wired to it and that both chip have their firmware uploaded (see further). 
 
-At present time, few documentation on controller functionality is available. 
+At present time, few documentation on controller functionality is available, therefore I suggest diving into the controller source code under controller/. 
 
 
 #### Architecture ####
