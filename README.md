@@ -105,16 +105,19 @@ Next, plug the MSP430g2553 (20pin) node chip and upload it.
 $ mspdebug rf2500 "prog node.o"
 ```
 
+Transfer must be successful to continue. 
+
 ##### Adce #####
 
 Under peripheral/adce/src type 
 ```
 $ make
 ```
-
-plug the second MSP430g2553 chip (28pin) 
+Plug the second MSP430g2553 chip (28pin) then type:
+```
 $ mspdebug rf2500 "prog node.o"
-
+```
+Ensure the upload was successful before going further.
 
 ### Hardware ###
 
