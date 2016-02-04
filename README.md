@@ -22,11 +22,11 @@ A first end goal is to drive an I/O as output to a logical level (up or down).
 IOs are implemented on what is called an extension (see the hardware overview for more details).
 
 To handle this, use the controller framework  :
-```
+```js
   $('my-io').enable();  // sets my-io to logical high.
 ```
 Another goal is to subscribe to an I/O as input changes
-```
+```js
   $('button-1').on('change',function(e){
 	    console.log('button 1 state is now :', e.value);
 	});
@@ -34,7 +34,7 @@ Another goal is to subscribe to an I/O as input changes
 
 Before this can be done, the network has to be setup, the nodes needs to be identified and mapped as well as the extensions.
 
-```
+```js
    var net = new MCU.Network();
 
    // define node with hardware id #0x17, mapped to "my-new-node" key
@@ -53,7 +53,7 @@ Before this can be done, the network has to be setup, the nodes needs to be iden
 ```
 
 The controller framework support chains which allow the following shortcuts
-```
+```js
 (function($) {
 	net.add('my-new-node',0x17);   
 	$('my-new-node').add('my-ext-0",0x00);   
@@ -100,13 +100,13 @@ You need the msp-gcc cross compiler packages, and the msp-gdb debug tools as wel
 ##### Node #####
 
 Under node/src type
-```
+```bash
 $ make
 ```
 This will generate a node firmware, the default has an hardware Id=1. Hardware ids identifies the node on the network and node ids must be unique on a network. Available IDs range from 1 to 31. use the NODEID option to create hardware with different ids. 
 
 Next, plug the MSP430g2553 (20pin) node chip and upload it. 
-```
+```bash
 $ mspdebug rf2500 "prog node.elf"
 ```
 
@@ -115,11 +115,11 @@ Transfer must be successful to continue.
 ##### Extension (adce) #####
 
 Under peripheral/adce/src type 
-```
+```bash
 $ make
 ```
 Plug the second MSP430g2553 chip (28pin) then type:
-```
+```bash
 $ mspdebug rf2500 "prog adce.elf"
 ```
 Ensure the upload was successful before going further.
@@ -134,7 +134,7 @@ The codebase however is well decoupled from hardware and may be ported to any mi
 ### Compiling the daemon ###
 
 Under daemon/src type 
-```
+```bash
 $ make
 ```
 
