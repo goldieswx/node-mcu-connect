@@ -41,7 +41,7 @@ Before this can be done, the network has to be setup, the nodes needs to be iden
    net.add('my-new-node',0x17);                            
 
    // define extension connected to extension #0.
-   net.find("my-new-node").add('my-ext-0",0x00);   
+   net.find("my-new-node").add('my-ext-0',0x00);   
 
    // define IOs on this extension.
    net.find("my-ext-0").add('button-1','digital in 1.3');
@@ -56,7 +56,7 @@ The controller framework support chains which allow the following shortcuts
 ```js
 (function($) {
 	net.add('my-new-node',0x17);   
-	$('my-new-node').add('my-ext-0",0x00);   
+	$('my-new-node').add('my-ext-0',0x00);   
 
 	// Map IOs
 	(function(i) {
