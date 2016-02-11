@@ -37,7 +37,11 @@
 #define HIGH	1
 #define LOW 	0
 
+#define PWM_SET_DUTY_CYCLE 0X10
+#define PWM_SET_VALUE 		0X20
 
+#define PWM_INIT_SET 0X0001
+#define PWM_INIT_UNSET 0X0002
 
 /* data struct */
 

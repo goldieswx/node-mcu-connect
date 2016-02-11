@@ -289,14 +289,15 @@ void pwmInitializeChannels(struct CustomCmdDataPwmMessage * msg) {
 		if (msg->data[0] & PWM_INIT_SET) {
     		TA0CCTL1 = OUTMOD_7; 		// CCR1 reset/set
       		TA0CTL = TASSEL_2 + MC_1;	// SMCLK, up mode
-    	} else {
+    	}
+    	if (msg->data[0] & PWM_INIT_UNSET)
 			 TA0CTL = TASSEL_2 + MC_0; // stop timer
  		}
-
 		if (msg->data[1] & PWM_INIT_SET) {
     		TA1CCTL1 = OUTMOD_7; 		// CCR1 reset/set
     		TA1CTL = TASSEL_2 + MC_1;	// SMCLK, up mode
-    	} else {
+    	}
+    	if (msg->data[1] & PWM_INIT_UNSET) {
 			 TA1CTL = TASSEL_2 + MC_0; // stop timer
  		}
 
@@ -320,8 +321,6 @@ void pwmSetChannelValues(struct CustomCmdDataPwmMessage * msg) {
 
 void customCmdProcessPwmMessage(struct CustomCmdDataPwmMessage * msg) {
 
-	static int initializedChannels;
-
 	switch (msg->action) {
 		case PWM_SET_DUTY_CYCLE:
 			//setDutyCycle intializes nonzero duty cycle channels
@@ -331,9 +330,6 @@ void customCmdProcessPwmMessage(struct CustomCmdDataPwmMessage * msg) {
 			pwmSetChannelValues(msg);
 			break;
 	};
-	if (msg->action ==)
-
-	TA0CCR1 = msg->data[0];
 
 }
 

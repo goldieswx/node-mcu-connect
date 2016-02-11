@@ -161,7 +161,7 @@ MCUIo.getPortMask = function(stringMask) {
 	var portNumber = keys[2].split("."); // e.g "2.3"
 	var mapping = { port: parseInt(portNumber[0]), mask: (1 << parseInt(portNumber[1])) };
 
-	var ret = { trigger: 0, portMask: 0x00, port: mapping.port, ignorePortMask: 0, direction: keys[1]};
+	var ret = { trigger: 0, portMask: 0x00, port: mapping.port, ignorePortMask: 0, direction: keys[1], type: keys[0] };
 
 	if (keys[0] == "analog") {
 		// analog config is reverted 0..4 => 4..0 from writing config (0x55 messages) to triggers/events(0x66)
