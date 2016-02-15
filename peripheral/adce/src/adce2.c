@@ -29,6 +29,7 @@
 
 int main() {
 
+
 	struct Sample 		   old;				// old sample to compare with (unsampled at boot)
 	struct IoConfig        ioConfig;		// configuration of in/out ports
 
@@ -42,8 +43,6 @@ int main() {
 
 	int i;	for (i=0;i<10
 		;i++) __delay_cycles(10000);
-
-	
 
 	while(1) { 
 		
@@ -286,18 +285,23 @@ void pwmInitializeChannels(struct CustomCmdDataPwmMessage * msg) {
 		if (msg->data[1]) TA0CCR0 = msg->data[1] ;		// 3000 Duty cycle
 		if (msg->data[2]) TA1CCR0 = msg->data[2] ;		// 3000 Duty cycle
 
-		if (msg->data[0] & PWM_INIT_SET) {
+		if (msg->data[0] & PWM_INIT_SET_CHAN1) {
     		TA0CCTL1 = OUTMOD_7; 		// CCR1 reset/set
+      		TA0CCTL2 = OUTMOD_7; 		// CCR1 reset/set
+
       		TA0CTL = TASSEL_2 + MC_1;	// SMCLK, up mode
     	}
-    	if (msg->data[0] & PWM_INIT_UNSET)
+    	if (msg->data[0] & PWM_INIT_UNSET_CHAN1) {
 			 TA0CTL = TASSEL_2 + MC_0; // stop timer
  		}
-		if (msg->data[1] & PWM_INIT_SET) {
+
+		if (msg->data[0] & PWM_INIT_SET_CHAN2) {
     		TA1CCTL1 = OUTMOD_7; 		// CCR1 reset/set
+    		TA1CCTL2 = OUTMOD_7; 		// CCR1 reset/set
+
     		TA1CTL = TASSEL_2 + MC_1;	// SMCLK, up mode
     	}
-    	if (msg->data[1] & PWM_INIT_UNSET) {
+    	if (msg->data[0] & PWM_INIT_UNSET_CHAN2) {
 			 TA1CTL = TASSEL_2 + MC_0; // stop timer
  		}
 
@@ -347,6 +351,7 @@ void customCmd(struct CustomCmd* cmd) {
 
 
 void processExchange(struct Exchange * exchange,struct IoConfig * ioConfig) {
+
 
 	char * pExchangeBuf = (char*)exchange->inBuffer.inData;
 	switch (*pExchangeBuf) {

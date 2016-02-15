@@ -31,6 +31,8 @@ struct IoConfig {
         unsigned char P3DIR;
         unsigned char P3REN;
         unsigned char P3OUT;
+        unsigned char P2ADC;
+        unsigned char P3ADC;
 };
 
 struct flashConfig {

@@ -86,7 +86,8 @@ inline void msp430StartTimer(int delay) {
 	//TA0CCTL1 = CCIE ;                      // Timer A interrupt enable
 
 	IFG1&=~WDTIFG;
-	WDTCTL = WDTPW+WDTCNTCL+WDTTMSEL+WDTIS1;
+	WDTCTL = WDTPW + WDTCNTCL + WDTTMSEL + WDTIS1 + WDTNMI;
+ 	IE1 &= ~NMIIE;
 	IE1 |= WDTIE;
 
 }
