@@ -142,7 +142,7 @@ interrupt(USCIAB0RX_VECTOR) USCI0RX_ISR(void) {
  */
 interrupt(WDT_VECTOR) WDT_ISR(void) {
 
-	WDTCTL = WDTPW+WDTHOLD;
+	WDTCTL = WDTPW+WDTHOLD+WDTNMI;
    	__bic_SR_register_on_exit(ADCE_LPM_BITS + GIE); 
 	IFG1&=~WDTIFG;
 
