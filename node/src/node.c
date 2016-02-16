@@ -431,6 +431,13 @@ int adceSignalCmd(struct PacketContainer * p) {
 			cmdId -= 0x44;
 			*((char*)p->inBuffer) = 0x44;
 			break;
+
+		case 0x77:
+                case 0x78:
+                case 0x79:
+                        cmdId -= 0x77;
+                        *((char*)p->inBuffer) = 0x77;
+                        break;
 		default:
 			cmdId = 0;
 	};

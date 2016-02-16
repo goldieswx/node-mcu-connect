@@ -20,7 +20,7 @@
 #include "msp430g2553.h"
 #include <legacymsp430.h>
 
-
+#include "network.h"
 #include "msp-utils.h"
 #include "adce2.h"
 #include "adce2-init.h"
@@ -44,41 +44,40 @@ int main() {
 	int i;	for (i=0;i<10
 		;i++) __delay_cycles(10000);
 
+        struct Return 		ret;
+	initializeReturn	(&ret);
+
 	while(1) { 
 		
 		timer(30);										// wait
+		
 		LOW_POWER_MODE();								// go LPM and enable interrupts and wait.
 		struct Sample new;						
 		initializeSample(&new);							// initialize new sample structure
 
-		sample(&new);									// start sampling ADC
-		LOW_POWER_MODE();								// go LPM and enable interrupts and wait.
+                if (!ret.transferReturn){ 					// check if a processExchange return is pending (impossible on first iteration)
+			sample(&new);									// start sampling ADC
+			LOW_POWER_MODE();								// go LPM and enable interrupts and wait.
+                }
 
-		fillSampleTrigger(&new,&old,&ioConfig);
+		fillSampleTrigger(&new,&old,&ioConfig,&ret);   // if there is a return value, we skip the trigger check and trigger on return value only;
 	
 		if (new.trigger || (NODE_INTERRUPT)) { 				// INTERRUPT read: 'node is interrupting'
 			struct Exchange exchange;
 		
-			//while(1);
-
-			fillExchange 	(&new,&exchange,&ioConfig);		// prepare output buffers with sample.
+			fillExchange 	(&new,&exchange,&ioConfig,&ret);		// prepare output buffers with sample/return value.
 			signalNode 		(HIGH);						// signal readyness to node 
 
 			while (!NODE_INTERRUPT) __delay_cycles(100);
-	
-			//P3OUT |= BIT4 | BIT3;
 
 
 			listen 			(&exchange);				// start USCI and enable USCI interrupt.
 			LOW_POWER_MODE	();							// go LPM and enable interrupts and wait.
 			
-			//while (1);
 			signalNode		(LOW);						// signal busyness to node
 			close			();							// stop USCI.
 			
-			//
-			processExchange	(&exchange,&ioConfig);				// process received buffer.
-			//while(1);
+			processExchange	(&exchange,&ioConfig,&ret);				// process received buffer.
 		}
 	}
 }
@@ -207,10 +206,14 @@ void timer(int delay) {
  * prepares exchange buffer and fills it with last sample
  */
 
-void fillExchange(struct Sample * sample,struct Exchange * exchange,struct IoConfig * ioConfig) {
+void fillExchange(struct Sample * sample,struct Exchange * exchange,struct IoConfig * ioConfig, struct Return * ret) {
 
 	memset(&exchange->inBuffer,0,sizeof(exchange->inBuffer));
-	memcpy(&exchange->outBuffer.s,sample,sizeof(struct Sample));
+        if (!ret->transferReturn) {
+		memcpy(&exchange->outBuffer.s,sample,sizeof(struct Sample));
+	} else {
+                memcpy(&exchange->outBuffer.s,&ret->returnedData.s,sizeof(struct Sample));
+	}
 
 	//memcpy(&exchange->outBuffer.s,ioConfig,10);
 
@@ -221,9 +224,9 @@ void fillExchange(struct Sample * sample,struct Exchange * exchange,struct IoCon
 	exchange->pIn  			= (char*) &exchange->inBuffer;
 	exchange->pOut 			= (char*) &exchange->outBuffer;
 
-	exchange->__padding_in[0]	= 0;
+	exchange->__padding_in[0] = 0;
 	exchange->__padding_out[0] = 0;
-	exchange->pointer 			= 0;
+	exchange->pointer = 0;
 
 	incrementExchange(0,exchange); // sets exchange reference in intr
 
@@ -233,10 +236,18 @@ void fillExchange(struct Sample * sample,struct Exchange * exchange,struct IoCon
  * function fillSampleTrigger
  * compares new and old sample and find out what was triggered.
  */
-void fillSampleTrigger(struct Sample * new,struct Sample * old,struct IoConfig * ioConfig) {
+void fillSampleTrigger(struct Sample * new,struct Sample * old,struct IoConfig * ioConfig, struct Return * ret) {
 
 	register int i, adcValue;
-    int usedADCIo[MAX_ADC_CHANNELS];
+    	int usedADCIo[MAX_ADC_CHANNELS];
+
+        if(ret->transferReturn) {
+           new->trigger = 1 >> 9;
+           ret->returnedData.s.trigger = new->trigger; 
+           return;
+	}
+
+        // CASE WHERE NO TRANSFERRETURN FOLLOWS
 
 	new->trigger = 0;
 
@@ -270,9 +281,7 @@ void fillSampleTrigger(struct Sample * new,struct Sample * old,struct IoConfig *
 
 
 
-#define __special_area__ __attribute__((section(".flashstart")))
-
-void __special_area__ pwmInitializeChannels(struct CustomCmdDataPwmMessage * msg) {
+void __flashable__ pwmInitializeChannels(struct CustomCmdDataPwmMessage * msg) {
 
 	/*
 		data[0] bit0 => set/reset TA0
@@ -311,7 +320,7 @@ void __special_area__ pwmInitializeChannels(struct CustomCmdDataPwmMessage * msg
 }
 
 
-void  __special_area__  pwmSetChannelValues(struct CustomCmdDataPwmMessage * msg) {
+void  __flashable__  pwmSetChannelValues(struct CustomCmdDataPwmMessage * msg) {
 
 	// data 0  TA0CCR1
 	// data 1  TA0CCR2
@@ -326,7 +335,7 @@ void  __special_area__  pwmSetChannelValues(struct CustomCmdDataPwmMessage * msg
 
 }
 
-void customCmdProcessPwmMessage(struct CustomCmdDataPwmMessage * msg) {
+void __flashable__ customCmdProcessPwmMessage(struct CustomCmdDataPwmMessage * msg,struct Return * ret) {
 
 	switch (msg->action) {
 		case PWM_SET_DUTY_CYCLE:
@@ -341,11 +350,11 @@ void customCmdProcessPwmMessage(struct CustomCmdDataPwmMessage * msg) {
 }
 
 
-void customCmd(struct CustomCmd* cmd) {
+void __flashable__ customCmd(struct CustomCmd* cmd,struct Return * ret) {
 
 	switch(cmd->CMDID) {
 		case 0x01 : 
-			customCmdProcessPwmMessage((struct CustomCmdDataPwmMessage *) cmd->DATA);
+			customCmdProcessPwmMessage((struct CustomCmdDataPwmMessage *) cmd->DATA,ret);
 
 
 	}
@@ -353,20 +362,71 @@ void customCmd(struct CustomCmd* cmd) {
 }
 
 
-void processExchange(struct Exchange * exchange,struct IoConfig * ioConfig) {
+void flashCustomCmds(struct flashCustomCmd * flashCustomCmd,struct Return *ret) {
+
+       static int segmentsErased;
+       static int lastWritePosition;
+       static int16_t * nextWrite; 
+   
+       int currentWritePosition = flashCustomCmd->flashPosition;
+       int i; 
+ 
+       if (currentWritePosition  == 0) {
+           char * start = (char *) FLASHABLE_START;
+
+           // erase all custom flash (4.5k) of segments
+	   for (i=0;i<9;i++) {	
+               flash_erase((int*)start);
+               start += 0x200; // SEGMENT_SIZE; 
+	   }
+           segmentsErased = 1;
+           lastWritePosition = -1; 
+           nextWrite = (int16_t *) FLASHABLE_START;
+       }
+
+       ret->code = 0;  
+       ret->transferReturn = 1;
+ 
+       if (!segmentsErased) { ret->code = FLASH_CUSTOM_RET_ERASE_FIRST; }
+       if ((lastWritePosition+1) != currentWritePosition) { ret->code = FLASH_CUSTOM_RET_NOT_IN_SEQUENCE; }
+       if (currentWritePosition > 255) { ret->code = FLASH_CUSTOM_RET_TOO_LARGE; }
+
+       lastWritePosition ++;
+
+       if (ret->code) { return; }
+       flash_write(nextWrite,flashCustomCmd->data,9);
+       nextWrite += 256; 
+
+       uint8_t * crcPtr = (uint8_t *) flashCustomCmd->data;
+       uint16_t  crc = 0;  
+       
+       for (i=0;i<18;i++) {
+           crc = crc16(crc,*crcPtr++);      
+       }
+ 
+       ret->returnedData.i[0] = crc;
+}
 
 
+
+void processExchange(struct Exchange * exchange,struct IoConfig * ioConfig,struct Return * ret) {
+
+        ret->transferReturn = 0;
+ 
 	char * pExchangeBuf = (char*)exchange->inBuffer.inData;
 	switch (*pExchangeBuf) {
 		case  0x44 : 
-			customCmd((struct CustomCmd*)++pExchangeBuf);
-            return;
+			customCmd((struct CustomCmd*)++pExchangeBuf,ret);
+                        return;
 		case  0x55 :
-		    flashConfig((struct IoConfig*)++pExchangeBuf);
+		    	flashConfig((struct IoConfig*)++pExchangeBuf);
 		  	return;
 		case  0x66 :
 			msp430BitMaskPorts(++pExchangeBuf,ioConfig);
 			return;
+                case  0x77 :
+			flashCustomCmds((struct flashCustomCmd*)++pExchangeBuf,ret);
+			return;	
 	}
 
 }
@@ -382,7 +442,9 @@ inline void getADCIoUsed (int ioADC, int * adcIoUsed) {
 	}
 }
 
-
+void initializeReturn (struct Return * ret) {
+	memset(ret,0,sizeof(struct Return));
+}
 
 void initializeSample(struct Sample * sample) {
 

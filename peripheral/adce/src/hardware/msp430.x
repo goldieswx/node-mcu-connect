@@ -2,6 +2,6 @@
 SECTIONS
 {
 
-.flashstart 0xE100 : { *(.flashstart) }
+.flashstart 0xE200 : { *(.flashstart) }
 
 }
