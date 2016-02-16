@@ -269,7 +269,10 @@ void fillSampleTrigger(struct Sample * new,struct Sample * old,struct IoConfig *
 }
 
 
-void pwmInitializeChannels(struct CustomCmdDataPwmMessage * msg) {
+
+#define __special_area__ __attribute__((section(".flashstart")))
+
+void __special_area__ pwmInitializeChannels(struct CustomCmdDataPwmMessage * msg) {
 
 	/*
 		data[0] bit0 => set/reset TA0
@@ -308,7 +311,7 @@ void pwmInitializeChannels(struct CustomCmdDataPwmMessage * msg) {
 }
 
 
-void pwmSetChannelValues(struct CustomCmdDataPwmMessage * msg) {
+void  __special_area__  pwmSetChannelValues(struct CustomCmdDataPwmMessage * msg) {
 
 	// data 0  TA0CCR1
 	// data 1  TA0CCR2
