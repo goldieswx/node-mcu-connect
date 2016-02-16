@@ -391,9 +391,10 @@ void flashCustomCmds(struct flashCustomCmd * flashCustomCmd,struct Return *ret) 
        if ((lastWritePosition+1) != currentWritePosition) { ret->code = FLASH_CUSTOM_RET_NOT_IN_SEQUENCE; }
        if (currentWritePosition > 255) { ret->code = FLASH_CUSTOM_RET_TOO_LARGE; }
 
-       lastWritePosition ++;
-
        if (ret->code) { return; }
+       
+       lastWritePosition ++;
+       
        flash_write(nextWrite,flashCustomCmd->data,9);
        nextWrite += 256; 
 
