@@ -106,6 +106,9 @@ MCUInterface.prototype.refresh = function() {
 
 	var pwmData = { channels : [ { setFlag:0,dutyCycle:1000}, { setFlag:0,dutyCycle:1000}]};
 
+     config.pwm = pwmData;
+     this.config = config;
+
     _.each(hardwareKeyList,function(item){
     		if (item.direction == "out") { // Digital out
     			config.portDIR[item.port-1] |= item.portMask;   // enable output flag
@@ -139,7 +142,7 @@ MCUInterface.prototype.pwm = function(value,dutyCycle) {
 	}
 
 };
-MCUInterface.getPWMDutyCycleMessage = function(nodeId,interfaceId,pwmInfo) {
+MCUInterface.getPWMDutyCycleMessage = function(nodeId,interfaceId,config) {
 
 	// 0x44+interfaceId
     // 0X01 pwm
@@ -167,7 +170,7 @@ MCUInterface.getPWMDutyCycleMessage = function(nodeId,interfaceId,pwmInfo) {
 	enableFlag |= (pwmInfo.channels[1].enable) ? 0x0001:0;
 	enableFlag |= (pwmInfo.channels[1].disable) ? 0x0001:0;	
 	
-	msg.writeUInt16LE(enableFlah,4);
+	msg.writeUInt16LE(enableFlag,4);
 	msg.writeUInt16LE(pwmInfo.channels[1].dutyCycle || 0,6);
 	msg.writeUInt16LE(pwmInfo.channels[2].dutyCycle || 0,8);
 	msg.writeUInt32LE(nodeId,20);

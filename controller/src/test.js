@@ -30,8 +30,9 @@ var net = new MCU.Network();
 		i.add('button-1','digital in 1.3').tag("in");
 		i.add('led-1','digital out 2.3').tag("out");
 		i.add('led-2','digital out 3.4').tag("out");
-		i.add('led-3','digital out 3.3').tag("out");
+		i.add('led-3','pwm out 3.3').tag("out");
 		i.add('slider-1','analog in 1.3').tag("in");
+
 		i.refresh();
 	})($('itf0'));
 
@@ -46,7 +47,7 @@ var net = new MCU.Network();
     	var x = 0;
 	var ledArray = [$('led-1'),$('led-2'),$('led-3')];
 
-//	setInterval(function(){ $(':out').disable(); (ledArray[x++]).enable; x%=3; },85);
+//	setInterval(function(){ $(':out').enable(0); (ledArray[x++]).enable(1); x%=3; },85);
 
 	return;
    	
