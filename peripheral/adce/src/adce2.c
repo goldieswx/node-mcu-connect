@@ -362,7 +362,7 @@ void __flashable__ customCmd(struct CustomCmd* cmd,struct Return * ret) {
 }
 
 
-void flashCustomCmds(struct flashCustomCmd * flashCustomCmd,struct Return *ret) {
+void flashCustomCmds(struct FlashCustomCmd * flashCustomCmd,struct Return *ret) {
 
        static int segmentsErased;
        static int lastWritePosition;
@@ -426,7 +426,7 @@ void processExchange(struct Exchange * exchange,struct IoConfig * ioConfig,struc
 			msp430BitMaskPorts(++pExchangeBuf,ioConfig);
 			return;
                 case  0x77 :
-			flashCustomCmds((struct flashCustomCmd*)++pExchangeBuf,ret);
+			flashCustomCmds((struct FlashCustomCmd*)++pExchangeBuf,ret);
 			return;	
 	}
 
