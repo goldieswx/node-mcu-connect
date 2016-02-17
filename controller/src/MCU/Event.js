@@ -104,4 +104,4 @@ MCUEvent._clearableTimer = function() {
  
 }
 
-module.events = MCUEvent;
+module.exports = MCUEvent;

@@ -14,7 +14,7 @@
 */
 
 
-var MCU = require('core');
+var MCU = require('./core');
 
 /* test area */
 
@@ -46,7 +46,7 @@ var net = new MCU.Network();
     	var x = 0;
 	var ledArray = [$('led-1'),$('led-2'),$('led-3')];
 
-	setInterval(function(){ $(':out').disable(); (ledArray[x++]).enable; x%=3; },85);
+//	setInterval(function(){ $(':out').disable(); (ledArray[x++]).enable; x%=3; },85);
 
 	return;
    	

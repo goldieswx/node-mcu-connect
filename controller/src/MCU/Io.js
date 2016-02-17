@@ -17,6 +17,7 @@ var _     = require('lodash-node');
 var util  = require('util');
 
 var MCUObject = require('./Object');
+var MCUEvent = require('./Event');
 
 var MCUIo = function() {
 
