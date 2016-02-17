@@ -78,17 +78,7 @@ MCUInterface.getThrottleMessageQueue = function(self) {
 };
 
 
-MCUInterface.getPWMMessage = function(nodeId,interfaceId,dutyCycle) {
 
-	var msg = new Buffer("                        ");
-	msg.fill(0);
-	msg.writeUInt8(0x44+interfaceId,0);
-	msg.writeUInt8(0x01,1);
-	msg.writeUInt16LE(dutyCycle,2); 
-	msg.writeUInt32LE(nodeId,20);
-
-	return msg;
-}
 
 MCUInterface.prototype.add = function(key,hardwareKeys) {
 
@@ -157,23 +147,35 @@ MCUInterface.getPWMDutyCycleMessage = function(nodeId,interfaceId,pwmInfo) {
 	// 0x0000 dty cycle 1
 	// 0x0000 pwm init set to set,
 	// 0x0000 dty cycle 2
+/*
+#define PWM_INIT_SET_CHAN1 0X0001
+#define PWM_INIT_UNSET_CHAN1 0X0002
+#define PWM_INIT_SET_CHAN2 0X0004
+#define PWM_INIT_UNSET_CHAN2 0X0008 */ 
 
 	var msg = new Buffer("                        ");
 
 	msg.fill(0);
 	msg.writeUInt8(0x44+interfaceId,0);
 	msg.writeUInt8(0x01,1);
-	msg.writeUInt16LE(0x0010,2);
-	msg.writeUInt16LE(pwmInfo.channels[0].setFlag,4);
-	msg.writeUInt16LE(pwmInfo.channels[0].dutyCycle,6);
-	msg.writeUInt16LE(pwmInfo.channels[1].setFlag,8);
-	msg.writeUInt16LE(pwmInfo.channels[1].dutyCycle,10);
+	msg.writeUInt16LE(0x0010,2); // 	PWM_SET_DUTY_CYCLE
+	
+	var enableFlag = 0 ;
+	enableFlag |= (pwmInfo.channels[0].enable) ? 0x0001:0;
+	enableFlag |= (pwmInfo.channels[0].disable) ? 0x0002:0;
+	enableFlag |= (pwmInfo.channels[1].enable) ? 0x0001:0;
+	enableFlag |= (pwmInfo.channels[1].disable) ? 0x0001:0;	
+	
+	msg.writeUInt16LE(enableFlah,4);
+	msg.writeUInt16LE(pwmInfo.channels[1].dutyCycle || 0,6);
+	msg.writeUInt16LE(pwmInfo.channels[2].dutyCycle || 0,8);
 	msg.writeUInt32LE(nodeId,20);
 
 	return msg;
 }
 
-MCUInterface.getPWMDutyCycleMessage = function(nodeId,interfaceId,pwmData) {
+
+MCUInterface.getPWMMessage = function(nodeId,interfaceId,dutyCycle) {
 
 	// 0x44+interfaceId
 	// 0X01 pwm
@@ -187,8 +189,8 @@ MCUInterface.getPWMDutyCycleMessage = function(nodeId,interfaceId,pwmData) {
 
 	msg.fill(0);
 	msg.writeUInt8(0x44+interfaceId,0);
-	msg.writeUInt8(0x01,1);
-	msg.writeUInt16LE(0x0020,2);
+	msg.writeUInt8(0x01,1); // custom cmd set pwm
+	msg.writeUInt16LE(0x0020,2); // PWM_SET_VALUE
 	msg.writeUInt16LE(pwmInfo.channel1||0xFFFF,4);
 	msg.writeUInt16LE(pwmInfo.channel2||0xFFFF,6);
 	msg.writeUInt16LE(pwmInfo.channel3||0xFFFF,8);
