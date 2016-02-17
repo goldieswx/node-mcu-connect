@@ -68,8 +68,8 @@ struct CustomCmdDataPwmMessage { // max 18 bytes;
 
 };
 
-struct flashCustomCmd {
-        int flashPosition;
+struct FlashCustomCmd {
+        char flashPosition;
         int data[9];
 };
 
