@@ -16,7 +16,7 @@
 
 module.exports = {
 
-    Network: require('./MCU/Newtwork')
+    Network: require('./MCU/Network')
 
 };
 

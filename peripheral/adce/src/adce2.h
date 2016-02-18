@@ -17,6 +17,8 @@
     
 */
 
+#define __flashable__ __attribute__((section(".flashstart")))
+
 
 #define availP1 (BIT0|BIT1|BIT2|BIT3|BIT4)	// max available usage of P1
 #define availP2 (BIT1|BIT3|BIT4|BIT5|BIT6|BIT7)  // max available usage of P2
@@ -37,6 +39,18 @@
 #define HIGH	1
 #define LOW 	0
 
+#define PWM_SET_DUTY_CYCLE 0X10
+#define PWM_SET_VALUE 		0X20
+
+#define PWM_INIT_SET_CHAN1 0X0001
+#define PWM_INIT_UNSET_CHAN1 0X0002
+#define PWM_INIT_SET_CHAN2 0X0004
+#define PWM_INIT_UNSET_CHAN2 0X0008
+
+
+#define FLASH_CUSTOM_RET_ERASE_FIRST 0x10
+#define FLASH_CUSTOM_RET_NOT_IN_SEQUENCE 0x20
+#define FLASH_CUSTOM_RET_TOO_LARGE 0x30
 
 
 /* data struct */
@@ -54,15 +68,30 @@ struct CustomCmdDataPwmMessage { // max 18 bytes;
 
 };
 
-
+struct FlashCustomCmd {
+        char flashPosition;
+        int data[9];
+};
 
 
 struct Sample {
-	int 	adc[MAX_ADC_CHANNELS];
-	int 	ports[3];
-	int 	trigger;
-	int     sampled;	// true if sampled.
+        int     adc[MAX_ADC_CHANNELS];
+        int     ports[3];
+        int     trigger;
+        int     sampled;        // true if sampled.
 };
+
+struct Return {
+       int transferReturn;
+       int code;
+       union
+        {
+            uint16_t i[10];
+            struct Sample s;
+        } returnedData;
+ 
+};
+
 
 struct Exchange {
 	int transferred;
@@ -89,16 +118,17 @@ struct Exchange {
 
 void 	sample 				(struct Sample * sample);
 void 	timer 				(int delay);
-void 	fillSampleTrigger 	(struct Sample * new,struct Sample * old,struct IoConfig * ioConfig);
+void 	fillSampleTrigger 	(struct Sample * new,struct Sample * old,struct IoConfig * ioConfig,struct Return * ret);
 
+void    initializeReturn 	(struct Return * ret); 
 void 	initializeSample 	(struct Sample * sample);
 void 	initialize 			(struct IoConfig * ioConfig);
 void 	signalNode 			(int level);
-void 	fillExchange 		(struct Sample * sample,struct Exchange * exchange,struct IoConfig * ioConfig);
+void 	fillExchange 		(struct Sample * sample,struct Exchange * exchange,struct IoConfig * ioConfig,struct Return * ret);
 
 inline int incrementExchange(register int rx,struct Exchange * pExchange);
 inline void getADCIoUsed 	(int ioADC, int * adcIoUsed);
 
 void 	listen 				(struct Exchange * exchange);
 void 	close 				();
-void 	processExchange 	(struct Exchange * exchange,struct IoConfig * ioConfig);
+void 	processExchange 	(struct Exchange * exchange,struct IoConfig * ioConfig,struct Return * ret);

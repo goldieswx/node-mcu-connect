@@ -18,6 +18,7 @@ var util  = require('util');
 var dgram = require('dgram');
 
 var MCUObject = require('./Object');
+var MCUNode = require('./Node');
 
 var MCUNetwork = function() {
 

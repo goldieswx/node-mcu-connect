@@ -70,6 +70,7 @@ void flashConfig(struct IoConfig * p) {
 
   // Do not write flash with the same existing buffer.
   if (!memcmp(&buffer,(int*)IOCFG_HW_ADDR,sizeof(struct flashConfig))) {
+
     return;
   }
 

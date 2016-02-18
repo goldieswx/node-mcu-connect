@@ -18,7 +18,12 @@
            
 */
 
+// reserve 256 bytes at 0XE000 for flash storage
 #define IOCFG_HW_ADDR       0xE000
+/// start of .flashstart section is at 0xE200 (where flashable routines start), see /peripheral/adce/src/hardware/msp430.x
+/// 0xE200 to 0xFFC0 range is available on msp430g2553
+#define FLASHABLE_START     0xE200  
+/// change also msp430.x if needed
 
 struct IoConfig {
         unsigned char P1DIR;
@@ -31,6 +36,8 @@ struct IoConfig {
         unsigned char P3DIR;
         unsigned char P3REN;
         unsigned char P3OUT;
+        unsigned char P2ADC;
+        unsigned char P3ADC;
 };
 
 struct flashConfig {
