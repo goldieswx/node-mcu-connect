@@ -1,3 +1,5 @@
+
+
 /*
     node-mcu-connect . node.js UDP Interface for embedded devices.
     Copyright (C) 2013-5 David Jakubowski
@@ -41,12 +43,16 @@ MCUInterface.getThrottleMessageQueue = function(self) {
 
 	return _.throttle(function(){
 		var state;
+
 		var aggreatedMessage = new Buffer("012345678901234567891234"); // see adce.c@processMsg for details 
-		aggreatedMessage.fill(0);
-		aggreatedMessage.writeUInt32LE(0x66+self.id,0);
-		aggreatedMessage.writeUInt32LE(self.node.id,20);
+			aggreatedMessage.fill(0);
+			aggreatedMessage.writeUInt32LE(0x66+self.id,0);
+			aggreatedMessage.writeUInt32LE(self.node.id,20);
+
+		var pwmValues = {  values: [0xFFFF,0xFFFF,0xFFFF,0xFFFF], received:0};
 
 		_.remove(self._outMessageQueue,function(item){
+			// aggregate digital outs.
 			if (item[0] == (0x66+self.id)) {
 				state = state || [0x00,0x00,0x00,0xFF,0xFF,0xFF]; // everything unchanged.
 				var j;
@@ -56,23 +62,40 @@ MCUInterface.getThrottleMessageQueue = function(self) {
 					state[j+3] |= (item[j+4]);
 					state[j+3] &= (item[j+1] | item[j+4]);
 				}
-
 			} else {
-				self._network._sendMessage(item); 
+				// aggregate pwm values because we can pack them by 4
+				if (item[0] == (0x44+self.id) && (item[1]==0x01) && (item[2]==0x20) && (item[3] == 0x00) ){
+					pwmValues.received++;
+
+					var i,j=4;
+					for(i=0;i<4;i++) {
+						var tmpValue = item.readUInt16LE(j);
+						pwmValues.values[i] = (tmpValue == 0xFFFF)?pwmValues.values[i]:tmpValue;
+						j += 2;
+					}
+					//pwm set value;
+				} else {
+					self._network._sendMessage(item);
+				}
+
 			}         
 			return true;
 		});
 
 		if(state) { 
 
-		aggreatedMessage[1] = 0xff & state[0];
-		aggreatedMessage[2] = 0xff & state[1];
-		aggreatedMessage[3] = 0xff & state[2];
-		aggreatedMessage[4] = 0xff & state[3];
-		aggreatedMessage[5] = 0xff & state[4];
-		aggreatedMessage[6] = 0xff & state[5];
+			aggreatedMessage[1] = 0xff & state[0];
+			aggreatedMessage[2] = 0xff & state[1];
+			aggreatedMessage[3] = 0xff & state[2];
+			aggreatedMessage[4] = 0xff & state[3];
+			aggreatedMessage[5] = 0xff & state[4];
+			aggreatedMessage[6] = 0xff & state[5];
+			self._network._sendMessage(aggreatedMessage);
+		}
 
-		self._network._sendMessage(aggreatedMessage); }
+		if (pwmValues.received) {
+			self._network._sendMessage(MCUInterface.getPWMMessage(this.node.id,this.id,pwmValues.values));
+		}
 
 	},30,{leading:false,trailing:true}); 
 
@@ -102,22 +125,25 @@ MCUInterface.prototype.refresh = function() {
 
 	// loop through all children and see what io they use and how
 	var hardwareKeyList = _.pluck(this.children,'hardwareKeys');
-    var config = { portDIR: [0,0,0], portADC: 0, portREN: [0x00,0x00,0x00], portOUT: [0,0,0], portPWM: [0,0] /* only on 2.x, 3.x */};
+    var config = { portDIR: [0,0,0], portADC: 0, portREN: [0x00,0x00,0x00], portOUT: [0,0,0], portPWM: [0,0] /* only on 2.x, 3.x */
+					,pwm: { channels : [ { setFlag:0,dutyCycle:1000}, { setFlag:0,dutyCycle:1000}], enabled: false}
+					};
 
-	var pwmData = { channels : [ { setFlag:0,dutyCycle:1000}, { setFlag:0,dutyCycle:1000}]};
+	this.config = this.config || config;
+	this.config.pwm.enabled = false;
 
-     config.pwm = pwmData;
-     this.config = config;
-
-    _.each(hardwareKeyList,function(item){
+	_.each(hardwareKeyList,function(item){
     		if (item.direction == "out") { // Digital out
     			config.portDIR[item.port-1] |= item.portMask;   // enable output flag
     			config.portREN[item.port-1] &= (0xFF & ~item.portMask); // disable pullup/dn flag
     			config.portOUT[item.port-1] &= (0xFF & ~item.portMask); // disable out flag
 				if (item.type == "pwm") {
 					config.portPWM[item.port-2] |= item.portMask; /* enable */
-
+					config.pwm.channels[0].enabled = (_.indexOf(['3.5','3.6'],item.portName) > -1 );
+					config.pwm.channels[1].enabled = (_.indexOf(['2.1','3.3'],item.portName) > -1 );
+					config.pwm.enabled = true;
 				}
+
     		} else {
     			if (item.trigger < (31)) { // ADC
     				config.portADC |= item.configMask;
@@ -133,16 +159,30 @@ MCUInterface.prototype.refresh = function() {
     });
 
 	this._network._sendMessage(MCUInterface.getRefreshMessage(config,this.node.id,this.id));
-
-};
-
-MCUInterface.prototype.pwm = function(value,dutyCycle) {
-	if (!_.isUndefined(dutyCycle)) {
-		this._network._sendMessage(MCUInterface.getPWMDutyCycleMessage(this.node.id, this.id, dutyCycle));
+	if (config.pwm.enabled) {
+		this._network._sendMessage(MCUInterface.getPWMDutyCycleMessage(config,this.node.id,this.id));
 	}
 
 };
-MCUInterface.getPWMDutyCycleMessage = function(nodeId,interfaceId,config) {
+
+MCUInterface.prototype._pwm = function(io,value) {
+
+
+	var values = [0xFFFF,0xFFFF,0xFFFF,0xFFFF];
+	var channelMap = ['3.5','3.6','2.1','3.3'];
+	// 3.5 3.6 2.1 3.3
+	var ioPWMChannelId = _.indexOf(channelMap,io.hardwareKeys.portName);
+	if (ioPWMChannelId == -1) { console.log (io.hardwareKeys.portName + 'is not a pwm channel'); return; }
+	values[ioPWMChannelId] = value;
+	//this._network._sendMessage(MCUInterface.getPWMMessage(this.node.id, this.id,values));
+	this._outMessageQueue.push(MCUInterface.getPWMMessage(this.node.id, this.id,values));
+	this.throttleMessageQueue();
+	//console.log("pused");
+};
+
+
+
+MCUInterface.getPWMDutyCycleMessage = function(config,nodeId,interfaceId) {
 
 	// 0x44+interfaceId
     // 0X01 pwm
@@ -165,21 +205,19 @@ MCUInterface.getPWMDutyCycleMessage = function(nodeId,interfaceId,config) {
 	msg.writeUInt16LE(0x0010,2); // 	PWM_SET_DUTY_CYCLE
 	
 	var enableFlag = 0 ;
-	enableFlag |= (pwmInfo.channels[0].enable) ? 0x0001:0;
-	enableFlag |= (pwmInfo.channels[0].disable) ? 0x0002:0;
-	enableFlag |= (pwmInfo.channels[1].enable) ? 0x0001:0;
-	enableFlag |= (pwmInfo.channels[1].disable) ? 0x0001:0;	
-	
+	enableFlag |= (config.pwm.channels[0].enabled) ? 0x0001:0x0002;
+	enableFlag |= (config.pwm.channels[1].enabled) ? 0x0004:0x0008;
+
 	msg.writeUInt16LE(enableFlag,4);
-	msg.writeUInt16LE(pwmInfo.channels[1].dutyCycle || 0,6);
-	msg.writeUInt16LE(pwmInfo.channels[2].dutyCycle || 0,8);
+	msg.writeUInt16LE(config.pwm.channels[0].dutyCycle || 0,6);
+	msg.writeUInt16LE(config.pwm.channels[1].dutyCycle || 0,8);
 	msg.writeUInt32LE(nodeId,20);
 
 	return msg;
 }
 
 
-MCUInterface.getPWMMessage = function(nodeId,interfaceId,dutyCycle) {
+MCUInterface.getPWMMessage = function(nodeId,interfaceId,pwmValues) {
 
 	// 0x44+interfaceId
 	// 0X01 pwm
@@ -195,10 +233,10 @@ MCUInterface.getPWMMessage = function(nodeId,interfaceId,dutyCycle) {
 	msg.writeUInt8(0x44+interfaceId,0);
 	msg.writeUInt8(0x01,1); // custom cmd set pwm
 	msg.writeUInt16LE(0x0020,2); // PWM_SET_VALUE
-	msg.writeUInt16LE(pwmInfo.channel1||0xFFFF,4);
-	msg.writeUInt16LE(pwmInfo.channel2||0xFFFF,6);
-	msg.writeUInt16LE(pwmInfo.channel3||0xFFFF,8);
-	msg.writeUInt16LE(pwmInfo.channel4||0xFFFF,10);
+	msg.writeUInt16LE(pwmValues[0]||0xFFFF,4);
+	msg.writeUInt16LE(pwmValues[1]||0xFFFF,6);
+	msg.writeUInt16LE(pwmValues[2]||0xFFFF,8);
+	msg.writeUInt16LE(pwmValues[3]||0xFFFF,10);
 	msg.writeUInt32LE(nodeId,20);
 
 	return msg;
