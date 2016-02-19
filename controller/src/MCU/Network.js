@@ -13,7 +13,7 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>. 
 */
 
-var _     = require('lodash-node');
+var _     = require('lodash');
 var util  = require('util');
 var dgram = require('dgram');
 
@@ -50,7 +50,7 @@ MCUNetwork.prototype.add = function(key,nodeId) {
 };
 
 MCUNetwork.prototype._sendMessage = function(buffer) {
-
+console.log(buffer);
 	var client = dgram.createSocket("udp4");
 		client.send(buffer, 0, buffer.length, 9930,'localhost', function(err, bytes) {
 		client.close();

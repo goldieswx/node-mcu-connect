@@ -15,7 +15,7 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>. 
 */
 
-var _     = require('lodash-node');
+var _     = require('lodash');
 var util  = require('util');
 
 var MCUObject = require('./Object');
@@ -124,7 +124,7 @@ MCUInterface.prototype.add = function(key,hardwareKeys) {
 MCUInterface.prototype.refresh = function() {
 
 	// loop through all children and see what io they use and how
-	var hardwareKeyList = _.pluck(this.children,'hardwareKeys');
+	var hardwareKeyList = _.map(this.children,'hardwareKeys');
     var config = { portDIR: [0,0,0], portADC: 0, portREN: [0x00,0x00,0x00], portOUT: [0,0,0], portPWM: [0,0] /* only on 2.x, 3.x */
 					,pwm: { channels : [ { setFlag:0,dutyCycle:1000}, { setFlag:0,dutyCycle:1000}], enabled: false}
 					};
