@@ -59,7 +59,7 @@
 struct CustomCmd {
 	unsigned char CMDID;
 	unsigned int  DATA[9];
-};
+} __attribute__((packed));
 
 struct CustomCmdDataPwmMessage { // max 18 bytes;
 
@@ -71,7 +71,7 @@ struct CustomCmdDataPwmMessage { // max 18 bytes;
 struct FlashCustomCmd {
         char flashPosition;
         int data[9];
-};
+} __attribute__((packed));
 
 
 struct Sample {
