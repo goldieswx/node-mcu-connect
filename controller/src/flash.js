@@ -20,12 +20,20 @@ var getBufferMsg = function(nodeId,interfaceId,buffer,offset,sequenceNumber) {
           buffer.copy(transmitMsg,2,offset,offset+18);
           transmitMsg.writeUInt32LE(nodeId,20); 
           net._sendMessage(transmitMsg); 
-  	console.log(transmitMsg);
+  	  console.log(transmitMsg);
 };
 
 
 
+var nodeId = 17;
+var interfaceId = 0;
+var delay = 5000;
+
+
 exec(cmd, function(error,stdout,stderr) {
+
+   console.log (arguments);
+   console.log ('--------');
 
    if (stdout && stdout.length) {
  
@@ -44,15 +52,22 @@ exec(cmd, function(error,stdout,stderr) {
       fs.read(fd,buffer,0,size,offset);
       fs.close(fd); 
 
-      var n = paddedSize / 18;
-      var i,j=0;
-      for (i=0;i<n;i++) { 
-      	getBufferMsg(0x17,0x00,buffer,j,i);
-        j += 18; 
-      } 
-  }
+      console.log('Found .flashstart section. offset:',headerData[3]," '"+offset+"' size:",headerData[0]," '"+size);
 
-   console.log(arguments);
+      // seding buffer in 18 bytes chunk.
+
+      var n = paddedSize / 18;
+      console.log('Sending data in ',n,' chunk(s)'); 
+      var i,j=0,k=0;
+      console.log('Transfer preview follows: (nodeid:',nodeId,' interface:',interfaceId,')'); 
+      for (i=0;i<n;i++) { 
+        
+        getBufferMsg(nodeId,interfaceId,buffer,i*18,i,true);
+      	setTimeout(function() { getBufferMsg(nodeId,interfaceId,buffer,j,k); j+= 18; k++; },delay*(i+1));
+      } 
+      console.log('Transfer starts in 5s. Ctrl-C to stop Now!');  
+}
+
 });
 
 
