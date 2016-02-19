@@ -242,7 +242,7 @@ void fillSampleTrigger(struct Sample * new,struct Sample * old,struct IoConfig *
     	int usedADCIo[MAX_ADC_CHANNELS];
 
         if(ret->transferReturn) {
-           new->trigger = 1 >> 9;
+           new->trigger = 1 << 9;
            ret->returnedData.s.trigger = new->trigger; 
            return;
 	}
