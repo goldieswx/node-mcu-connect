@@ -57,10 +57,8 @@ MCUInterface.getThrottleMessageQueue = function(self) {
 				state = state || [0x00,0x00,0x00,0xFF,0xFF,0xFF]; // everything unchanged.
 				var j;
 				for (j=0;j<3;j++) {
-					state[j] |= (item[j+1] & item[j+4]);
-					state[j] &= (item[j+4]);
-					state[j+3] |= (item[j+4]);
-					state[j+3] &= (item[j+1] | item[j+4]);
+					state[j] |= item[j+1];
+					state[j+3] &= item[j+4];
 				}
 			} else {
 				// aggregate pwm values because we can pack them by 4
