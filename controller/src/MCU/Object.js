@@ -14,6 +14,7 @@
 */
 
 var _     = require('lodash');
+var helper = require('./Helper');
 
 var MCUObject = function(key) {
 
@@ -24,6 +25,7 @@ var MCUObject = function(key) {
   this.tags = [];
 
   this._selectors = [];
+  this.helper = new helper(this);
 
 };
 
@@ -41,12 +43,14 @@ MCUObject.prototype._cacheSelector = function(selector,value) {
  * Transforms a selector to a collection of objects.
  */
 
-MCUObject.prototype.find = function(selector) {
+MCUObject.prototype.find = function(selector,_originalSelector) {
 
 	var cached = _.find(this._selectors,{"selector":selector});
 	if (cached) {
 		return cached.value;	
-	} 
+	}
+
+    _originalSelector = _originalSelector||selector; // cache original selector for further reference
 
   // split expression by spaces and recursively call ourselves
   // to reduce the result subset by subset
@@ -54,7 +58,7 @@ MCUObject.prototype.find = function(selector) {
   if (expression.length > 1) {
 	 var tmp = this;
 	 _.each(expression,function(item){
-		tmp = tmp.find(item);
+		tmp = tmp.find(item,_originalSelector);
 	 });
 	 return this._cacheSelector(selector,tmp);
   }
@@ -87,6 +91,7 @@ MCUObject.prototype.find = function(selector) {
 	 ret = new MCUObject();
 	 ret.childType = "mixed-multiple";
 	 ret.children = children;
+     ret.selector = _originalSelector;
   } else {
 	 ret = children[0];
   }
@@ -131,5 +136,17 @@ MCUObject.prototype.enable = function(val) {
     }
 
 }
+
+
+MCUObject.prototype.disable = function() {
+
+    if (this.childType == "mixed-multiple") {
+        _.each(this.children,function(item){
+            item.disable();
+        });
+    }
+
+}
+
 
 module.exports = MCUObject;

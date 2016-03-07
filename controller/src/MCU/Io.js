@@ -26,7 +26,9 @@ var MCUIo = function() {
    this.childType = "io";
   // this.value = undefined;
    this._callbacks = { "change":[],"up":[],"down":[]};
-  
+   this.nonInverted();
+
+
 };
 
 util.inherits(MCUIo,MCUObject);
@@ -84,19 +86,88 @@ MCUIo.prototype.toggle = function() {
     return this;
 };
 
+MCUIo.prototype.isPWM = function() {
+
+	return this.hardwareKeys.type == 'pwm';
+
+};
+
+
+MCUIo.prototype._getValueDigital = function(value) {
+
+	if (this._inverted) { return (value)?0:1; }
+	return (value)?1:0;
+
+};
+
+
+MCUIo.prototype._getValuePWM = function(value) {
+
+	var dutyCycle = this.getDutyCycle();
+	value = Math.max(1,value);
+	value = Math.min(dutyCycle-1,value);
+
+	if (this._inverted) { return dutyCycle-value; }
+	return value;
+
+};
+
+MCUIo.prototype.getDutyCycle = function() {
+
+	var ifaceConfig = this._interface.getConfig();
+	var ifaceChannelMap = this._interface.getPWMChannelMapping();
+
+	var channel = ifaceChannelMap[this.hardwareKeys.portName];
+	if (channel)
+	{
+		//console.log(channel,ifaceConfig.pwm.channels);
+		return ifaceConfig.pwm.channels[channel.id].dutyCycle;
+	}
+
+	throw "MCUIo.prototype.getDutyCycle:: Not a pwm channel";
+	return;
+}
+
+MCUIo.prototype.disable = function() {
+
+	if (_.isUndefined(this.value) || (this.value)) {
+
+		if (this.isPWM()) {
+			this.pwm(0);
+		} else {
+			this._interface._outMessageQueue.push(MCUIo.getMessageIoWriteDigital(this.hardwareKeys, this.node.id, this._interface.id, this._getValueDigital(0)));
+			this._interface.throttleMessageQueue();
+		}
+		this.value = 0;
+	}
+	return this;
+}
+
+
 MCUIo.prototype.enable = function(value) {
 
-	if (!arguments.length) { value = 1; }
+	if (!arguments.length || _.isUndefined(value)) { value = 1; }
 	value = (value)?1:0;
+	if (!value) { return this.disable(); }
 
-	if (_.isUndefined(this.value) || (this.value != value)) {
-  	
-  	    this._interface._outMessageQueue.push(MCUIo.getMessageIoWriteDigital(this.hardwareKeys,this.node.id,this._interface.id,value));
-		this._interface.throttleMessageQueue();
+	if (_.isUndefined(this.value) || !this.value) {
 
-		//var msg = MCUIo.getMessageIoWriteDigital(this.hardwareKeys,this.node.id,this._interface.id,value);
-		//this._network._sendMessage(msg);
-		//console.log(msg);
+		if (this.isPWM()) {
+
+			if (_.isUndefined(this._lastPWM)) {
+				this.pwm(this.getDutyCycle());
+			} else {
+				this.pwm(this._lastPWM);
+			}
+		} else {
+			// check if we are inverted logig and push message
+			this._interface._outMessageQueue.push(MCUIo.getMessageIoWriteDigital(this.hardwareKeys, this.node.id, this._interface.id, this._getValueDigital(1)));
+			this._interface.throttleMessageQueue();
+
+			//var msg = MCUIo.getMessageIoWriteDigital(this.hardwareKeys,this.node.id,this._interface.id,value);
+			//this._network._sendMessage(msg);
+			//console.log(msg);
+		}
 
 		this.value = value;
 	}
@@ -104,20 +175,13 @@ MCUIo.prototype.enable = function(value) {
 
 }
 
-MCUIo.prototype.disable = function() {
-
-	if (_.isUndefined(this.value) || (this.value)) {
-    this._interface._outMessageQueue.push(MCUIo.getMessageIoWriteDigital(this.hardwareKeys,this.node.id,this._interface.id,0));
-    this._interface.throttleMessageQueue();
-		this.value = 0;
-	}
-  return this;
-}
 
 
 MCUIo.prototype.pwm = function(value) {
 
-	this._interface._pwm(this,value);
+
+	this._lastPWM = value;
+	this._interface._pwm(this,this._getValuePWM(value));
 	this.value = 0;
 
 }
@@ -126,9 +190,18 @@ MCUIo.prototype.pwm = function(value) {
 MCUIo.getValueFromContext = function(hardwareKeys,message) {
 
       if (!_.isUndefined(hardwareKeys.analogTrigger)) { return message.adcData[hardwareKeys.analogTrigger]; }
+    	//console.log(hardwareKeys.portMask,message.portData,hardwareKeys.port-1);
       return (hardwareKeys.portMask & message.portData[hardwareKeys.port-1])?1:0;
 
 };
+
+MCUIo.prototype.inverted = function() {
+	this._inverted= true;
+};
+
+MCUIo.prototype.nonInverted = function() {
+	this._inverted = false;
+}
 
 
 MCUIo.getMessageIoWriteDigital = function(hardwareKeys,nodeId,interfaceId,value) {

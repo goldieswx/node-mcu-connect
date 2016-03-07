@@ -50,9 +50,9 @@ MCUNetwork.prototype.add = function(key,nodeId) {
 };
 
 MCUNetwork.prototype._sendMessage = function(buffer) {
-console.log(buffer);
+//console.log(buffer);
 	var client = dgram.createSocket("udp4");
-		client.send(buffer, 0, buffer.length, 9930,'localhost', function(err, bytes) {
+		client.send(buffer, 0, buffer.length, 9930,'192.168.0.8', function(err, bytes) {
 		client.close();
 	});
 
@@ -85,7 +85,7 @@ MCUNetwork.prototype._dispatchMessage = function(message) {
  */
 MCUNetwork.prototype._callback = function(value) {
 
-	var message = {
+  	var message = {
 		timestamp 	: 	(new Date()).getTime(),
 		destination : 	value.readUInt32LE(36),
 		trigger 	:  	value.readUInt16LE(16),

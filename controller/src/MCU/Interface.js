@@ -57,10 +57,9 @@ MCUInterface.getThrottleMessageQueue = function(self) {
 				state = state || [0x00,0x00,0x00,0xFF,0xFF,0xFF]; // everything unchanged.
 				var j;
 				for (j=0;j<3;j++) {
-					state[j] |= (item[j+1] & item[j+4]);
-					state[j] &= (item[j+4]);
-					state[j+3] |= (item[j+4]);
-					state[j+3] &= (item[j+1] | item[j+4]);
+		 var tmp = state[j];	
+					state[j] |= item[j+1] & state[j+3];
+					state[j+3] &= tmp | item[j+4];
 				}
 			} else {
 				// aggregate pwm values because we can pack them by 4
@@ -91,13 +90,15 @@ MCUInterface.getThrottleMessageQueue = function(self) {
 			aggreatedMessage[5] = 0xff & state[4];
 			aggreatedMessage[6] = 0xff & state[5];
 			self._network._sendMessage(aggreatedMessage);
+			console.log(aggreatedMessage);
 		}
 
 		if (pwmValues.received) {
+			console.log(MCUInterface.getPWMMessage(this.node.id,this.id,pwmValues.values));
 			self._network._sendMessage(MCUInterface.getPWMMessage(this.node.id,this.id,pwmValues.values));
 		}
 
-	},30,{leading:false,trailing:true}); 
+	},35,{leading:false,trailing:false});
 
 };
 
@@ -125,7 +126,7 @@ MCUInterface.prototype.refresh = function() {
 
 	// loop through all children and see what io they use and how
 	var hardwareKeyList = _.map(this.children,'hardwareKeys');
-    var config = { portDIR: [0,0,0], portADC: 0, portREN: [0x00,0x00,0x00], portOUT: [0,0,0], portPWM: [0,0] /* only on 2.x, 3.x */
+    var config = { portDIR: [0xFF,0xFF,0xFF], portADC: 0, portREN: [0x00,0x00,0x00], portOUT: [0,0,0], portPWM: [0,0] /* only on 2.x, 3.x */
 					,pwm: { channels : [ { setFlag:0,dutyCycle:1000}, { setFlag:0,dutyCycle:1000}], enabled: false}
 					};
 
@@ -139,8 +140,8 @@ MCUInterface.prototype.refresh = function() {
     			config.portOUT[item.port-1] &= (0xFF & ~item.portMask); // disable out flag
 				if (item.type == "pwm") {
 					config.portPWM[item.port-2] |= item.portMask; /* enable */
-					config.pwm.channels[0].enabled = (_.indexOf(['3.5','3.6'],item.portName) > -1 );
-					config.pwm.channels[1].enabled = (_.indexOf(['2.1','3.3'],item.portName) > -1 );
+					config.pwm.channels[0].enabled = config.pwm.channels[0].enabled || (_.indexOf(['3.5','3.6'],item.portName) > -1 );
+					config.pwm.channels[1].enabled = config.pwm.channels[1].enabled || (_.indexOf(['2.1','3.3'],item.portName) > -1 );
 					config.pwm.enabled = true;
 				}
 
@@ -166,7 +167,6 @@ MCUInterface.prototype.refresh = function() {
 };
 
 MCUInterface.prototype._pwm = function(io,value) {
-
 
 	var values = [0xFFFF,0xFFFF,0xFFFF,0xFFFF];
 	var channelMap = ['3.5','3.6','2.1','3.3'];
@@ -207,6 +207,8 @@ MCUInterface.getPWMDutyCycleMessage = function(config,nodeId,interfaceId) {
 	var enableFlag = 0 ;
 	enableFlag |= (config.pwm.channels[0].enabled) ? 0x0001:0x0002;
 	enableFlag |= (config.pwm.channels[1].enabled) ? 0x0004:0x0008;
+	//enableFlag = 5;
+	//console.log("enbleFlag",enableFlag,JSON.stringify(config));
 
 	msg.writeUInt16LE(enableFlag,4);
 	msg.writeUInt16LE(config.pwm.channels[0].dutyCycle || 0,6);
@@ -242,6 +244,18 @@ MCUInterface.getPWMMessage = function(nodeId,interfaceId,pwmValues) {
 	return msg;
 
 }
+
+MCUInterface.prototype.getPWMChannelMapping = function() {
+
+	ioChannels = {'3.5':{id: 0},'3.6' :{id: 0},'2.1' :{id: 1},'3.3':{id: 1}};
+	return ioChannels;
+
+};
+
+MCUInterface.prototype.getConfig = function() {
+	return this.config;
+}
+
 
 MCUInterface.getRefreshMessage = function(config,nodeId,interfaceId) {
 
