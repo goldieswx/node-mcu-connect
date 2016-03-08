@@ -16,6 +16,7 @@
 var _     = require('lodash');
 var util  = require('util');
 var dgram = require('dgram');
+var q 	  = require('q');
 
 var MCUObject = require('./Object');
 var MCUNode = require('./Node');
@@ -48,6 +49,15 @@ MCUNetwork.prototype.add = function(key,nodeId) {
    return (this.superClass.add.bind(this))(child);
 
 };
+
+MCUNetwork.prototype.bootstrap = function(fn) {
+
+   var deferred = q.defer();
+   fn(this,this.find.bind(this),deferred);
+   return deferred.promise;
+
+};
+
 
 MCUNetwork.prototype._sendMessage = function(buffer) {
 //console.log(buffer);
