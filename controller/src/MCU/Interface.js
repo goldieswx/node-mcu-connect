@@ -41,7 +41,7 @@ util.inherits(MCUInterface,MCUObject);
 
 MCUInterface.getThrottleMessageQueue = function(self) {
 
-	return _.throttle(function(){
+	return _.debounce(function(){
 		var state;
 
 		var aggreatedMessage = new Buffer("012345678901234567891234"); // see adce.c@processMsg for details 
@@ -90,15 +90,15 @@ MCUInterface.getThrottleMessageQueue = function(self) {
 			aggreatedMessage[5] = 0xff & state[4];
 			aggreatedMessage[6] = 0xff & state[5];
 			self._network._sendMessage(aggreatedMessage);
-			console.log(aggreatedMessage);
+//			console.log(aggreatedMessage);
 		}
 
 		if (pwmValues.received) {
-			console.log(MCUInterface.getPWMMessage(this.node.id,this.id,pwmValues.values));
+//			console.log(MCUInterface.getPWMMessage(this.node.id,this.id,pwmValues.values));
 			self._network._sendMessage(MCUInterface.getPWMMessage(this.node.id,this.id,pwmValues.values));
 		}
 
-	},35,{leading:false,trailing:false});
+	},35,{leading:false,trailing:true});
 
 };
 
@@ -153,8 +153,8 @@ MCUInterface.prototype.refresh = function() {
     				config.portREN[item.port-1] &= (0xFF & ~item.configMask); // disable pullup/dn flag
     			} else { // Digital in
     				config.portDIR[item.port-1] &= (0xFF & ~item.portMask); // disable output flag
-    				config.portREN[item.port-1] &= (0xFF & ~item.portMask); // disble pulldn flag
-    				config.portOUT[item.port-1] &= (0xFF & ~item.portMask); // pull dn
+    				config.portREN[item.port-1] |= (0xFF & item.portMask); // enable pullup flag
+    				config.portOUT[item.port-1] |= (0xFF & item.portMask); // pull "up"
     			}
     		}
     });

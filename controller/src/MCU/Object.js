@@ -148,5 +148,15 @@ MCUObject.prototype.disable = function() {
 
 }
 
+MCUObject.prototype.toggle = function() {
+
+    if (this.childType == "mixed-multiple") {
+        _.each(this.children,function(item){
+            item.toggle();
+        });
+    }
+
+}
+
 
 module.exports = MCUObject;

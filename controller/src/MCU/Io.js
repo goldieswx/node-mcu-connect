@@ -65,7 +65,7 @@ MCUIo.prototype._callback = function(message) {
               if (changeEvent.value != changeEvent.previousValue) {
 	              changeEvent.context = message;
 	              changeEvent.previousValue = changeEvent.value;
-	              changeEvent.callback(changeEvent); 
+	              changeEvent.callback(changeEvent,self);
 	              changeEvent.previousContext = message; 
 	              this.value = changeEvent.value;
 	          }

@@ -33,9 +33,9 @@ MCUHelper.prototype.toRGB = function (rgbHexString,intensity){
            if (_.indexOf(item.tags,'red')>-1) {
                item.pwm(Math.round(item.getDutyCycle()*rgbArray[0]*intensity));
            } else if (_.indexOf(item.tags,'green')>-1) {
-               item.pwm(Math.round(item.getDutyCycle()*rgbArray[1]*intensity));
+               item.pwm(Math.round(item.getDutyCycle()*rgbArray[1]*intensity*.76));
            } else if (_.indexOf(item.tags,'blue')>-1) {
-               item.pwm(Math.round(item.getDutyCycle()*rgbArray[2]*intensity));
+               item.pwm(Math.round(item.getDutyCycle()*rgbArray[2]*intensity*.75));
            }
         });
    }

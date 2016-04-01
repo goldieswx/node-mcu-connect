@@ -16,6 +16,7 @@
 var _     = require('lodash');
 var util  = require('util');
 var dgram = require('dgram');
+var q     = require('q');
 
 var MCUObject = require('./Object');
 var MCUNode = require('./Node');
@@ -35,9 +36,20 @@ var MCUNetwork = function() {
 
   this._listenntingSocket.bind(9931);
 
+  this._registerHardwareDeferred = q.defer();
+  this.ready = this._registerHardwareDeferred.promise;
+
 };
 
 util.inherits(MCUNetwork,MCUObject);
+
+
+MCUNetwork.prototype.registerHardware = function(fn) {
+
+  fn(this.find.bind(this));
+  this._registerHardwareDeferred.resolve(this.find.bind(this));
+
+};
 
 
 MCUNetwork.prototype.add = function(key,nodeId) {
@@ -52,7 +64,7 @@ MCUNetwork.prototype.add = function(key,nodeId) {
 MCUNetwork.prototype._sendMessage = function(buffer) {
 //console.log(buffer);
 	var client = dgram.createSocket("udp4");
-		client.send(buffer, 0, buffer.length, 9930,'192.168.0.8', function(err, bytes) {
+		client.send(buffer, 0, buffer.length, 9930,'localhost', function(err, bytes) {
 		client.close();
 	});
 
