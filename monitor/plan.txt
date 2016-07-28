@@ -1,0 +1,38 @@
+
+
+[Networks]
+    NET1 64kbps 192.168.0.8 8820/8821 [power draw] [voltage].
+
+[Nodes]
+
+My-node  NET1.0X01 Firmware
+My-node  NET1.0X02 Firmware
+My-node  NET1.0X03 Firmware
+My-node  NET1.0X04 Firmware
+
+[Interfaces]
+
+Itf1      NET1.0x01.1 Firmware
+Itf1      NET1.0x01.1 Firmware
+Itf1      NET1.0x01.1 Firmware
+Itf1      NET1.0x01.1 Firmware
+
+[Io]
+
+Led1     0x01.1.1.2   Value  In Out PWM ADC
+Led2     0x01.1.1.2   Value  In Out PWM ADC
+Led3     0x01.1.1.2   Value  In Out PWM ADC
+Led4     0x01.1.1.2   Value  In Out PWM ADC
+Sw1      0x01.1.1.2   Value  In Out PWM ADC
+Sw2      0x01.1.1.2   Value  In Out PWM ADC
+
+[Messages]
+
+    Incoming          {Buffer}  Destination Checksum In  Checksum Out  Status (transferred,queued,dropped) Retry#
+                        {Buffer analysis}
+    Outgoing  Forced  {Buffer}  Mask        Checksum In  Checksym Out  Status (transferred,queued,dropped) Retry#
+                        {Buffer analysis}
+
+
+
+
