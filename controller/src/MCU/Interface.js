@@ -127,7 +127,7 @@ MCUInterface.prototype.refresh = function() {
 	// loop through all children and see what io they use and how
 	var hardwareKeyList = _.map(this.children,'hardwareKeys');
     var config = { portDIR: [0xFF,0xFF,0xFF], portADC: 0, portREN: [0x00,0x00,0x00], portOUT: [0,0,0], portPWM: [0,0] /* only on 2.x, 3.x */
-					,pwm: { channels : [ { setFlag:0,dutyCycle:1000}, { setFlag:0,dutyCycle:1000}], enabled: false}
+					,pwm: { channels : [ { setFlag:0,dutyCycle:3000}, { setFlag:0,dutyCycle:3000}], enabled: false}
 					};
 
 	this.config = this.config || config;
