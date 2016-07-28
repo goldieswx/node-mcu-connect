@@ -10,7 +10,7 @@
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
     You should have received a copy of the GNU General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+    along with this program.  If not, see <http://www.gnu.org/licenses/>. 
 */
 
 
@@ -23,19 +23,57 @@ var net = new MCU.Network();
 
 net.ready.then(function($){
 
+    console.log('ready');
     $(':switch').on("change",function(value,io) {
         if (!value.value) {
             io._interface.find('led-'+io.key).toggle();
         }
     });
 
-    $(':out').disable();
+    $('b1').on("change",function(value,io) {
+        if (!value.value) {
+            $(':white').toggle();
+        }
+    });
+
+  $('b2').on("change",function(value,io) {
+       value.lastVal = value.lastVal || 0;  
+       if (!value.value) {
+       
+             value.lastVal = (value.lastVal==1)?999:1; 
+             $(':rgb').pwm(value.lastVal);
+	  }
+    });
+  $('b3').on("change",function(value,io) {
+    });
+$('b4').on("change",function(value,io) {
+       value.lastVal = value.lastVal || 0;  
+       if (!value.value) {
+       
+             value.lastVal = (value.lastVal==1)?500:1; 
+     		$(':room :out').toggle(); 
+          }
+    });
+
+
+
+    $(':out').enable();
     setInterval(function(){ $(':led').toggle();  },3000);
 
 });
 
 
 net.registerHardware(function($) {
+
+    console.log('registering');
+
+    net.add('room-led',15);
+    $('room-led').add('interface-south',0x00).tag('room');
+  
+
+   net.add('room-led-2',14);
+    $('room-led-2').add('interface-south',0x00).tag('room');
+  
 
 
     net.add('main-led-north',16);
@@ -47,13 +85,36 @@ net.registerHardware(function($) {
     $('main-led-south').add('interface-dining',0x01);
 
     // Entry interface
+  (function(i) {
+        i.add('led-1','pwm out 2.1').tag("out out1 red rgb").inverted();
+        i.add('led-2','digital out 2.3').tag("out out1 white").inverted();
+        i.add('led-3','pwm out 3.3').tag("out out1 blue rgb").inverted();
+        i.add('led-4','digital out 3.5').tag("out out1 white").inverted();
+        i.add('led-5','pwm out 3.6').tag("out out1 green rgb").inverted();
+        i.add('led-6','digital out 2.4').tag("out out1 white").inverted();
+        i.refresh();
+    })($('room-led interface-south'));
+
+ (function(i) {
+        i.add('led-1','pwm out 2.1').tag("out out1 red rgb").inverted();
+        i.add('led-2','digital out 2.3').tag("out out1 white").inverted();
+        i.add('led-3','pwm out 3.3').tag("out out1 blue rgb").inverted();
+        i.add('led-4','digital out 3.5').tag("out out1 white").inverted();
+        i.add('led-5','pwm out 3.6').tag("out out1 green rgb").inverted();
+        i.add('led-6','digital out 2.4').tag("out out1 white").inverted();
+        i.refresh();
+    })($('room-led-2 interface-south'));
+
+
+
+
     (function(i) {
         i.add('led-1','pwm out 2.1').tag("out out1 red rgb").inverted();
         i.add('led-2','digital out 2.3').tag("out out1 white").inverted();
         i.add('led-3','pwm out 3.3').tag("out out1 blue rgb").inverted();
         i.add('led-4','digital out 3.5').tag("out out1 white").inverted();
         i.add('led-5','pwm out 3.6').tag("out out1 green rgb").inverted();
-        i.add('led-6','digital out 2.4').tag("out out1").inverted();
+        i.add('led-6','digital out 2.4').tag("out out1 white").inverted();
         i.refresh();
     })($('main-led-north interface-living'));
 
@@ -63,7 +124,7 @@ net.registerHardware(function($) {
         i.add('led-3','pwm out 3.3').tag("out out2 blue rgb").inverted();
         i.add('led-4','digital out 3.5').tag("out out2 white").inverted();
         i.add('led-5','pwm out 3.6').tag("out out2 green rgb").inverted();
-        i.add('led-6','digital out 2.4').tag("out out2").inverted();
+        i.add('led-6','digital out 2.4').tag("out out2 white").inverted();
         i.refresh();
     })($('main-led-north interface-dining'));
 
@@ -74,7 +135,7 @@ net.registerHardware(function($) {
         i.add('led-3','pwm out 3.3').tag("out out3 green rgb").inverted();
         i.add('led-4','digital out 3.5').tag("out out3 white").inverted();
         i.add('led-5','pwm out 3.6').tag("out out3 blue rgb").inverted();
-        i.add('led-6','digital out 2.4').tag("out out3").inverted();
+        i.add('led-6','digital out 2.4').tag("out out3 white").inverted();
         i.refresh();
     })($('main-led-south interface-living'));
 
@@ -84,12 +145,14 @@ net.registerHardware(function($) {
         i.add('led-3','pwm out 3.3').tag("out out4 blue rgb").inverted();
         i.add('led-4','digital out 3.5').tag("out out4 white").inverted();
         i.add('led-5','pwm out 3.6').tag("out out4 green rgb").inverted();
-        i.add('led-6','digital out 2.4').tag("out out4").inverted();
+        i.add('led-6','digital out 2.4').tag("out out4 white").inverted();
         i.refresh();
     })($('main-led-south interface-dining'));
 
 
-    var registerSwitchNode = function (nodeKey,nodeId,interfaceId,interfaceKey) {
+    var registerSwitchNode = function (nodeKey,nodeId,timeOut,interfaceId,interfaceKey) {
+
+        setTimeout(function() {
 
         interfaceId = interfaceId || 0;
         interfaceKey = interfaceKey || 'interface';
@@ -111,12 +174,23 @@ net.registerHardware(function($) {
             i.add('led-b4','digital out 2.1').tag('out led');
             i.refresh();
         })(node.find(interfaceKey));
-    }
+    },timeOut);
+  };
+
+//21 NEW ONE
+registerSwitchNode('room-south'     ,22,3200);
+registerSwitchNode('dressing'     ,24,1000);
+registerSwitchNode('room-north'     ,23,3400);
+
+registerSwitchNode('office-east'     ,26,1500);
+    registerSwitchNode('office-west'     ,27,2000);
+    registerSwitchNode('hall-west'       ,29,2500); //29;
+    registerSwitchNode('living-fire'     ,30,3000);
 
 
-    registerSwitchNode('office-east'     ,26);
-    registerSwitchNode('office-west'     ,27);
-    registerSwitchNode('hall-west'       ,29);
-    registerSwitchNode('living-fire'     ,30);
+
+    setTimeout(function(){net._registerHardwareDeferred.resolve(net.find.bind(net))},3500);
+
+
 
 });

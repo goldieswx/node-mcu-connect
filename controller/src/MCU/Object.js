@@ -158,5 +158,16 @@ MCUObject.prototype.toggle = function() {
 
 }
 
+MCUObject.prototype.pwm = function(val) {
+
+    if (this.childType == "mixed-multiple") {
+       _.each(this.children,function(item){
+           item.pwm(val);
+       });
+    }
+
+}
+
+
 
 module.exports = MCUObject;
