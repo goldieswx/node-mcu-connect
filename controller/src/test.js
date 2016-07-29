@@ -15,7 +15,7 @@
 
 
 var MCU = require('./core');
-
+var _ = require('lodash');
 
 /* test area */
 
@@ -33,34 +33,44 @@ net.ready.then(function($){
     });
 
     $('b1').on("change",function(value,io) {
-        if (!value.value) {
+       if (io.node.key === 'dressing') return;  
+       if (!value.value) {
              value.lastval = value.lastval || 0;        
              value.lastval ++;
 	     value.lastval %= 4; 
              var j; 
-             for (j=1;j<=3;j++) {
-    		$(':white:out'+j).enable(j<=(value.lastval));
-             } 
+         //console.log(io.node.key);   
+          for (j=1;j<=3;j++) {
+    		if (io.node.key != 'living-fire') {
+			$(':white:out'+j).enable(j<=(value.lastval));
+                } else {
+                        $('interface-living :white:out'+j).enable(j<=(value.lastval));
+		}  
+	    } 
 	}
     });
 
-  $('b2').on("change",function(value,io) {
-       value.lastVal = value.lastVal || 0;  
+    $('b2').on("change",function(value,io) {
+     if (io.node.key === 'dressing') return;  
+     value.lastVal = value.lastVal || 0;  
        if (!value.value) {
        
              value.lastVal = (value.lastVal==1)?999:1; 
              $(':rgb').pwm(value.lastVal);
 	  }
     });
-  $('b3').on("change",function(value,io) {
-     value.index = value.index || 0;
+   $('b3').on("change",function(value,io) {
+    if (io.node.key === 'dressing') return;  
+    value.index = value.index || 0;
      value.index %= colcycle.length; 
      $(':rgb').helper.toRGB(colcycle[value.index]);
      value.index++;
 
     });
-$('b4').on("change",function(value,io) {
-       value.lastVal = value.lastVal || 0;  
+   $('b4').on("change",function(value,io) {
+      if (io.node.key === 'dressing') return;  
+ 
+      value.lastVal = value.lastVal || 0;  
        if (!value.value) {
        
              value.lastVal = (value.lastVal==1)?500:1; 
@@ -68,10 +78,60 @@ $('b4').on("change",function(value,io) {
           }
     });
 
+   var dressingSwUp =
+       function(value,io) {
+       if (!value.value) {
+             value.lastval = value.lastval || 0;        
+             value.lastval ++;
+             value.lastval %= 4; 
+             var j; 
+          for (j=1;j<=3;j++) {
+        	if (io.key === 'b3') {
+        		$('interface-dining :white:out'+j).enable(j<=(value.lastval));
+                } else {
+                        $('interface-living :white:out'+j).enable(j<=(value.lastval));
+        	}  
+	    } 
+        }
+    };
+
+  
+   var diningThrottled = _.throttle(function() {
+    $('interface-dining :rgb').pwm(1); 
+   }, 3000, { 'leading': false, 'trailing': true });
+
+   var livingThrottled = _.throttle(function() { 
+    $('interface-living :rgb').pwm(1); 
+   }, 3000, { 'leading': false, 'trailing': true });
+ 
+
+   var dressingSwDn = function (value,io) {
+      if (value.value === 0) {
+         if (io.key === 'b2') { livingThrottled(); }; 
+         if (io.key === 'b4') { diningThrottled(); }; 
+      } else {
+         if (io.key === 'b2') { livingThrottled.cancel(); }; 
+         if (io.key === 'b4') { diningThrottled.cancel(); }; 
+      }
+      if (!value.value) {
+           value.index = value.index || 0;
+           value.index %= colcycle.length; 
+            if (io.key === 'b2') { $('interface-living :rgb').helper.toRGB(colcycle[value.index]) };
+            if (io.key === 'b4') { $('interface-dining :rgb').helper.toRGB(colcycle[value.index]) };
+           value.index++;
+  
+         }
+
+   };
+
+   $('dressing b1').on("change",dressingSwUp);
+   $('dressing b3').on("change",dressingSwUp);
+   $('dressing b2').on("change",dressingSwDn);
+   $('dressing b4').on("change",dressingSwDn);
 
 
     $(':out').disable();
-    setInterval(function(){ $(':led').disable();  },3000);
+    setInterval(function(){ $(':led').disable();  },30000);
     $('main-led-office :white').disable();
 
 });
@@ -229,6 +289,11 @@ registerSwitchNode('office-east'     ,26,1500);
     registerSwitchNode('office-west'     ,27,2000);
     registerSwitchNode('hall-west'       ,29,2200); //29;
     registerSwitchNode('living-fire'     ,30,3000);
+
+
+
+    setTimeout(function(){net._registerHardwareDeferred.resolve(net.find.bind(net))},5600);
+
 
 
 });
