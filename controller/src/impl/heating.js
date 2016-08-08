@@ -1,3 +1,4 @@
+
 /*
  node-mcu-connect . node.js UDP Interface for embedded devices.
  Copyright (C) 2013-6 David Jakubowski
@@ -14,15 +15,32 @@
  */
 
 
-var MCU = require('./core');
 
-var net = new MCU.Network();
+var MCU = require('../core');
+var q = require ('q');
 
-net.registerServices(
-    [
-        { name: 'heating',       impl : './impl/heating.js' },
-        { name: 'room-switches', impl : './impl/room-switces.js' },
-        { name: 'room-lighting', impl : './impl/room-lightning.js' },
-    ]
-);
+var heatingService = function(net) {
+    this.network = net;
+    console.log('heating :: constructor');
 
+};
+
+heatingService.prototype.init = function() {
+
+    var deferred = q.defer();
+    deferred.resolve();
+    console.log('heating :: initialized but not resolved');
+    return deferred.promise;
+
+}
+
+heatingService.prototype.run = function() {
+
+    var deferred = q.defer();
+    deferred.resolve();
+    console.log('heating :: running');
+    return deferred.promise;
+
+}
+
+exports.service = heatingService;

@@ -36,6 +36,7 @@ var MCUNetwork = function() {
 
   this._listenntingSocket.bind(9931);
 
+  this._services = { items: []};
   this._registerHardwareDeferred = q.defer();
   this.ready = this._registerHardwareDeferred.promise;
 
@@ -47,7 +48,7 @@ util.inherits(MCUNetwork,MCUObject);
 MCUNetwork.prototype.registerHardware = function(fn) {
 
   fn(this.find.bind(this));
-  this._registerHardwareDeferred.resolve(this.find.bind(this));
+ // this._registerHardwareDeferred.resolve(this.find.bind(this));
 
 };
 
@@ -113,6 +114,58 @@ MCUNetwork.prototype._callback = function(value) {
 	}
 	this._dispatchMessage(message);
 }
+
+
+/**
+ * MCUNetwork::registerServices(array)
+ * Receives an array of {name/impl} mapping services and their impementation path (.js)
+ */
+
+MCUNetwork.prototype.registerServices = function (_services) {
+
+    // establish a chain of promise with service inits.
+    var deferred = q.defer();
+    var promise = deferred.promise;
+    var services = { items: _services };
+
+    var singleServiceRunner = function(service) {
+
+        if (!_.find(services.items,{name:service.name,loaded:true})) {
+            service.liveInstance = new (require(service.impl).service);
+        }
+
+        if (!service.initialized) {
+            // newPromise = service.liveInstance.init()
+            return  service.liveInstance.init();
+        }
+
+        if (!service.running) {
+            service.running = true;
+            // newPromise = service.promise;
+            return  service.liveInstance.run();
+        }
+   };
+
+    deferred.resolve(true);
+
+    _.each(services.items,function(service){
+        if (!service.initialized) {
+            promise = promise.then(function(x) {
+                var ret = singleServiceRunner(service);
+               return  ret;
+            });
+        }
+    });
+
+    _.each(services.items,function(service){
+        if (!service.running) {
+            promise = promise.then(function(x) {
+                return singleServiceRunner(service);
+            });
+        }
+    });
+
+};
 
 
 module.exports = MCUNetwork;

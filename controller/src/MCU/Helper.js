@@ -38,7 +38,6 @@ MCUHelper.prototype.HSLtoRGB=  function HSLtoRGB(hsl) {
             b = hue2rgb(p, q, h - 1/3);
         }
         return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
-}
 
 }
 
