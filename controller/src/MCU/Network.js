@@ -65,7 +65,7 @@ MCUNetwork.prototype.add = function(key,nodeId) {
 MCUNetwork.prototype._sendMessage = function(buffer) {
 //console.log(buffer);
 	var client = dgram.createSocket("udp4");
-		client.send(buffer, 0, buffer.length, 9930,'localhost', function(err, bytes) {
+		client.send(buffer, 0, buffer.length, 9930,'192.168.1.100', function(err, bytes) {
 		client.close();
 	});
 
@@ -128,30 +128,39 @@ MCUNetwork.prototype.registerServices = function (_services) {
     var promise = deferred.promise;
     var services = { items: _services };
 
+    var net = this;
+    var $ = net.find.bind(net);
+
     var singleServiceRunner = function(service) {
 
         if (!_.find(services.items,{name:service.name,loaded:true})) {
+            console.log ('[',service.name,'] Constructor.');
             service.liveInstance = new (require(service.impl).service);
+            service.loaded = true;
         }
 
         if (!service.initialized) {
+            console.log ('[',service.name,'] Initializing.');
+            service.initialized = true;
             // newPromise = service.liveInstance.init()
-            return  service.liveInstance.init();
+            return  service.liveInstance.init(net,$);
         }
 
         if (!service.running) {
+            console.log ('[',service.name,'] Running.');
             service.running = true;
             // newPromise = service.promise;
-            return  service.liveInstance.run();
+            return  service.liveInstance.run(net,$);
         }
    };
 
-    deferred.resolve(true);
+    deferred.resolve('initial');
 
     _.each(services.items,function(service){
         if (!service.initialized) {
             promise = promise.then(function(x) {
-                var ret = singleServiceRunner(service);
+
+               var ret = singleServiceRunner(service);
                return  ret;
             });
         }

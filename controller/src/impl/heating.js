@@ -29,7 +29,6 @@ heatingService.prototype.init = function() {
 
     var deferred = q.defer();
     deferred.resolve();
-    console.log('heating :: initialized but not resolved');
     return deferred.promise;
 
 }
