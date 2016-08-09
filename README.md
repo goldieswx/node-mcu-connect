@@ -281,7 +281,7 @@ Extensions are tied to a single node, with a common SPI bus and a dedicated CTS/
 ![Quinoha node+adce in one tiny PCB](https://cloud.githubusercontent.com/assets/3940546/17515635/d2169f70-5e39-11e6-9163-bcc1b67a7d4f.JPG)
 
 
-Hardware available. Contact me for further info.
+
 
 #### Applications ####
 
