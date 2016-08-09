@@ -120,13 +120,14 @@ MCUNetwork.prototype._callback = function(value) {
  * MCUNetwork::registerServices(array)
  * Receives an array of {name/impl} mapping services and their impementation path (.js)
  */
-
 MCUNetwork.prototype.registerServices = function (_services) {
 
     // establish a chain of promise with service inits.
     var deferred = q.defer();
     var promise = deferred.promise;
-    var services = { items: _services };
+
+    this._services.items =  _services;
+    var services = this._services;
 
     var net = this;
     var $ = net.find.bind(net);
@@ -135,7 +136,7 @@ MCUNetwork.prototype.registerServices = function (_services) {
 
         if (!_.find(services.items,{name:service.name,loaded:true})) {
             console.log ('[',service.name,'] Constructor.');
-            service.liveInstance = new (require(service.impl).service);
+            service.liveInstance = new (require(service.impl).service)(net);
             service.loaded = true;
         }
 
@@ -143,14 +144,14 @@ MCUNetwork.prototype.registerServices = function (_services) {
             console.log ('[',service.name,'] Initializing.');
             service.initialized = true;
             // newPromise = service.liveInstance.init()
-            return  service.liveInstance.init(net,$);
+            return  service.liveInstance.init();
         }
 
         if (!service.running) {
             console.log ('[',service.name,'] Running.');
             service.running = true;
             // newPromise = service.promise;
-            return  service.liveInstance.run(net,$);
+            return  service.liveInstance.run();
         }
    };
 
@@ -176,5 +177,16 @@ MCUNetwork.prototype.registerServices = function (_services) {
 
 };
 
+MCUNetwork.prototype.reloadService = function(serviceName) {
+
+    var svc = _.find(this._services.items,{name:serviceName});
+
+    svc.loaded = false;
+    svc.running = false;
+    svc.initialized = false;
+
+    this.registerServices(this._services.items);
+
+};
 
 module.exports = MCUNetwork;
