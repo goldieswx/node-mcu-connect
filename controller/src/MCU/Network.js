@@ -58,6 +58,7 @@ MCUNetwork.prototype.add = function(key,nodeId) {
    var child = new MCUNode();
    child.key = key;
    child.id = nodeId;
+
    return (this.superClass.add.bind(this))(child);
 
 };
@@ -65,7 +66,7 @@ MCUNetwork.prototype.add = function(key,nodeId) {
 MCUNetwork.prototype._sendMessage = function(buffer) {
 //console.log(buffer);
 	var client = dgram.createSocket("udp4");
-		client.send(buffer, 0, buffer.length, 9930,'192.168.1.100', function(err, bytes) {
+		client.send(buffer, 0, buffer.length, 9930,'192.168.1.99', function(err, bytes) {
 		client.close();
 	});
 
@@ -136,7 +137,16 @@ MCUNetwork.prototype.registerServices = function (_services) {
 
         if (!_.find(services.items,{name:service.name,loaded:true})) {
             console.log ('[',service.name,'] Constructor.');
+            try {
+                if (service.path) {
+                    delete (require.cache[service.path]);
+                }
+            } catch(e) {
+                console.log("[warning] Deleting cache of [",service.name,"]",e);
+            }
             service.liveInstance = new (require(service.impl).service)(net);
+            service.liveInstance.key = service.name;
+            service.path = service.liveInstance.getServicePath();
             service.loaded = true;
         }
 
@@ -181,12 +191,47 @@ MCUNetwork.prototype.reloadService = function(serviceName) {
 
     var svc = _.find(this._services.items,{name:serviceName});
 
+    this._clearCallbacks(serviceName);
+
     svc.loaded = false;
     svc.running = false;
-    svc.initialized = false;
+    svc.initialized = true;
 
     this.registerServices(this._services.items);
 
 };
+
+MCUNetwork.prototype.startRemote = function() {
+
+    var http = require("http"),
+        url = require("url"),
+        path = require("path"),
+        fs = require("fs"),
+        port = 8888;
+        self = this;
+
+    http.createServer(function(request, response) {
+
+        var uri = url.parse(request.url).pathname
+            , filename = path.join(process.cwd(), uri);
+
+        response.writeHead(200, {"Content-Type": "text/plain"});
+        var cmd = uri.split('/');
+
+        var serviceName = cmd.pop();
+        var action = cmd.pop();
+
+        if (action === 'reload') {
+            self.reloadService(serviceName);
+        }
+
+        response.write(uri);
+        response.end();
+
+
+    }).listen(parseInt(port, 10));
+
+}
+
 
 module.exports = MCUNetwork;

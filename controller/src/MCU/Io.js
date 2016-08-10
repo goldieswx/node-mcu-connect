@@ -48,9 +48,11 @@ MCUIo.prototype.toggle = function() {
  * 
  * register callback event
  */
-MCUIo.prototype.on = function(eventType,fn) {
+MCUIo.prototype.on = function(eventType,fn,serviceInstance) {
 
-  this._callbacks[eventType].push (new MCUEvent(fn));
+
+  this._callbacks[eventType].push (new MCUEvent(fn,serviceInstance));
+
 
 };
 
@@ -74,6 +76,13 @@ MCUIo.prototype._callback = function(message) {
       }
   });
 
+};
+
+MCUIo.prototype._clearCallbacks = function(serviceName) {
+
+	_.forOwn(this._callbacks,function(callbackTypeArray) {
+		_.remove(callbackTypeArray,{serviceName:serviceName});
+	});
 };
 
 MCUIo.prototype.toggle = function() {

@@ -105,6 +105,7 @@ MCUInterface.getThrottleMessageQueue = function(self) {
 
 
 
+
 MCUInterface.prototype.add = function(key,hardwareKeys) {
 
    var child = new MCUIo();
@@ -279,6 +280,7 @@ MCUInterface.getRefreshMessage = function(config,nodeId,interfaceId) {
 
 	return msg;
 }
+
 
 
 MCUInterface.prototype._callback = function(message) {

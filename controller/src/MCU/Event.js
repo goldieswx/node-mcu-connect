@@ -16,13 +16,14 @@
 var _     = require('lodash');
 var Q     = require('q');
 
-var MCUEvent = function(fn) {
+var MCUEvent = function(fn,service) {
 
    this.context = {}
    this.callback = fn;
    this.previousValue = null;
    this.value = null; 
    this.previousContext = {};
+   this.serviceName = service.key;
 
    // init clearable timer instance.
    this.clearableTimer = MCUEvent._clearableTimer();

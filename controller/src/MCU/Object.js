@@ -117,11 +117,11 @@ MCUObject.prototype.tag  = function(tags) {
    return this;
 };
 
-MCUObject.prototype.on = function(eventId,fn) {
+MCUObject.prototype.on = function(eventId,fn,serviceInstance) {
 
     if (this.childType == "mixed-multiple") {
        _.each(this.children,function(item){
-           item.on(eventId,fn);
+           item.on(eventId,fn,serviceInstance);
        });
     }
 
@@ -167,6 +167,15 @@ MCUObject.prototype.pwm = function(val) {
     }
 
 }
+
+MCUObject.prototype._clearCallbacks = function(serviceName) {
+
+    _.each(this.children,function(item){
+        item._clearCallbacks(serviceName);
+    });
+
+};
+
 
 
 
