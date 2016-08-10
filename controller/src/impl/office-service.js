@@ -12,12 +12,14 @@
  You should have received a copy of the GNU General Public License
  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+'use strict';
 
 var MCU = require('../core');
 var q = require ('q');
 
 var officeService = function(net) {
     this.network = net;
+    this.currentStates = {};
 
 };
 
@@ -25,37 +27,57 @@ officeService.prototype.onRegisterHardware = function(deferred) {
 
     this.accessNetwork(function(net,$) {
 
-        // Main LED bar in office, nodeId = 18, key = office-east.
+        let nodeKey,interfaceKey,nodeId;
+        let node;
 
-        net.add('main-led-office', 18);
-        $('main-led-office').add('interface', 0x00);
+        // Main LED bar in office, nodeId = 18, key = office-east.
+        nodeKey = 'main-led-office'; interfaceKey = 'interface'; nodeId = 18;
+        net.add(nodeKey, nodeId);
+        node = $(nodeKey)
+        node.add(interfaceKey, 0x00);
 
         (function (i) {
             i.add('led-1', 'digital out 2.3').tag("out white1").inverted();
             i.add('led-2', 'digital out 3.4').tag("out white2").inverted();
             i.add('led-3', 'digital out 2.5').tag("out white3").inverted();
             i.refresh();
-        })($('main-led-office interface'));
+        })(node.find(interfaceKey));
 
         // East switch, nodeID = 26, key = office-east
+        nodeKey = 'office-east'; interfaceKey = 'interface'; nodeId = 26;
+        net.add(nodeKey, nodeId);
+        node = $(nodeKey);
+        node.add(interfaceKey, 0x00);
 
-         net.add('office-east',26);
-         var node = $('office-east');
-         node.add('interface',0);
-
-         // Entry interface
          (function(i) {
-         i.add('b1','digital in 1.2').tag('switch in');
-         i.add('b2','digital in 1.3').tag('switch in');
-         i.add('b3','digital in 2.5').tag('switch in');
-         i.add('b4','digital in 2.4').tag('switch in');
+             i.add('b1','digital in 1.3').tag('switch in left top');
+             i.add('b2','digital in 2.4').tag('switch in right top');
+             i.add('b3','digital in 1.2').tag('switch in left bottom');
+             i.add('b4','digital in 2.5').tag('switch in right bottom');
+             i.add('led-b1','digital out 3.3').tag('out led left top blue');
+             i.add('led-b2','digital out 2.3').tag('out led right top red');
+             i.add('led-b3','digital out 2.1').tag('out led left bottom green');
+             i.add('led-b4','digital out 3.4').tag('out led right bottom orange');
+             i.refresh();
+         })(node.find(interfaceKey));
 
-         i.add('led-b1','digital out 2.3').tag('out led');
-         i.add('led-b2','digital out 3.3').tag('out led');
-         i.add('led-b3','digital out 3.4').tag('out led');
-         i.add('led-b4','digital out 2.1').tag('out led');
-         i.refresh();
-         })(node.find('interface'));
+        // East switch, nodeID = 27, key = office-west
+        nodeKey = 'office-west'; interfaceKey = 'interface'; nodeId = 27;
+        net.add(nodeKey, nodeId);
+        node = $(nodeKey);
+        node.add(interfaceKey, 0x00);
+
+        (function(i) {
+            i.add('b1','digital in 1.3').tag('switch in left top');
+            i.add('b2','digital in 2.4').tag('switch in right top');
+            i.add('b3','digital in 1.2').tag('switch in left bottom');
+            i.add('b4','digital in 2.5').tag('switch in right bottom');
+            i.add('led-b1','digital out 3.3').tag('out led left top blue');
+            i.add('led-b2','digital out 2.3').tag('out led right top red');
+            i.add('led-b3','digital out 2.1').tag('out led left bottom green');
+            i.add('led-b4','digital out 3.4').tag('out led right bottom orange');
+            i.refresh();
+        })(node.find(interfaceKey));
 
         /// done hardware registering
         deferred.resolve();
@@ -67,19 +89,30 @@ officeService.prototype.onStart = function(deferred) {
     var self = this;
     this.accessNetwork(function(net,$) {
 
-        /// register logic
-        //setInterval(function() {
-        $('main-led-office :white2').disable();
-        //},2000);
-        /// done register logic
+        /* office-east Top-Left Switch  cycle led circuits  1/1+2/1+2+3/OFF  */
+        /* office-west Top-Left Switch  cycle led circuits  1/1+2/1+2+3/OFF  */
 
-        $('office-east b1').on("change",function(){
+        self.currentStates.cycleState = self.currentStates.cycleState | 0;
 
-                console.log ('changed');
+        $('main-led-office :out').disable();
+        $('office-east :out').disable();
+        $('office-west :out').disable();
 
-        },self);
+        var cycleLEDCircuits = function(value){
+            // cycle led circuits  1/1+2/1+2+3/OFF
+            if (!value.value) {
+                let lastval = self.currentStates.cycleState+1;
+                lastval %= 4;
+                self.currentStates.cycleState = lastval;
 
+                for (let j=1;j<=3;j++) {
+                    $('main-led-office :white'+j).enable(j<=(lastval));
+                }
+            }
+        };
 
+        $('office-east b1').on("change",cycleLEDCircuits,self);
+        $('office-west b1').on("change",cycleLEDCircuits,self);
 
         deferred.resolve('run');
     });

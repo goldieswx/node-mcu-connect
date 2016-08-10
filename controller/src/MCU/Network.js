@@ -66,7 +66,7 @@ MCUNetwork.prototype.add = function(key,nodeId) {
 MCUNetwork.prototype._sendMessage = function(buffer) {
 //console.log(buffer);
 	var client = dgram.createSocket("udp4");
-		client.send(buffer, 0, buffer.length, 9930,'192.168.1.99', function(err, bytes) {
+		client.send(buffer, 0, buffer.length, 9930,'localhost', function(err, bytes) {
 		client.close();
 	});
 
