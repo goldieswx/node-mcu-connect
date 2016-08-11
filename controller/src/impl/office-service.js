@@ -80,7 +80,7 @@ officeService.prototype.onRegisterHardware = function(deferred) {
         })(node.find(interfaceKey));
 
         /// done hardware registering
-        deferred.resolve();
+        setTimeout(function() {deferred.resolve();},200);
     });
 };
 

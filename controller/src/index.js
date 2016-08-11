@@ -23,8 +23,8 @@ net.startRemote();
 net.registerServices(
     [
       //  { name: 'heating',       impl : '../impl/heating' },
-        { name: 'office-service', impl : '../impl/office-service' }
-      /*  { name: 'room-lighting', impl : './impl/room-lightning.js' }, */
+        { name: 'office-service', impl : '../impl/office-service' },
+        { name: 'living-service', impl : '../impl/living-service' }
     ]
 );
 
