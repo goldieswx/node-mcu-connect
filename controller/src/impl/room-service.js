@@ -17,25 +17,23 @@
 var MCU = require('../core');
 var q = require ('q');
 
-var livingService = function(net) {
+var roomService = function(net) {
     this.network = net;
     this.currentStates = {};
 
 };
 
-livingService.prototype.onRegisterHardware = function(deferred) {
+roomService.prototype.onRegisterHardware = function(deferred) {
 
     this.accessNetwork(function(net,$) {
+
         // Main LED bar in  xxx, nodeId = xxx, key =xxx
 
-        net.add('main-led-north',16);
-        $('main-led-north').add('interface-living',0x00);
-        $('main-led-north').add('interface-dining',0x01);
+        net.add('room-led',15);
+        $('room-led').add('interface-south',0x00).tag('room');
 
-        net.add('main-led-south',17);
-        $('main-led-south').add('interface-living',0x00);
-        $('main-led-south').add('interface-dining',0x01);
-
+        net.add('room-led-2',14);
+        $('room-led-2').add('interface-south',0x00).tag('room');
 
         (function(i) {
             i.add('led-1','pwm out 2.1').tag("out red rgb").inverted();
@@ -58,8 +56,44 @@ livingService.prototype.onRegisterHardware = function(deferred) {
         })($('room-led-2 interface-south'));
 
 
-        // East switch, nodeID = 27, key = office-west
-        let nodeKey = 'living-fire', interfaceKey = 'interface', nodeId = 24, node;
+       // North switch, nodeID = 23, key = room-north
+        let nodeKey = 'room-north', interfaceKey = 'interface', nodeId = 22, node;
+        net.add(nodeKey, nodeId);
+        node = $(nodeKey);
+        node.add(interfaceKey, 0x00);
+
+        (function(i) {
+            i.add('b1','digital in 2.5').tag('switch in left top');
+            i.add('b2','digital in 1.2').tag('switch in right top');
+            i.add('b3','digital in 2.4').tag('switch in left bottom');
+            i.add('b4','digital in 1.3').tag('switch in right bottom');
+            i.add('led-b1','digital out 3.4').tag('out led left top blue');
+            i.add('led-b2','digital out 2.1').tag('out led right top red');
+            i.add('led-b3','digital out 2.3').tag('out led left bottom green');
+            i.add('led-b4','digital out 3.3').tag('out led right bottom orange');
+            i.refresh();
+        })(node.find(interfaceKey));
+
+        // South switch, nodeID = 22, key = room-north
+        let nodeKey = 'room-south', interfaceKey = 'interface', nodeId = 22, node;
+        net.add(nodeKey, nodeId);
+        node = $(nodeKey);
+        node.add(interfaceKey, 0x00);
+
+        (function(i) {
+            i.add('b1','digital in 2.5').tag('switch in left top');
+            i.add('b2','digital in 1.2').tag('switch in right top');
+            i.add('b3','digital in 2.4').tag('switch in left bottom');
+            i.add('b4','digital in 1.3').tag('switch in right bottom');
+            i.add('led-b1','digital out 3.4').tag('out led left top blue');
+            i.add('led-b2','digital out 2.1').tag('out led right top red');
+            i.add('led-b3','digital out 2.3').tag('out led left bottom green');
+            i.add('led-b4','digital out 3.3').tag('out led right bottom orange');
+            i.refresh();
+        })(node.find(interfaceKey));
+
+        // Dressing switch, nodeID = 30, key = dresssing
+        let nodeKey = 'dressing', interfaceKey = 'interface', nodeId = 30, node;
         net.add(nodeKey, nodeId);
         node = $(nodeKey);
         node.add(interfaceKey, 0x00);
@@ -83,45 +117,25 @@ livingService.prototype.onRegisterHardware = function(deferred) {
 
 
 
-livingService.prototype.onStart = function(deferred) {
+roomService.prototype.onStart = function(deferred) {
 
     var self = this;
     this.accessNetwork(function(net,$) {
 
-        /* office-east Top-Left Switch  cycle led circuits  1/1+2/1+2+3/OFF  */
-        /* office-west Top-Left Switch  cycle led circuits  1/1+2/1+2+3/OFF  */
 
-        self.currentStates.cycleState = {
-        }
+        $('room-north :out').disable();
+        $('room-south :out').disable();
+        $('dressing :out').disable();
+        $('room-led :out').disable();
+        $('room-led2 :out').disable();
 
-        $('living-fire :out').enable();
-        $('living-fire :orange').disable();
-        $('interface-living :out').disable();
-        $('interface-dining :out').disable();
+        let cycleFn =  net.services('helper').cycle(self.currentStates,'mainLEDCycle',':room :white');
 
-        var cycleLEDs = function (nodeKey) {
-            return function(value){
-                // cycle led circuits  1/1+2/1+2+3/OFF
-                if (!value.value) {
-                    self.currentStates.cycleState[nodeKey] = self.currentStates.cycleState[nodeKey] | 0;
-                    let lastval = self.currentStates.cycleState[nodeKey]+1;
+        $('room-north b1').on("change",cycleFn,self);
+        $('room-south b1').on("change",cycleFn,self);
 
-                    if ((nodeKey == 'interface-dining') && (lastval == 4)) {
-                        net.services('kitchen').toggleLighting();
-                    }
-
-                    lastval %= 4;
-                    self.currentStates.cycleState[nodeKey] = lastval;
-
-                    for (let j=1;j<=3;j++) {
-                        $(nodeKey + ' :out'+j).enable(j<=(lastval));
-                    }
-                }
-            };
-        };
-
-        $('living-fire b1').on("change",cycleLEDs('interface-living'),self);
-        $('living-fire b2').on("change",cycleLEDs('interface-dining'),self);
+//        $('living-fire b1').on("change",cycleLEDs('interface-living'),self);
+//        $('living-fire b2').on("change",cycleLEDs('interface-dining'),self);
 
         deferred.resolve('run');
     });
@@ -133,7 +147,7 @@ livingService.prototype.onStart = function(deferred) {
  * run the service itself.
  * @returns {*|promise}
  */
-livingService.prototype.run = function() {
+roomService.prototype.run = function() {
 
     var deferred = q.defer();
 
@@ -147,7 +161,7 @@ livingService.prototype.run = function() {
  * hardware is or gets registered.
  * @returns {*|promise}
  */
-livingService.prototype.init = function() {
+roomService.prototype.init = function() {
 
     var deferred = q.defer();
 
@@ -160,7 +174,7 @@ livingService.prototype.init = function() {
  * accessNetwork() wraps the necessary network objects and calls the handler along with them.
  * @param handler
  */
-livingService.prototype.accessNetwork = function(handler) {
+roomService.prototype.accessNetwork = function(handler) {
 
     var net = this.network;
     var $ = net.find.bind(net);
@@ -168,9 +182,9 @@ livingService.prototype.accessNetwork = function(handler) {
 
 };
 
-livingService.prototype.getServicePath = function() {
+roomService.prototype.getServicePath = function() {
     return __filename;
 }
 
 
-exports.service = livingService;
+exports.service = roomService;

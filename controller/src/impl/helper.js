@@ -19,13 +19,44 @@
 var MCU = require('../core');
 var q = require ('q');
 
-var heatingService = function(net) {
+var helperService = function(net) {
     this.network = net;
-    console.log('heating :: constructor');
 
 };
 
-heatingService.prototype.init = function() {
+helperService.published = function() {
+
+    return {
+
+        /* function cycle()
+         *  @returns a callback function to be used with events
+         *  linked to a specific container,key for state (storage)
+         *  cycle circuits  1/1+2/1+2+3/OFF
+         */
+
+        cycle : function(stateContainer,stateKey,selector) {
+
+            stateContainer[stateKey] = stateContainer[stateKey] | 0;
+
+            return function (value) {
+                if (!value.value) {
+                    let lastval = stateContainer[stateKey] + 1;
+                    lastval %= 4;
+                    stateContainer[stateKey] = lastval;
+
+                    for (let j = 1; j <= 3; j++) {
+                        $(selector + j).enable(j <= (lastval));
+                    }
+                }
+            };
+        }
+
+
+    }
+
+}
+
+helperService.prototype.init = function() {
 
     var deferred = q.defer();
     deferred.resolve();
@@ -37,7 +68,6 @@ heatingService.prototype.run = function() {
 
     var deferred = q.defer();
     deferred.resolve();
-    console.log('heating :: running');
     return deferred.promise;
 
 }

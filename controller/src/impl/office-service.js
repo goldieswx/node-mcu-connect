@@ -92,27 +92,14 @@ officeService.prototype.onStart = function(deferred) {
         /* office-east Top-Left Switch  cycle led circuits  1/1+2/1+2+3/OFF  */
         /* office-west Top-Left Switch  cycle led circuits  1/1+2/1+2+3/OFF  */
 
-        self.currentStates.cycleState = self.currentStates.cycleState | 0;
-
         $('main-led-office :out').disable();
         $('office-east :out').disable();
         $('office-west :out').disable();
 
-        var cycleLEDCircuits = function(value){
-            // cycle led circuits  1/1+2/1+2+3/OFF
-            if (!value.value) {
-                let lastval = self.currentStates.cycleState+1;
-                lastval %= 4;
-                self.currentStates.cycleState = lastval;
+        let cycleFn =  net.services('helper').cycle(self.currentStates,'mainLEDCycle','main-led-office :white');
 
-                for (let j=1;j<=3;j++) {
-                    $('main-led-office :white'+j).enable(j<=(lastval));
-                }
-            }
-        };
-
-        $('office-east b1').on("change",cycleLEDCircuits,self);
-        $('office-west b1').on("change",cycleLEDCircuits,self);
+        $('office-east b1').on("change",cycleFn,self);
+        $('office-west b1').on("change",cycleFn,self);
 
         deferred.resolve('run');
     });

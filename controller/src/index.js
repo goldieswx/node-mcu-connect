@@ -22,9 +22,10 @@ net.startRemote();
 
 net.registerServices(
     [
-      //  { name: 'heating',       impl : '../impl/heating' },
-        { name: 'office-service', impl : '../impl/office-service' },
-        { name: 'living-service', impl : '../impl/living-service' }
+        { name: 'helper', impl : '../impl/helper' },
+        { name: 'kitchen', impl : '../impl/kitchen-service' },
+        { name: 'office', impl : '../impl/office-service' },
+        { name: 'living', impl : '../impl/living-service' }
     ]
 );
 

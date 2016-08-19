@@ -187,6 +187,14 @@ MCUNetwork.prototype.registerServices = function (_services) {
 
 };
 
+MCUNetwork.prototype.services = function(serviceName) {
+
+    var service =  this.services.items[serviceName];
+    return service.published(service);
+
+};
+
+
 MCUNetwork.prototype.reloadService = function(serviceName) {
 
     var svc = _.find(this._services.items,{name:serviceName});
