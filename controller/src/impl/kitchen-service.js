@@ -60,7 +60,7 @@ kitchenService.prototype.onRegisterHardware = function(deferred) {
     });
 };
 
-kitchenService.published = function(self) {
+kitchenService.prototype.published = function(self) {
 
     return {
         /**
@@ -82,7 +82,7 @@ kitchenService.prototype.onStart = function(deferred) {
     var self = this;
     this.accessNetwork(function(net,$) {
 
-       $('kitchen-lightning :out').disable();
+       $('kitchen-lightning :out').enable();
 
         /* office-east Top-Left Switch  cycle led circuits  1/1+2/1+2+3/OFF  */
         /* office-west Top-Left Switch  cycle led circuits  1/1+2/1+2+3/OFF  */

@@ -37,27 +37,27 @@ roomService.prototype.onRegisterHardware = function(deferred) {
 
         (function(i) {
             i.add('led-1','pwm out 2.1').tag("out red rgb").inverted();
-            i.add('led-2','digital out 2.3').tag("out white").inverted();
+            i.add('led-2','digital out 2.3').tag("out white1").inverted();
             i.add('led-3','pwm out 3.3').tag("out blue rgb").inverted();
-            i.add('led-4','digital out 3.5').tag("out white").inverted();
+            i.add('led-4','digital out 3.5').tag("out white2").inverted();
             i.add('led-5','pwm out 3.6').tag("out  green rgb").inverted();
-            i.add('led-6','digital out 2.4').tag("out white").inverted();
+            i.add('led-6','digital out 2.4').tag("out white3").inverted();
             i.refresh();
         })($('room-led interface-south'));
 
         (function(i) {
             i.add('led-1','pwm out 2.1').tag("out red rgb").inverted();
-            i.add('led-2','digital out 2.3').tag("out white").inverted();
+            i.add('led-2','digital out 2.3').tag("out white1").inverted();
             i.add('led-3','pwm out 3.3').tag("out blue rgb").inverted();
-            i.add('led-4','digital out 3.5').tag("out white").inverted();
+            i.add('led-4','digital out 3.5').tag("out white2").inverted();
             i.add('led-5','pwm out 3.6').tag("out green rgb").inverted();
-            i.add('led-6','digital out 2.4').tag("out white").inverted();
+            i.add('led-6','digital out 2.4').tag("out white3").inverted();
             i.refresh();
         })($('room-led-2 interface-south'));
 
 
        // North switch, nodeID = 23, key = room-north
-        let nodeKey = 'room-north', interfaceKey = 'interface', nodeId = 22, node;
+        let nodeKey = 'room-north', interfaceKey = 'interface', nodeId = 23, node;
         net.add(nodeKey, nodeId);
         node = $(nodeKey);
         node.add(interfaceKey, 0x00);
@@ -75,7 +75,7 @@ roomService.prototype.onRegisterHardware = function(deferred) {
         })(node.find(interfaceKey));
 
         // South switch, nodeID = 22, key = room-north
-        let nodeKey = 'room-south', interfaceKey = 'interface', nodeId = 22, node;
+        nodeKey = 'room-south'; interfaceKey = 'interface';  nodeId = 22; 
         net.add(nodeKey, nodeId);
         node = $(nodeKey);
         node.add(interfaceKey, 0x00);
@@ -93,7 +93,7 @@ roomService.prototype.onRegisterHardware = function(deferred) {
         })(node.find(interfaceKey));
 
         // Dressing switch, nodeID = 30, key = dresssing
-        let nodeKey = 'dressing', interfaceKey = 'interface', nodeId = 30, node;
+        nodeKey = 'dressing'; interfaceKey = 'interface'; nodeId = 30;
         net.add(nodeKey, nodeId);
         node = $(nodeKey);
         node.add(interfaceKey, 0x00);

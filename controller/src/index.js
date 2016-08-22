@@ -25,7 +25,9 @@ net.registerServices(
         { name: 'helper', impl : '../impl/helper' },
         { name: 'kitchen', impl : '../impl/kitchen-service' },
         { name: 'office', impl : '../impl/office-service' },
-        { name: 'living', impl : '../impl/living-service' }
+        { name: 'living', impl : '../impl/living-service' },
+        { name: 'room', impl : '../impl/room-service' }
+
     ]
 );
 

@@ -203,9 +203,10 @@ MCUNetwork.prototype.registerServices = function (_services) {
 
 MCUNetwork.prototype.services = function(serviceName) {
 
-    var service =  this.services.items[serviceName];
-    return service.published(service);
-
+    var service =  _.find(this._services.items,{name:serviceName});
+    var tmp = service.liveInstance.published(service.liveInstance);
+    console.log('services::',tmp);
+   return tmp;
 };
 
 

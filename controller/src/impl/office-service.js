@@ -89,7 +89,8 @@ officeService.prototype.onStart = function(deferred) {
     var self = this;
     this.accessNetwork(function(net,$) {
 
-        /* office-east Top-Left Switch  cycle led circuits  1/1+2/1+2+3/OFF  */
+        try { 
+	/* office-east Top-Left Switch  cycle led circuits  1/1+2/1+2+3/OFF  */
         /* office-west Top-Left Switch  cycle led circuits  1/1+2/1+2+3/OFF  */
 
         $('main-led-office :out').disable();
@@ -102,7 +103,9 @@ officeService.prototype.onStart = function(deferred) {
         $('office-west b1').on("change",cycleFn,self);
 
         deferred.resolve('run');
-    });
+       } catch(e) { console.log('error: officeService:',e); };  
+
+  });
 
 };
 

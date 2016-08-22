@@ -24,8 +24,9 @@ var helperService = function(net) {
 
 };
 
-helperService.published = function() {
+helperService.prototype.published = function() {
 
+    var self = this; 
     return {
 
         /* function cycle()
@@ -37,16 +38,18 @@ helperService.published = function() {
         cycle : function(stateContainer,stateKey,selector) {
 
             stateContainer[stateKey] = stateContainer[stateKey] | 0;
-
             return function (value) {
+                console.log(value);
                 if (!value.value) {
                     let lastval = stateContainer[stateKey] + 1;
                     lastval %= 4;
                     stateContainer[stateKey] = lastval;
 
                     for (let j = 1; j <= 3; j++) {
-                        $(selector + j).enable(j <= (lastval));
-                    }
+	                   self.accessNetwork(function(net,$) { 
+       				$(selector + j).enable(j <= (lastval));
+                           }); 
+		    }
                 }
             };
         }
