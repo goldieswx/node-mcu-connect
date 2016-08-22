@@ -31,9 +31,9 @@ roomService.prototype.onRegisterHardware = function(deferred) {
 
         net.add('room-led',15);
         $('room-led').add('interface-south',0x00).tag('room');
-
         net.add('room-led-2',14);
         $('room-led-2').add('interface-south',0x00).tag('room');
+
 
         (function(i) {
             i.add('led-1','pwm out 2.1').tag("out red rgb").inverted();

@@ -14,14 +14,19 @@
  */
 'use strict';
 
+
 var MCU = require('../core');
 var q = require ('q');
+var util  = require('util');
 
-var livingService = function(net) {
-    this.network = net;
-    this.currentStates = {};
 
+var livingService = function() {
+    this.superClass = MCU.Service.prototype;
+    livingService.super_.apply(this,arguments);
 };
+
+util.inherits(livingService,MCU.Service);
+
 
 livingService.prototype.onRegisterHardware = function(deferred) {
 
@@ -36,26 +41,47 @@ livingService.prototype.onRegisterHardware = function(deferred) {
         $('main-led-south').add('interface-living',0x00);
         $('main-led-south').add('interface-dining',0x01);
 
-
         (function(i) {
-            i.add('led-1','pwm out 2.1').tag("out red rgb").inverted();
-            i.add('led-2','digital out 2.3').tag("out white").inverted();
-            i.add('led-3','pwm out 3.3').tag("out blue rgb").inverted();
-            i.add('led-4','digital out 3.5').tag("out white").inverted();
-            i.add('led-5','pwm out 3.6').tag("out  green rgb").inverted();
-            i.add('led-6','digital out 2.4').tag("out white").inverted();
+            i.add('led-1','pwm out 2.1').tag("out out1 red rgb").inverted();
+            i.add('led-2','digital out 2.3').tag("out out1 white").inverted();
+            i.add('led-3','pwm out 3.3').tag("out out2 blue rgb").inverted();
+            i.add('led-4','digital out 3.5').tag("out out2 white").inverted();
+            i.add('led-5','pwm out 3.6').tag("out out3 green rgb").inverted();
+            i.add('led-6','digital out 2.4').tag("out out3 white").inverted();
             i.refresh();
-        })($('room-led interface-south'));
+        })($('main-led-north interface-living'));
 
         (function(i) {
             i.add('led-1','pwm out 2.1').tag("out red rgb").inverted();
-            i.add('led-2','digital out 2.3').tag("out white").inverted();
+            i.add('led-2','digital out 2.3').tag("out out1 white").inverted();
             i.add('led-3','pwm out 3.3').tag("out blue rgb").inverted();
-            i.add('led-4','digital out 3.5').tag("out white").inverted();
+            i.add('led-4','digital out 3.5').tag("out out2 white").inverted();
             i.add('led-5','pwm out 3.6').tag("out green rgb").inverted();
-            i.add('led-6','digital out 2.4').tag("out white").inverted();
+            i.add('led-6','digital out 2.4').tag("out out3 white").inverted();
             i.refresh();
-        })($('room-led-2 interface-south'));
+        })($('main-led-north interface-dining'));
+
+
+        (function(i) {
+            i.add('led-1','pwm out 2.1').tag("out red rgb").inverted();
+            i.add('led-2','digital out 2.3').tag("out out1 white").inverted();
+            i.add('led-3','pwm out 3.3').tag("out green rgb").inverted();
+            i.add('led-4','digital out 3.5').tag("out out2 white").inverted();
+            i.add('led-5','pwm out 3.6').tag("out blue rgb").inverted();
+            i.add('led-6','digital out 2.4').tag("out out3 white").inverted();
+            i.refresh();
+        })($('main-led-south interface-living'));
+
+        (function(i) {
+            i.add('led-1','pwm out 2.1').tag("out red rgb").inverted();
+            i.add('led-2','digital out 2.3').tag("out out1 white").inverted();
+            i.add('led-3','pwm out 3.3').tag("out blue rgb").inverted();
+            i.add('led-4','digital out 3.5').tag("out out2 white").inverted();
+            i.add('led-5','pwm out 3.6').tag("out green rgb").inverted();
+            i.add('led-6','digital out 2.4').tag("out out3 white").inverted();
+            i.refresh();
+        })($('main-led-south interface-dining'));
+
 
 
         // East switch, nodeID = 27, key = office-west
@@ -127,50 +153,6 @@ livingService.prototype.onStart = function(deferred) {
     });
 
 };
-
-/**
- * run () is called by the network registration services, calls internal methods to
- * run the service itself.
- * @returns {*|promise}
- */
-livingService.prototype.run = function() {
-
-    var deferred = q.defer();
-
-    this.onStart(deferred);
-    return deferred.promise;
-
-};
-
-/**
- * init() is called by the network registration services, calls internal methods to ensure the
- * hardware is or gets registered.
- * @returns {*|promise}
- */
-livingService.prototype.init = function() {
-
-    var deferred = q.defer();
-
-    this.onRegisterHardware(deferred);
-    return deferred.promise;
-
-}
-
-/**
- * accessNetwork() wraps the necessary network objects and calls the handler along with them.
- * @param handler
- */
-livingService.prototype.accessNetwork = function(handler) {
-
-    var net = this.network;
-    var $ = net.find.bind(net);
-    return handler(net,$);
-
-};
-
-livingService.prototype.getServicePath = function() {
-    return __filename;
-}
 
 
 exports.service = livingService;

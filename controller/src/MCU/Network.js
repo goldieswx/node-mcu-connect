@@ -136,7 +136,7 @@ MCUNetwork.prototype.registerServices = function (_services) {
     var singleServiceRunner = function(service) {
 
         if (!_.find(services.items,{name:service.name,loaded:true})) {
-            console.log ('[',service.name,'] Constructor.');
+            console.log ('[',service.name,'] \t\tConstructor.');
             try {
                 if (service.path) {
                     delete (require.cache[service.path]);
@@ -144,21 +144,35 @@ MCUNetwork.prototype.registerServices = function (_services) {
             } catch(e) {
                 console.log("[warning] Deleting cache of [",service.name,"]",e);
             }
-            service.liveInstance = new (require(service.impl).service)(net);
-            service.liveInstance.key = service.name;
-            service.path = service.liveInstance.getServicePath();
-            service.loaded = true;
+            try {
+                service.liveInstance = new (require(service.impl).service)(net);
+                service.liveInstance.key = service.name;
+                service.path = service.liveInstance.getServicePath();
+                service.loaded = true;
+
+            } catch(e) {
+                console.log('[error] ',service.name,' failed instantiation. error below.');
+                console.log('[',service.name,'] err: ',e);
+            };
+
         }
 
-        if (!service.initialized) {
-            console.log ('[',service.name,'] Initializing.');
+        if (service.loaded && !service.initialized) {
+            console.log ('[',service.name,"] \t\tInitializing.");
             service.initialized = true;
             // newPromise = service.liveInstance.init()
-            return  service.liveInstance.init();
+            var promise;
+            try {
+                 promise =  service.liveInstance.init();
+            } catch(e) {
+                console.log('[error] ',service.name,' failed initiaization. error below.');
+                console.log('[',service.name,'] err: ',e);
+            }
+            return promise;
         }
 
-        if (!service.running) {
-            console.log ('[',service.name,'] Running.');
+        if (service.loaded && service.initialized && !service.running) {
+            console.log ('[',service.name,'] \t\tRunning.');
             service.running = true;
             // newPromise = service.promise;
             return  service.liveInstance.run();

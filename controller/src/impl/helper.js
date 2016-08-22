@@ -13,7 +13,7 @@
  You should have received a copy of the GNU General Public License
  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-
+"use strict";
 
 
 var MCU = require('../core');
@@ -64,7 +64,7 @@ helperService.prototype.init = function() {
 
 }
 
-heatingService.prototype.run = function() {
+helperService.prototype.run = function() {
 
     var deferred = q.defer();
     deferred.resolve();
@@ -72,4 +72,20 @@ heatingService.prototype.run = function() {
 
 }
 
-exports.service = heatingService;
+/**
+ * accessNetwork() wraps the necessary network objects and calls the handler along with them.
+ * @param handler
+ */
+helperService.prototype.accessNetwork = function(handler) {
+
+    var net = this.network;
+    var $ = net.find.bind(net);
+    return handler(net,$);
+
+};
+
+helperService.prototype.getServicePath = function() {
+    return __filename;
+}
+
+exports.service = helperService;
