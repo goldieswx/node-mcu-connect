@@ -39,7 +39,7 @@ helperService.prototype.published = function() {
 
             stateContainer[stateKey] = stateContainer[stateKey] | 0;
             return function (value) {
-                console.log(value);
+                //console.log(value);
                 if (!value.value) {
                     let lastval = stateContainer[stateKey] + 1;
                     lastval %= 4;

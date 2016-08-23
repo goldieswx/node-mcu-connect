@@ -70,7 +70,7 @@ kitchenService.prototype.published = function(self) {
 
             self.accessNetwork(function(net,$) {
                 $('kitchen-lightning :out').toggle();
-                console.log('lightningToggled');
+                //console.log('lightningToggled');
             });
         }
     };
@@ -82,7 +82,7 @@ kitchenService.prototype.onStart = function(deferred) {
     var self = this;
     this.accessNetwork(function(net,$) {
 
-       $('kitchen-lightning :out').enable();
+       $('kitchen-lightning :out').disable();
 
         /* office-east Top-Left Switch  cycle led circuits  1/1+2/1+2+3/OFF  */
         /* office-west Top-Left Switch  cycle led circuits  1/1+2/1+2+3/OFF  */

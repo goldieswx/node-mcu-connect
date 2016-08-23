@@ -120,7 +120,7 @@ livingService.prototype.onStart = function(deferred) {
         self.currentStates.cycleState = {
         }
 
-        $('living-fire :out').enable();
+        $('living-fire :out').disable();
         $('living-fire :orange').disable();
         $('interface-living :out').disable();
         $('interface-dining :out').disable();

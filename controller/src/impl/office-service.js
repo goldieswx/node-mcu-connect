@@ -37,9 +37,9 @@ officeService.prototype.onRegisterHardware = function(deferred) {
         node.add(interfaceKey, 0x00);
 
         (function (i) {
-            i.add('led-1', 'digital out 2.3').tag("out white1").inverted();
+            i.add('led-1', 'digital out 2.3').tag("out white3").inverted();
             i.add('led-2', 'digital out 3.4').tag("out white2").inverted();
-            i.add('led-3', 'digital out 2.5').tag("out white3").inverted();
+            i.add('led-3', 'digital out 2.5').tag("out white1").inverted();
             i.refresh();
         })(node.find(interfaceKey));
 
