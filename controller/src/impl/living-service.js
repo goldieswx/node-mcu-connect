@@ -42,10 +42,10 @@ livingService.prototype.onRegisterHardware = function(deferred) {
         $('main-led-south').add('interface-dining',0x01);
 
         (function(i) {
-            i.add('led-1','pwm out 2.1').tag("out out1 red rgb").inverted();
-            i.add('led-2','digital out 2.3').tag("out out1 white").inverted();
-            i.add('led-3','pwm out 3.3').tag("out out2 blue rgb").inverted();
-            i.add('led-4','digital out 3.5').tag("out out2 white").inverted();
+            i.add('led-1','pwm out 2.1').tag("out red rgb").inverted();
+            i.add('led-2','digital out 2.3').tag("out out2 white").inverted();
+            i.add('led-3','pwm out 3.3').tag("out blue rgb").inverted();
+            i.add('led-4','pwm out 3.5').tag("out out1 white").inverted();
             i.add('led-5','pwm out 3.6').tag("out out3 green rgb").inverted();
             i.add('led-6','digital out 2.4').tag("out out3 white").inverted();
             i.refresh();
@@ -53,9 +53,9 @@ livingService.prototype.onRegisterHardware = function(deferred) {
 
         (function(i) {
             i.add('led-1','pwm out 2.1').tag("out red rgb").inverted();
-            i.add('led-2','digital out 2.3').tag("out out1 white").inverted();
+            i.add('led-2','digital out 2.3').tag("out out2 white").inverted();
             i.add('led-3','pwm out 3.3').tag("out blue rgb").inverted();
-            i.add('led-4','digital out 3.5').tag("out out2 white").inverted();
+            i.add('led-4','pwm out 3.5').tag("out out1 white").inverted();
             i.add('led-5','pwm out 3.6').tag("out green rgb").inverted();
             i.add('led-6','digital out 2.4').tag("out out3 white").inverted();
             i.refresh();
@@ -64,9 +64,9 @@ livingService.prototype.onRegisterHardware = function(deferred) {
 
         (function(i) {
             i.add('led-1','pwm out 2.1').tag("out red rgb").inverted();
-            i.add('led-2','digital out 2.3').tag("out out1 white").inverted();
+            i.add('led-2','digital out 2.3').tag("out out2 white").inverted();
             i.add('led-3','pwm out 3.3').tag("out green rgb").inverted();
-            i.add('led-4','digital out 3.5').tag("out out2 white").inverted();
+            i.add('led-4','pwm out 3.5').tag("out out1 white").inverted();
             i.add('led-5','pwm out 3.6').tag("out blue rgb").inverted();
             i.add('led-6','digital out 2.4').tag("out out3 white").inverted();
             i.refresh();
@@ -74,9 +74,9 @@ livingService.prototype.onRegisterHardware = function(deferred) {
 
         (function(i) {
             i.add('led-1','pwm out 2.1').tag("out red rgb").inverted();
-            i.add('led-2','digital out 2.3').tag("out out1 white").inverted();
+            i.add('led-2','digital out 2.3').tag("out out2 white").inverted();
             i.add('led-3','pwm out 3.3').tag("out blue rgb").inverted();
-            i.add('led-4','digital out 3.5').tag("out out2 white").inverted();
+            i.add('led-4','pwm out 3.5').tag("out out1 white").inverted();
             i.add('led-5','pwm out 3.6').tag("out green rgb").inverted();
             i.add('led-6','digital out 2.4').tag("out out3 white").inverted();
             i.refresh();
@@ -146,8 +146,32 @@ livingService.prototype.onStart = function(deferred) {
             };
         };
 
-        $('living-fire b1').on("change",cycleLEDs('interface-living'),self);
-        $('living-fire b2').on("change",cycleLEDs('interface-dining'),self);
+        $('living-fire b2').on("change",cycleLEDs('interface-living'),self);
+        $('living-fire b1').on("change",cycleLEDs('interface-dining'),self);
+
+        $('living-fire b3').on("change",function(e){
+            if (!e.value) {
+                //console.log(e.value,"B3",e);
+                self.currentStates.livingPWM = self.currentStates.livingPWM | 0;
+                self.currentStates.livingPWM += 200;
+                self.currentStates.livingPWM %= 3000;
+
+                $('interface-living :out1').pwm(self.currentStates.livingPWM);
+            }
+        },self);
+
+
+        $('living-fire b4').on("change",function(e){
+            if (!e.value) {
+
+                self.currentStates.diningPWM = self.currentStates.diningPWM | 0;
+                self.currentStates.diningPWM += 200;
+                self.currentStates.diningPWM %= 3000;
+
+                $('interface-dining :out1').pwm(self.currentStates.diningPWM);
+            }
+        },self);
+
 
         deferred.resolve('run');
     });
