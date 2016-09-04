@@ -175,7 +175,7 @@ int sendMessage(struct message * outQueue,struct message * inQueues, int * pNumS
 
         printf("CHK:\n");
 	printBuffer2(ppck,SIZEOF_MCOM_OUT_CHK); printf("-"); bcm2835_spi_transfern2 (ppck,SIZEOF_MCOM_OUT_CHK);  printBuffer2(ppck,SIZEOF_MCOM_OUT_CHK);
-        usleep(6000);
+        usleep(12000);
 
 	if(outQueue) {
 		if (pck.chkSum == checkSum) {
@@ -393,7 +393,7 @@ int main(int argc, char **argv)
 				//  or we have more snccRequests to service
 				sendMessage(NULL,inQueues,&numSNCCRequests);
 			} else {
-				usleep(750);
+				usleep(1500);
 			}
 		}
 		allMsgProcessed=0;
@@ -425,7 +425,7 @@ int main(int argc, char **argv)
 			if (transferErrorsPresent) {
 				if (onlyTransferErrors) {
 					insertNewCmds((struct message**)outQueues);
-					usleep(750); 
+					usleep(1500); 
 				} 
 			} 
 		}
@@ -451,7 +451,7 @@ int dataCheckSum (unsigned char * req, int reqLen) {
 void debugMessage(struct message * m) {
 
 	unsigned char data [20];
-
+   
 	printf("data: ");
 	printBuffer2(m->data,20);
 	printf("expectedChecksum: 0x%x\n",m->expectedChecksum);
@@ -474,7 +474,7 @@ int printBuffer (char * b,int size) {
 }
 
 int printBuffer2 (char * b,int size) {
-
+ return;
   int i;
   for (i=0;i<size;i++) {
   printf("%x ",b[i]);

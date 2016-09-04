@@ -47,9 +47,27 @@ helperService.prototype.published = function() {
 
                     for (let j = 1; j <= 3; j++) {
 	                   self.accessNetwork(function(net,$) { 
-       				$(selector + j).enable(j <= (lastval));
-                           }); 
-		    }
+       				    $(selector + j).enable(j <= (lastval));
+                       });
+		            }
+                }
+            };
+        },
+
+        colorCycle : function(stateContainer,stateKey,selector,colorArray) {
+
+            stateContainer[stateKey] = stateContainer[stateKey] | 0;
+            return function (value) {
+                //console.log(value);
+                if (!value.value) {
+                    let lastval = stateContainer[stateKey];
+
+                    self.accessNetwork(function(net,$) {
+                       $(selector).helper.toRGB(colorArray[lastval++]);
+                    });
+
+                    lastval %= colorArray.length;
+                    stateContainer[stateKey] = lastval;
                 }
             };
         }

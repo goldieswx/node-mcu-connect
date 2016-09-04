@@ -36,21 +36,21 @@ roomService.prototype.onRegisterHardware = function(deferred) {
 
 
         (function(i) {
-            i.add('led-1','pwm out 2.1').tag("out red rgb").inverted();
+            i.add('led-1','pwm out 2.1').tag("out green rgb").inverted();
             i.add('led-2','digital out 2.3').tag("out white1").inverted();
             i.add('led-3','pwm out 3.3').tag("out blue rgb").inverted();
             i.add('led-4','digital out 3.5').tag("out white2").inverted();
-            i.add('led-5','pwm out 3.6').tag("out  green rgb").inverted();
+            i.add('led-5','pwm out 3.6').tag("out red rgb").inverted();
             i.add('led-6','digital out 2.4').tag("out white3").inverted();
             i.refresh();
         })($('room-led interface-south'));
 
         (function(i) {
-            i.add('led-1','pwm out 2.1').tag("out red rgb").inverted();
+            i.add('led-1','pwm out 2.1').tag("out green rgb").inverted();
             i.add('led-2','digital out 2.3').tag("out white1").inverted();
             i.add('led-3','pwm out 3.3').tag("out blue rgb").inverted();
             i.add('led-4','digital out 3.5').tag("out white2").inverted();
-            i.add('led-5','pwm out 3.6').tag("out green rgb").inverted();
+            i.add('led-5','pwm out 3.6').tag("out red rgb").inverted();
             i.add('led-6','digital out 2.4').tag("out white3").inverted();
             i.refresh();
         })($('room-led-2 interface-south'));
@@ -126,13 +126,55 @@ roomService.prototype.onStart = function(deferred) {
         $('room-north :out').disable();
         $('room-south :out').disable();
         $('dressing :out').disable();
-        $('room-led :out').disable();
-        $('room-led2 :out').disable();
+        $(':room :out').disable();
+        $(':room :rgb').pwm(0);
+
 
         let cycleFn =  net.services('helper').cycle(self.currentStates,'mainLEDCycle',':room :white');
 
         $('room-north b1').on("change",cycleFn,self);
         $('room-south b1').on("change",cycleFn,self);
+
+        let colors = [
+            '3FE500',
+            '81E100',
+            'C1DD00',
+            'D9B300',
+            'D57000',
+            'D22E00',
+            'CE000F',
+            'CA004C',
+            'C60086',
+            'C200BE',
+            '8900BF',
+            '5200C2',
+            '1800C6',
+            '0023CA',
+            '0062CE',
+            '00A3D2',
+            '00D5C5',
+            '00D987',
+            'FFFFFF',
+            '808080',
+            '000000'];
+
+             let roomColorCycleFn = net.services('helper').colorCycle(self.currentStates,'color1','room-led :rgb',colors);
+             let roomColorCycleFn2 = net.services('helper').colorCycle(self.currentStates,'color2','room-led-2 :rgb',colors);
+
+             let allDown = function() {
+                 $(':out').disable();
+                 $(':rgb').pwm(0);
+             };
+
+
+        $('room-north b2').on("change",allDown,self);
+        $('room-north b3').on("change",roomColorCycleFn,self);
+        $('room-north b4').on("change",roomColorCycleFn2,self);
+        $('room-south b2').on("change",allDown,self);
+        $('room-south b3').on("change",roomColorCycleFn,self);
+        $('room-south b4').on("change",roomColorCycleFn2,self);
+
+
 
 //        $('living-fire b1').on("change",cycleLEDs('interface-living'),self);
 //        $('living-fire b2').on("change",cycleLEDs('interface-dining'),self);

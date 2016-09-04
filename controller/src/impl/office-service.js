@@ -97,9 +97,41 @@ officeService.prototype.onStart = function(deferred) {
         $('office-east :out').disable();
         $('office-west :out').disable();
 
+         let colors = [
+            '3FE500',
+            '81E100',
+            'C1DD00',
+            'D9B300',
+            'D57000',
+            'D22E00',
+            'CE000F',
+            'CA004C',
+            'C60086',
+            'C200BE',
+            '8900BF',
+            '5200C2',
+            '1800C6',
+            '0023CA',
+            '0062CE',
+            '00A3D2',
+            '00D5C5',
+            '00D987',
+            'FFFFFF',
+            '808080',
+            '000000'];
+
         let cycleFn =  net.services('helper').cycle(self.currentStates,'mainLEDCycle','main-led-office :white');
+        let diningColorCycleFn = net.services('helper').colorCycle(self.currentStates,'color1','interface-living :rgb',colors);
+        let livingColorCycleFn = net.services('helper').colorCycle(self.currentStates,'color2','interface-dining :rgb',colors);
+        let roomColorCycleFn = net.services('helper').colorCycle(self.currentStates,'color3',':room :rgb',colors);
+
 
         $('office-east b1').on("change",cycleFn,self);
+        $('office-east b3').on("change",roomColorCycleFn,self);
+
+
+        $('office-west b3').on("change",diningColorCycleFn,self);
+        $('office-west b4').on("change",livingColorCycleFn,self);
         $('office-west b1').on("change",cycleFn,self);
 
         deferred.resolve('run');
