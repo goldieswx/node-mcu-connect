@@ -46,7 +46,7 @@ livingService.prototype.onRegisterHardware = function(deferred) {
             i.add('led-2','digital out 2.3').tag("out out2 white").inverted();
             i.add('led-3','pwm out 3.3').tag("out blue rgb").inverted();
             i.add('led-4','pwm out 3.5').tag("out out1 white").inverted();
-            i.add('led-5','pwm out 3.6').tag("out out3 green rgb").inverted();
+            i.add('led-5','pwm out 3.6').tag("out green rgb").inverted();
             i.add('led-6','digital out 2.4').tag("out out3 white").inverted();
             i.refresh();
         })($('main-led-north interface-living'));
@@ -96,14 +96,51 @@ livingService.prototype.onRegisterHardware = function(deferred) {
             i.add('b3','digital in 2.4').tag('switch in left bottom');
             i.add('b4','digital in 1.3').tag('switch in right bottom');
             i.add('led-b1','digital out 3.4').tag('out led left top blue');
-            i.add('led-b2','digital out 2.1').tag('out led right top red');
-            i.add('led-b3','digital out 2.3').tag('out led left bottom green');
+            i.add('led-b2','digital out 2.1').tag('out led right top green');
+            i.add('led-b3','digital out 2.3').tag('out led left bottom red');
             i.add('led-b4','digital out 3.3').tag('out led right bottom orange');
             i.refresh();
         })(node.find(interfaceKey));
 
-        /// done hardware registering
-        setTimeout(function() {deferred.resolve();},200);
+
+
+
+        nodeKey = 'hall-east', interfaceKey = 'interface', nodeId = 21, node;
+        net.add(nodeKey, nodeId);
+        node = $(nodeKey);
+        node.add(interfaceKey, 0x00);
+
+        (function(i) {
+            i.add('b1','digital in 2.5').tag('switch in left top');
+            i.add('b2','digital in 1.2').tag('switch in right top');
+            i.add('b3','digital in 2.4').tag('switch in left bottom');
+            i.add('b4','digital in 1.3').tag('switch in right bottom');
+            i.add('led-b1','digital out 3.4').tag('out led left top orange hall');
+            i.add('led-b2','digital out 2.1').tag('out led right top green ok hall');
+            i.add('led-b3','digital out 2.3').tag('out led left bottom red hall');
+            i.add('led-b4','digital out 3.3').tag('out led right bottom blue ok hall');
+            i.refresh();
+        })(node.find(interfaceKey));
+
+        nodeKey = 'hall-west', interfaceKey = 'interface', nodeId = 29, node;
+        net.add(nodeKey, nodeId);
+        node = $(nodeKey);
+        node.add(interfaceKey, 0x00);
+
+        (function(i) {
+            i.add('b1','digital in 2.5').tag('switch in left top');
+            i.add('b2','digital in 1.2').tag('switch in right top');
+            i.add('b3','digital in 2.4').tag('switch in left bottom');
+            i.add('b4','digital in 1.3').tag('switch in right bottom');
+            i.add('led-b1','digital out 3.4').tag('out led left top blue ok hall');
+            i.add('led-b2','digital out 2.1').tag('out led right top orange ok hall');
+            i.add('led-b3','digital out 2.3').tag('out led left bottom green ok hall');
+            i.add('led-b4','digital out 3.3').tag('out led right bottom red hall');
+            i.refresh();
+        })(node.find(interfaceKey));
+
+
+        setTimeout(function() {deferred.resolve();},300);
     });
 };
 
@@ -114,8 +151,18 @@ livingService.prototype.onStart = function(deferred) {
     var self = this;
     this.accessNetwork(function(net,$) {
 
+
+        $(':hall:out').disable();
+
         /* office-east Top-Left Switch  cycle led circuits  1/1+2/1+2+3/OFF  */
         /* office-west Top-Left Switch  cycle led circuits  1/1+2/1+2+3/OFF  */
+
+        setInterval(function() {
+            $(':hall:red').enable();
+            setTimeout(function() {
+                 $(':hall:red').disable();
+	    },500);
+	},3000);
 
         self.currentStates.cycleState = {
         }
@@ -149,7 +196,15 @@ livingService.prototype.onStart = function(deferred) {
         $('living-fire b2').on("change",cycleLEDs('interface-living'),self);
         $('living-fire b1').on("change",cycleLEDs('interface-dining'),self);
 
-        $('living-fire b3').on("change",function(e){
+        $('hall-east b2').on("change",cycleLEDs('interface-living'),self);
+        $('hall-east b1').on("change",cycleLEDs('interface-dining'),self);
+
+        $('hall-west b2').on("change",cycleLEDs('interface-living'),self);
+        $('hall-west b1').on("change",cycleLEDs('interface-dining'),self);
+
+
+
+        $('living-fire b4').on("change",function(e){
             if (!e.value) {
                 //console.log(e.value,"B3",e);
                 self.currentStates.livingPWM = self.currentStates.livingPWM | 0;
@@ -161,7 +216,7 @@ livingService.prototype.onStart = function(deferred) {
         },self);
 
 
-        $('living-fire b4').on("change",function(e){
+        $('living-fire b3').on("change",function(e){
             if (!e.value) {
 
                 self.currentStates.diningPWM = self.currentStates.diningPWM | 0;

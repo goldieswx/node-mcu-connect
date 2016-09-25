@@ -121,8 +121,8 @@ officeService.prototype.onStart = function(deferred) {
             '000000'];
 
         let cycleFn =  net.services('helper').cycle(self.currentStates,'mainLEDCycle','main-led-office :white');
-        let diningColorCycleFn = net.services('helper').colorCycle(self.currentStates,'color1','interface-living :rgb',colors);
-        let livingColorCycleFn = net.services('helper').colorCycle(self.currentStates,'color2','interface-dining :rgb',colors);
+        let diningColorCycleFn = net.services('helper').colorCycle(self.currentStates,'color1','main-led-north :rgb',colors);
+        let livingColorCycleFn = net.services('helper').colorCycle(self.currentStates,'color2','main-led-south :rgb',colors);
         let roomColorCycleFn = net.services('helper').colorCycle(self.currentStates,'color3',':room :rgb',colors);
 
 

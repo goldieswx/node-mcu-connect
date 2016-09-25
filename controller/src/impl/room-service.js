@@ -36,21 +36,21 @@ roomService.prototype.onRegisterHardware = function(deferred) {
 
 
         (function(i) {
-            i.add('led-1','pwm out 2.1').tag("out green rgb").inverted();
+            i.add('led-1','pwm out 2.1').tag("out red rgb").inverted();
             i.add('led-2','digital out 2.3').tag("out white1").inverted();
-            i.add('led-3','pwm out 3.3').tag("out blue rgb").inverted();
+            i.add('led-3','pwm out 3.3').tag("out green rgb").inverted();
             i.add('led-4','digital out 3.5').tag("out white2").inverted();
-            i.add('led-5','pwm out 3.6').tag("out red rgb").inverted();
+            i.add('led-5','pwm out 3.6').tag("out blue rgb").inverted();
             i.add('led-6','digital out 2.4').tag("out white3").inverted();
             i.refresh();
         })($('room-led interface-south'));
 
         (function(i) {
-            i.add('led-1','pwm out 2.1').tag("out green rgb").inverted();
+            i.add('led-1','pwm out 2.1').tag("out red rgb").inverted();
             i.add('led-2','digital out 2.3').tag("out white1").inverted();
-            i.add('led-3','pwm out 3.3').tag("out blue rgb").inverted();
+            i.add('led-3','pwm out 3.3').tag("out green rgb").inverted();
             i.add('led-4','digital out 3.5').tag("out white2").inverted();
-            i.add('led-5','pwm out 3.6').tag("out red rgb").inverted();
+            i.add('led-5','pwm out 3.6').tag("out blue rgb").inverted();
             i.add('led-6','digital out 2.4').tag("out white3").inverted();
             i.refresh();
         })($('room-led-2 interface-south'));
@@ -134,6 +134,8 @@ roomService.prototype.onStart = function(deferred) {
 
         $('room-north b1').on("change",cycleFn,self);
         $('room-south b1').on("change",cycleFn,self);
+
+        // r=>b g=>r b=>g
 
         let colors = [
             '3FE500',

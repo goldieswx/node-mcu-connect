@@ -163,7 +163,7 @@ MCUIo.prototype.enable = function(value) {
 
 		if (this.isPWM()) {
 
-			if (_.isUndefined(this._lastPWM)) {
+			if (_.isUndefined(this._lastPWM) || (this._lastPWM < 10)) {
 				this.pwm(this.getDutyCycle());
 			} else {
 				this.pwm(this._lastPWM);
@@ -188,10 +188,9 @@ MCUIo.prototype.enable = function(value) {
 
 MCUIo.prototype.pwm = function(value) {
 
-
 	this._lastPWM = value;
 	this._interface._pwm(this,this._getValuePWM(value));
-	this.value = 0;
+	this.value = value != 0;
 
 }
 
