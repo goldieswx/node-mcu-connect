@@ -163,11 +163,7 @@ roomService.prototype.onStart = function(deferred) {
 
              let roomColorCycleFn = net.services('helper').colorCycle(self.currentStates,'color1','room-led :rgb',colors);
              let roomColorCycleFn2 = net.services('helper').colorCycle(self.currentStates,'color2','room-led-2 :rgb',colors);
-
-             let allDown = function() {
-                 $(':out').disable();
-                 $(':rgb').pwm(0);
-             };
+             let allDown = net.services('helper').allDown;
 
 
         $('room-north b2').on("change",allDown,self);

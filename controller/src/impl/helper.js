@@ -70,6 +70,13 @@ helperService.prototype.published = function() {
                     stateContainer[stateKey] = lastval;
                 }
             };
+        },
+
+        allDown :   function(value) {
+                if (!value.value) {
+                    $(':out').disable();
+                    $(':rgb').pwm(0);
+                }
         }
 
 

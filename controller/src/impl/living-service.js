@@ -193,6 +193,8 @@ livingService.prototype.onStart = function(deferred) {
             };
         };
 
+        let allDown = net.services('helper').allDown;
+
         $('living-fire b2').on("change",cycleLEDs('interface-living'),self);
         $('living-fire b1').on("change",cycleLEDs('interface-dining'),self);
 
@@ -201,6 +203,7 @@ livingService.prototype.onStart = function(deferred) {
 
         $('hall-west b2').on("change",cycleLEDs('interface-living'),self);
         $('hall-west b1').on("change",cycleLEDs('interface-dining'),self);
+        $('hall-west b4').on("change",allDown,self);
 
         $('dressing b3').on("change",cycleLEDs('interface-living'),self);
         $('dressing b3').on("change",cycleLEDs('interface-dining'),self);
