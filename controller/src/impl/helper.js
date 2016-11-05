@@ -74,6 +74,7 @@ helperService.prototype.published = function() {
 
         allDown :   function(value) {
                 if (!value.value) {
+                    console.log('disable all');
                     $(':out').disable();
                     $(':rgb').pwm(0);
                 }
