@@ -127,7 +127,7 @@ officeService.prototype.onStart = function(deferred) {
 
 
         $('office-east b1').on("change",cycleFn,self);
-        $('office-east b3').on("change",roomColorCycleFn,self);
+        $('office-east b4').on("change",roomColorCycleFn,self);
 
 
         $('office-west b3').on("change",diningColorCycleFn,self);

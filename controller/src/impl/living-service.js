@@ -205,6 +205,9 @@ livingService.prototype.onStart = function(deferred) {
         $('dressing b3').on("change",cycleLEDs('interface-living'),self);
         $('dressing b3').on("change",cycleLEDs('interface-dining'),self);
 
+        $('office-west b2').on("change",cycleLEDs('interface-living'),self);
+        $('office-west b2').on("change",cycleLEDs('interface-dining'),self);
+
         $('living-fire b4').on("change",function(e){
             if (!e.value) {
                 //console.log(e.value,"B3",e);
