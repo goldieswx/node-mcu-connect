@@ -34,7 +34,6 @@ roomService.prototype.onRegisterHardware = function(deferred) {
         net.add('room-led-2',14);
         $('room-led-2').add('interface-south',0x00).tag('room');
 
-
         (function(i) {
             i.add('led-1','pwm out 2.1').tag("out red rgb").inverted();
             i.add('led-2','digital out 2.3').tag("out white1").inverted();
@@ -134,6 +133,7 @@ roomService.prototype.onStart = function(deferred) {
 
         $('room-north b1').on("change",cycleFn,self);
         $('room-south b1').on("change",cycleFn,self);
+        $('dressing b2').on("change",cycleFn,self);
 
         // r=>b g=>r b=>g
 
@@ -175,6 +175,7 @@ roomService.prototype.onStart = function(deferred) {
         $('room-south b2').on("change",allDown,self);
         $('room-south b3').on("change",roomColorCycleFn,self);
         $('room-south b4').on("change",roomColorCycleFn2,self);
+
 
 
 
