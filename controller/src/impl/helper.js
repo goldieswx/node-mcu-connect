@@ -73,11 +73,12 @@ helperService.prototype.published = function() {
         },
 
         allDown :   function(value) {
-                if (!value.value) {
-                    console.log('disable all');
-                    $(':out').disable();
-                    $(':rgb').pwm(0);
-                }
+                self.accessNetwork(function(net,$) {
+                    if (!value.value) {
+                        $(':out').disable();
+                        $(':rgb').pwm(0);
+                    }
+                });
         }
 
 
