@@ -133,7 +133,7 @@ roomService.prototype.onStart = function(deferred) {
 
         $('room-north b1').on("change",cycleFn,self);
         $('room-south b1').on("change",cycleFn,self);
-        $('dressing b2').on("change",cycleFn,self);
+        $('dressing b4').on("change",cycleFn,self);
 
         // r=>b g=>r b=>g
 
