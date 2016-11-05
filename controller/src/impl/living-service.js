@@ -200,7 +200,7 @@ livingService.prototype.onStart = function(deferred) {
 
         $('hall-east b2').on("change",cycleLEDs('interface-living'),self);
         $('hall-east b1').on("change",cycleLEDs('interface-dining'),self);
-        $('hall-west b4').on("change",allDown,self);
+        $('hall-east b4').on("change",allDown,self);
 
 
         $('hall-west b2').on("change",cycleLEDs('interface-living'),self);
