@@ -88,11 +88,11 @@ helperService.prototype.published = function() {
                             console.log('handler started');
                             timeOutGradientSpeedHandler = setInterval(function() {
                                 console.log('setting intensity to',intensity);
-                                if (intensity <= 0.0001) {
-                                    deltaIntensity *= -1;
-                                }
+                                if (intensity < 0.0001) {
+                                    deltaIntensity = Math.abs(deltaIntensity);
+                                } else
                                 if (intensity >= 1) {
-                                    deltaIntensity *= -1;
+                                    deltaIntensity = -Math.abs(deltaIntensity);
                                 }
                                 intensity -= deltaIntensity;
                                 self.accessNetwork(function(net,$) {
