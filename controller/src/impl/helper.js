@@ -60,13 +60,13 @@ helperService.prototype.published = function() {
             var timeOutGradientStartHandler = null;
             var timeOutGradientSpeedHandler = null;
             var intensity = 1.0;
-            var deltaIntensity = 0.01;
+            var deltaIntensity = 0.05;
 
             return function (value) {
                 //console.log(value);
                 let lastval = stateContainer[stateKey];
 
-                if (!value.value) {
+                if (value.value) {
 
                     console.log('clearing timeouts');
                     clearTimeout(timeOutGradientStartHandler);
@@ -89,6 +89,9 @@ helperService.prototype.published = function() {
                             timeOutGradientSpeedHandler = setInterval(function() {
                                 console.log('setting intensity to',intensity);
                                 if (intensity <= 0.0001) {
+                                    deltaIntensity *= -1;
+                                }
+                                if (intensity >= 1) {
                                     deltaIntensity *= -1;
                                 }
                                 intensity -= deltaIntensity;
