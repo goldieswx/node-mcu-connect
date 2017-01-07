@@ -60,7 +60,7 @@ helperService.prototype.published = function() {
             var timeOutGradientStartHandler = null;
             var timeOutGradientSpeedHandler = null;
             var intensity = 1.0;
-            var deltaIntensity = 0.05;
+            var deltaIntensity = 0.02;
 
             return function (value) {
                 //console.log(value);
@@ -68,15 +68,16 @@ helperService.prototype.published = function() {
 
                 if (value.value) {
 
-                    console.log('clearing timeouts');
-                    clearTimeout(timeOutGradientStartHandler);
-                    clearTimeout(timeOutGradientSpeedHandler);
-                    timeOutGradientStartHandler = null;
-                    timeOutGradientSpeedHandler = null;
-
-                    self.accessNetwork(function(net,$) {
-                       $(selector).helper.toRGB(colorArray[lastval++],intensity);
-                    });
+                    if (!timeOutGradientStartHandler) {
+                        self.accessNetwork(function (net, $) {
+                            $(selector).helper.toRGB(colorArray[lastval++], intensity);
+                        });
+                    } else {
+                        clearTimeout(timeOutGradientStartHandler);
+                        clearTimeout(timeOutGradientSpeedHandler);
+                        timeOutGradientStartHandler = null;
+                        timeOutGradientSpeedHandler = null;
+                    }
 
                     lastval %= colorArray.length;
                     stateContainer[stateKey] = lastval;
@@ -94,11 +95,11 @@ helperService.prototype.published = function() {
                                 if (intensity >= 1) {
                                     deltaIntensity = -Math.abs(deltaIntensity);
                                 }
-                                intensity -= deltaIntensity;
+                                intensity += deltaIntensity;
                                 self.accessNetwork(function(net,$) {
                                     $(selector).helper.toRGB(colorArray[lastval],intensity);
                                 });
-                            },250);
+                            },150);
                         },2000);
                     }
                 }
