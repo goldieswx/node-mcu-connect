@@ -57,10 +57,21 @@ helperService.prototype.published = function() {
         colorCycle : function(stateContainer,stateKey,selector,colorArray) {
 
             stateContainer[stateKey] = stateContainer[stateKey] | 0;
+            var timeOutGradientStartHandler = null;
+            var timeOutGradientSpeedHandler = null;
+            var intensity = 1.0;
+            var deltaIntensity = 0.01;
+
             return function (value) {
                 //console.log(value);
+                let lastval = stateContainer[stateKey];
+
                 if (!value.value) {
-                    let lastval = stateContainer[stateKey];
+
+                    clearTimeout(timeOutGradientStartHandler);
+                    clearTimeout(timeOutGradientSpeedHandler);
+                    timeOutGradientStartHandler = null;
+                    timeOutGradientSpeedHandler = null;
 
                     self.accessNetwork(function(net,$) {
                        $(selector).helper.toRGB(colorArray[lastval++]);
@@ -68,6 +79,21 @@ helperService.prototype.published = function() {
 
                     lastval %= colorArray.length;
                     stateContainer[stateKey] = lastval;
+                } else {
+                    // startTimeout.
+                    if (!timeOutGradientStartHandler) {
+                        timeOutGradientStartHandler = setTimeout(function() {
+                            timeOutGradientSpeedHandler = setInterval(function() {
+                                if (intensity <= 0.0001) {
+                                    deltaIntensity *= -1;
+                                }
+                                intensity -= deltaIntensity;
+                                self.accessNetwork(function(net,$) {
+                                    $(selector).helper.toRGB(colorArray[lastval],intensity);
+                                });
+                            },250);
+                        },2000);
+                    }
                 }
             };
         },
