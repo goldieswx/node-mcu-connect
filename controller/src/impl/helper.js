@@ -68,14 +68,15 @@ helperService.prototype.published = function() {
 
                 if (value.value) {
 
+                    clearTimeout(timeOutGradientStartHandler);
+                    timeOutGradientStartHandler = null;
+
                     if (!timeOutGradientSpeedHandler) {
                         self.accessNetwork(function (net, $) {
                             $(selector).helper.toRGB(colorArray[lastval++], intensity);
                         });
                     } else {
-                        clearTimeout(timeOutGradientStartHandler);
                         clearTimeout(timeOutGradientSpeedHandler);
-                        timeOutGradientStartHandler = null;
                         timeOutGradientSpeedHandler = null;
                     }
 
