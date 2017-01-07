@@ -68,22 +68,26 @@ helperService.prototype.published = function() {
 
                 if (!value.value) {
 
+                    console.log('clearing timeouts');
                     clearTimeout(timeOutGradientStartHandler);
                     clearTimeout(timeOutGradientSpeedHandler);
                     timeOutGradientStartHandler = null;
                     timeOutGradientSpeedHandler = null;
 
                     self.accessNetwork(function(net,$) {
-                       $(selector).helper.toRGB(colorArray[lastval++]);
+                       $(selector).helper.toRGB(colorArray[lastval++],intensity);
                     });
 
                     lastval %= colorArray.length;
                     stateContainer[stateKey] = lastval;
                 } else {
                     // startTimeout.
+                    console.log('starting hanlder in 2S');
                     if (!timeOutGradientStartHandler) {
                         timeOutGradientStartHandler = setTimeout(function() {
+                            console.log('handler started');
                             timeOutGradientSpeedHandler = setInterval(function() {
+                                console.log('setting intensity to',intensity);
                                 if (intensity <= 0.0001) {
                                     deltaIntensity *= -1;
                                 }
