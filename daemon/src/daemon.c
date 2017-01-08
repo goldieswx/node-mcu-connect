@@ -166,7 +166,7 @@ int sendMessage(struct message * outQueue,struct message * inQueues, int * pNumS
 
 	pck.__reserved_1 = 0;
 	pck.__reserved_2 = 0;
-        printf("PL:\n");
+    //printf("PL:\n");
 	//printBuffer2(ppck,SIZEOF_MCOM_OUT_PAYLOAD);
 	//printf("-");
 	bcm2835_spi_transfern2 (ppck,SIZEOF_MCOM_OUT_PAYLOAD);
