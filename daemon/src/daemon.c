@@ -131,9 +131,12 @@ int sendMessage(struct message * outQueue,struct message * inQueues, int * pNumS
 	pck.preamble.i16 = MI_DOUBLE_PREAMBLE;
 
 	pck.cmd = MI_CMD;
-        printf("HDR:\n");
+     //  printf("HDR:\n");
 	// send preamble and get the first answer
-	printBuffer2(ppck,SIZEOF_MCOM_OUT_HEADER);  bcm2835_spi_transfern2 (ppck,SIZEOF_MCOM_OUT_HEADER); printf("-");  printBuffer2(ppck,SIZEOF_MCOM_OUT_HEADER);
+	//printBuffer2(ppck,SIZEOF_MCOM_OUT_HEADER);
+	bcm2835_spi_transfern2 (ppck,SIZEOF_MCOM_OUT_HEADER);
+	//printf("-");
+	//printBuffer2(ppck,SIZEOF_MCOM_OUT_HEADER);
 
 	// send first bytes to preprocess, if no sncc request is pending,
 	// we'll try to insert the request in this signalmask already
@@ -163,8 +166,11 @@ int sendMessage(struct message * outQueue,struct message * inQueues, int * pNumS
 
 	pck.__reserved_1 = 0;
 	pck.__reserved_2 = 0;
-        printf("PL:\n");
-	printBuffer2(ppck,SIZEOF_MCOM_OUT_PAYLOAD);  printf("-"); bcm2835_spi_transfern2 (ppck,SIZEOF_MCOM_OUT_PAYLOAD); printBuffer2(ppck,SIZEOF_MCOM_OUT_PAYLOAD);
+    //printf("PL:\n");
+	//printBuffer2(ppck,SIZEOF_MCOM_OUT_PAYLOAD);
+	//printf("-");
+	bcm2835_spi_transfern2 (ppck,SIZEOF_MCOM_OUT_PAYLOAD);
+	//printBuffer2(ppck,SIZEOF_MCOM_OUT_PAYLOAD);
 	ppck += SIZEOF_MCOM_OUT_PAYLOAD;
 
 	int checkSumSNCC;
@@ -173,9 +179,12 @@ int sendMessage(struct message * outQueue,struct message * inQueues, int * pNumS
 		pck.snccCheckSum = checkSumSNCC;
 	}
 
-        printf("CHK:\n");
-	printBuffer2(ppck,SIZEOF_MCOM_OUT_CHK); printf("-"); bcm2835_spi_transfern2 (ppck,SIZEOF_MCOM_OUT_CHK);  printBuffer2(ppck,SIZEOF_MCOM_OUT_CHK);
-        usleep(6000);
+        // printf("CHK:\n");
+	    //printBuffer2(ppck,SIZEOF_MCOM_OUT_CHK);
+	    // printf("-");
+	    bcm2835_spi_transfern2 (ppck,SIZEOF_MCOM_OUT_CHK);
+	    //printBuffer2(ppck,SIZEOF_MCOM_OUT_CHK);
+        usleep(12000);
 
 	if(outQueue) {
 		if (pck.chkSum == checkSum) {
@@ -218,7 +227,7 @@ int processNodeQueue(struct message ** q) {
 
 void onMessageDropped (struct message *q) {
 
-  printf("Dropped");
+  //printf("Dropped");
   debugMessage(q);
 
 }
@@ -393,7 +402,7 @@ int main(int argc, char **argv)
 				//  or we have more snccRequests to service
 				sendMessage(NULL,inQueues,&numSNCCRequests);
 			} else {
-				usleep(750);
+				usleep(1500);
 			}
 		}
 		allMsgProcessed=0;
@@ -425,7 +434,7 @@ int main(int argc, char **argv)
 			if (transferErrorsPresent) {
 				if (onlyTransferErrors) {
 					insertNewCmds((struct message**)outQueues);
-					usleep(750); 
+					usleep(1500); 
 				} 
 			} 
 		}
@@ -451,7 +460,7 @@ int dataCheckSum (unsigned char * req, int reqLen) {
 void debugMessage(struct message * m) {
 
 	unsigned char data [20];
-
+   
 	printf("data: ");
 	printBuffer2(m->data,20);
 	printf("expectedChecksum: 0x%x\n",m->expectedChecksum);
@@ -474,7 +483,7 @@ int printBuffer (char * b,int size) {
 }
 
 int printBuffer2 (char * b,int size) {
-
+ return;
   int i;
   for (i=0;i<size;i++) {
   printf("%x ",b[i]);

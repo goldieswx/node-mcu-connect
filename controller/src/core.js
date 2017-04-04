@@ -16,7 +16,7 @@
 
 module.exports = {
 
-    Network: require('./MCU/Network')
-
+    Network: require('./MCU/Network'),
+    Service: require('./MCU/Service')
 };
 

@@ -13,7 +13,7 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>. 
 */
 
-var _     = require('lodash-node');
+var _     = require('lodash');
 var util  = require('util');
 
 var MCUObject = require('./Object');
@@ -44,7 +44,8 @@ MCUNode.prototype.add = function(key,id) {
 
 MCUNode.prototype._callback = function(message) {
 
-	// lazy cache of cachedInterfaceList.
+
+  	// lazy cache of cachedInterfaceList.
 	if(_.isUndefined(this._cachedInterfaceList[message.interfaceId])) {
 		this._cachedInterfaceList[message.interfaceId] = _.find(this.children,{id:message.interfaceId});
 	}

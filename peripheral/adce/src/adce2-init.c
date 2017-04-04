@@ -153,9 +153,16 @@ void initializeIOConfig(struct IoConfig * ioConfig) {
 	ioConfig->P3DIR &= availP3;
 	ioConfig->P3REN &= availP3;
 	ioConfig->P3OUT &= availP3;
+	ioConfig->P2ADC &= availP2;
+	ioConfig->P3ADC &= availP3;
+
+
 
 	P1DIR    = (P1DIR & (~availP1)) | ioConfig->P1DIR;
 	P1SEL    = (P1SEL & (~availP1)) | ioConfig->P1ADC;
+	P2SEL    = (P2SEL & (~availP2)) | ioConfig->P2ADC;
+	P3SEL    = (P3SEL & (~availP3)) | ioConfig->P3ADC;
+
 	P1SEL2   = (P1SEL2 & (~availP1));
 	P2SEL2   = (P2SEL2 & (~availP2));
 	P3SEL2   = (P3SEL2 & (~availP3));

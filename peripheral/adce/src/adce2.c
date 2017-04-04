@@ -242,7 +242,7 @@ void fillSampleTrigger(struct Sample * new,struct Sample * old,struct IoConfig *
     	int usedADCIo[MAX_ADC_CHANNELS];
 
         if(ret->transferReturn) {
-           new->trigger = 1 >> 9;
+           new->trigger = 1 << 9;
            ret->returnedData.s.trigger = new->trigger; 
            return;
 	}
@@ -396,7 +396,7 @@ void flashCustomCmds(struct FlashCustomCmd * flashCustomCmd,struct Return *ret) 
        lastWritePosition ++;
        
        flash_write(nextWrite,flashCustomCmd->data,9);
-       nextWrite += 256; 
+       nextWrite += 18; 
 
        uint8_t * crcPtr = (uint8_t *) flashCustomCmd->data;
        uint16_t  crc = 0;  

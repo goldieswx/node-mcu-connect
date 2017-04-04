@@ -62,7 +62,7 @@ int main() {
 			adceServiceCmd(p,adceId);
 			clearMasterInquiry(p); //only if processed correctly TODO
 		} else {
-			if ((EXT1_INTR) /*|| (EXT2_INTR)*/) {
+			if ((EXT1_INTR) || (EXT2_INTR)) {
 				int adceId = adceSignalTriggerAny();
 				adceServiceTrigger(p,adceId);
 			}
