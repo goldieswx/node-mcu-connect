@@ -66,10 +66,10 @@ roomService.prototype.onRegisterHardware = function(deferred) {
             i.add('b2','digital in 1.2').tag('switch in right top');
             i.add('b3','digital in 2.4').tag('switch in left bottom');
             i.add('b4','digital in 1.3').tag('switch in right bottom');
-            i.add('led-b1','digital out 3.4').tag('out led left top blue');
-            i.add('led-b2','digital out 2.1').tag('out led right top red');
-            i.add('led-b3','digital out 2.3').tag('out led left bottom green');
-            i.add('led-b4','digital out 3.3').tag('out led right bottom orange');
+            i.add('led-b1','digital out 3.4').tag('room out led left top orange');
+            i.add('led-b2','digital out 2.1').tag('room out led right top red');
+            i.add('led-b3','digital out 2.3').tag('room out led left bottom green');
+            i.add('led-b4','digital out 3.3').tag('room out led right bottom blue');
             i.refresh();
         })(node.find(interfaceKey));
 
@@ -84,14 +84,15 @@ roomService.prototype.onRegisterHardware = function(deferred) {
             i.add('b2','digital in 1.2').tag('switch in right top');
             i.add('b3','digital in 2.4').tag('switch in left bottom');
             i.add('b4','digital in 1.3').tag('switch in right bottom');
-            i.add('led-b1','digital out 3.4').tag('out led left top blue');
-            i.add('led-b2','digital out 2.1').tag('out led right top red');
-            i.add('led-b3','digital out 2.3').tag('out led left bottom green');
-            i.add('led-b4','digital out 3.3').tag('out led right bottom orange');
+            i.add('led-b1','digital out 3.4').tag('room out led left top orange');
+            i.add('led-b2','digital out 2.1').tag('room out led right top red');
+            i.add('led-b3','digital out 2.3').tag('room out led left bottom green');
+            i.add('led-b4','digital out 3.3').tag('room out led right bottom blue');
             i.refresh();
         })(node.find(interfaceKey));
+        
 
-        // Dressing switch, nodeID = 30, key = dresssing
+	// Dressing switch, nodeID = 30, key = dresssing
         nodeKey = 'dressing'; interfaceKey = 'interface'; nodeId = 30;
         net.add(nodeKey, nodeId);
         node = $(nodeKey);
@@ -133,7 +134,7 @@ roomService.prototype.onStart = function(deferred) {
 
         $('room-north b1').on("change",cycleFn,self);
         $('room-south b1').on("change",cycleFn,self);
-        $('office-east b3').on("change",cycleFn,self);
+	$('office-east b3').on("change",cycleFn,self);
         $('dressing b4').on("change",cycleFn,self);
 
         // r=>b g=>r b=>g
@@ -163,7 +164,11 @@ roomService.prototype.onStart = function(deferred) {
 
              let roomColorCycleFn = net.services('helper').colorCycle(self.currentStates,'color1','room-led :rgb',colors);
              let roomColorCycleFn2 = net.services('helper').colorCycle(self.currentStates,'color2','room-led-2 :rgb',colors);
-             let allDown = net.services('helper').allDown;
+             let allDown = function(value) {
+                 net.services('helper').allDown(value);
+                 setTimeout(function() { $(':room:led:blue').enable(); } ,50) ;
+                 setTimeout(function() { $(':room:led:blue').disable(); } ,30000);
+             }
 
 
         $('room-north b2').on("change",allDown,self);
@@ -206,7 +211,6 @@ roomService.prototype.run = function() {
 roomService.prototype.init = function() {
 
     var deferred = q.defer();
-
     this.onRegisterHardware(deferred);
     return deferred.promise;
 

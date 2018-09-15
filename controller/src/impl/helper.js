@@ -62,9 +62,12 @@ helperService.prototype.published = function() {
             var intensity = 1.0;
             var deltaIntensity = 0.02;
 
+            var lastval = stateContainer[stateKey];
+            var nextColor = colorArray[lastval];
+            var lastColor = colorArray[lastval];
+
             return function (value) {
                 //console.log(value);
-                let lastval = stateContainer[stateKey];
 
                 if (value.value) {
 
@@ -73,15 +76,17 @@ helperService.prototype.published = function() {
 
                     if (!timeOutGradientSpeedHandler) {
                         self.accessNetwork(function (net, $) {
-                            $(selector).helper.toRGB(colorArray[lastval++], intensity);
+                            lastColor = nextColor;
+                            nextColor = colorArray[lastval++];
+                            lastval %= colorArray.length;
+                            $(selector).helper.toRGB(lastColor, intensity);
+                            stateContainer[stateKey] = lastval;
                         });
                     } else {
                         clearTimeout(timeOutGradientSpeedHandler);
                         timeOutGradientSpeedHandler = null;
                     }
 
-                    lastval %= colorArray.length;
-                    stateContainer[stateKey] = lastval;
                 } else {
                     // startTimeout.
                     if (!timeOutGradientStartHandler) {
@@ -95,10 +100,10 @@ helperService.prototype.published = function() {
                                 }
                                 intensity += deltaIntensity;
                                 self.accessNetwork(function(net,$) {
-                                    $(selector).helper.toRGB(colorArray[lastval],intensity);
+                                    $(selector).helper.toRGB(lastColor,intensity);
                                 });
-                            },150);
-                        },2000);
+                            },75);
+                        },1500);
                     }
                 }
             };

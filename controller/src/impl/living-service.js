@@ -102,7 +102,22 @@ livingService.prototype.onRegisterHardware = function(deferred) {
             i.refresh();
         })(node.find(interfaceKey));
 
+        nodeKey = 'living-dressing', interfaceKey = 'interface', nodeId = 7, node;
+        net.add(nodeKey, nodeId);
+        node = $(nodeKey);
+        node.add(interfaceKey, 0x00);
 
+        (function(i) {
+            i.add('b1','digital in 2.5').tag('switch in left top');
+            i.add('b2','digital in 1.2').tag('switch in right top');
+            i.add('b3','digital in 2.4').tag('switch in left bottom');
+            i.add('b4','digital in 1.3').tag('switch in right bottom');
+            i.add('led-b1','digital out 3.4').tag('out led left top blue');
+            i.add('led-b2','digital out 2.1').tag('out led right top green');
+            i.add('led-b3','digital out 2.3').tag('out led left bottom red');
+            i.add('led-b4','digital out 3.3').tag('out led right bottom orange');
+            i.refresh();
+        })(node.find(interfaceKey));
 
 
         nodeKey = 'hall-east', interfaceKey = 'interface', nodeId = 21, node;
@@ -160,9 +175,9 @@ livingService.prototype.onStart = function(deferred) {
         setInterval(function() {
             $(':hall:red').enable();
             setTimeout(function() {
-                 $(':hall:red').disable();
-	    },500);
-	},3000);
+                $(':hall:red').disable();
+            },500);
+        },3000);
 
         self.currentStates.cycleState = {
         }
@@ -197,6 +212,8 @@ livingService.prototype.onStart = function(deferred) {
 
         $('living-fire b2').on("change",cycleLEDs('interface-living'),self);
         $('living-fire b1').on("change",cycleLEDs('interface-dining'),self);
+        $('living-dressing b2').on("change",cycleLEDs('interface-living'),self);
+        $('living-dressing b1').on("change",cycleLEDs('interface-dining'),self);
 
         $('hall-east b2').on("change",cycleLEDs('interface-living'),self);
         $('hall-east b1').on("change",cycleLEDs('interface-dining'),self);
@@ -224,8 +241,30 @@ livingService.prototype.onStart = function(deferred) {
             }
         },self);
 
+        $('living-dressing b4').on("change",function(e){
+            if (!e.value) {
+                //console.log(e.value,"B3",e);
+                self.currentStates.livingPWM = self.currentStates.livingPWM | 0;
+                self.currentStates.livingPWM += 200;
+                self.currentStates.livingPWM %= 3000;
+
+                $('interface-living :out1').pwm(self.currentStates.livingPWM);
+            }
+        },self);
+
 
         $('living-fire b3').on("change",function(e){
+            if (!e.value) {
+
+                self.currentStates.diningPWM = self.currentStates.diningPWM | 0;
+                self.currentStates.diningPWM += 200;
+                self.currentStates.diningPWM %= 3000;
+
+                $('interface-dining :out1').pwm(self.currentStates.diningPWM);
+            }
+        },self);
+
+        $('living-dressing b3').on("change",function(e){
             if (!e.value) {
 
                 self.currentStates.diningPWM = self.currentStates.diningPWM | 0;
@@ -244,3 +283,4 @@ livingService.prototype.onStart = function(deferred) {
 
 
 exports.service = livingService;
+
