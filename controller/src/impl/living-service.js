@@ -41,6 +41,9 @@ livingService.prototype.onRegisterHardware = function(deferred) {
         $('main-led-south').add('interface-living',0x00);
         $('main-led-south').add('interface-dining',0x01);
 
+       net.add('main-led-bathroom',6);
+       $('main-led-bathroom').add('interface-bathroom',0x00);
+      
         (function(i) {
             i.add('led-1','pwm out 2.1').tag("out red rgb").inverted();
             i.add('led-2','digital out 2.3').tag("out out2 white").inverted();
@@ -82,6 +85,10 @@ livingService.prototype.onRegisterHardware = function(deferred) {
             i.refresh();
         })($('main-led-south interface-dining'));
 
+        (function(i) {
+            i.add('led-1','pwm out 3.6').tag("out white").inverted();
+            i.refresh();
+        })($('main-led-bathroom interface-bathroom'));
 
 
         // East switch, nodeID = 27, key = office-west
@@ -186,6 +193,7 @@ livingService.prototype.onStart = function(deferred) {
         $('living-fire :orange').disable();
         $('interface-living :out').disable();
         $('interface-dining :out').disable();
+        $('interface-bathroom :out').disable();
 
         var cycleLEDs = function (nodeKey) {
             return function(value){

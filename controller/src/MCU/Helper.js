@@ -70,11 +70,11 @@ MCUHelper.prototype.toRGB = function (rgbValues,intensity){
 
         _.each(io.children,function(item) {
            if (_.indexOf(item.tags,'red')>-1) {
-               item.pwm(Math.round(item.getDutyCycle()*rgbArray[0]*intensity));
+               item.pwm(Math.round(item.getDutyCycle()*rgbArray[0]*intensity*intensity));
            } else if (_.indexOf(item.tags,'green')>-1) {
-               item.pwm(Math.round(item.getDutyCycle()*rgbArray[1]*intensity*.76));
+               item.pwm(Math.round(item.getDutyCycle()*rgbArray[1]*intensity*intensity));
            } else if (_.indexOf(item.tags,'blue')>-1) {
-               item.pwm(Math.round(item.getDutyCycle()*rgbArray[2]*intensity*.75));
+               item.pwm(Math.round(item.getDutyCycle()*rgbArray[2]*intensity*intensity));
            }
         });
    }

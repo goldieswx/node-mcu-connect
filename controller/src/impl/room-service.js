@@ -139,6 +139,28 @@ roomService.prototype.onStart = function(deferred) {
 
         // r=>b g=>r b=>g
 
+	$('dressing b1').on("change",function(e){
+            if (!e.value) {
+                //console.log(e.value,"B3",e);
+                //if (self.currentStates.bathPWMTimeout) {
+                 //   clearTimeout(self.currentStates.bathPWMTimeout);
+		 //   self.currentStates.bathPWMTimeout = undefined;	
+	//	} 
+		if ((self.currentStates.bathPWM === undefined)) {
+		     self.currentStates.bathPWM = 2500;
+	             self.currentStates.bathPWMTimeout = setTimeout(()=> {
+			self.currentStates.bathPWM = undefined;
+		     },30000);	
+		} 
+
+                self.currentStates.bathPWM += 500;
+                self.currentStates.bathPWM %= 3500;
+
+                $('interface-bathroom :out').pwm(self.currentStates.bathPWM);
+            }
+        },self);
+
+
         let colors = [
             '3FE500',
             '81E100',
