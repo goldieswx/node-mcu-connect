@@ -134,27 +134,39 @@ roomService.prototype.onStart = function(deferred) {
 
         $('room-north b1').on("change",cycleFn,self);
         $('room-south b1').on("change",cycleFn,self);
-	$('office-east b3').on("change",cycleFn,self);
+	    $('office-east b3').on("change",cycleFn,self);
         $('dressing b4').on("change",cycleFn,self);
 
         // r=>b g=>r b=>g
 
-	$('dressing b1').on("change",function(e){
-            if (!e.value) {
-                //console.log(e.value,"B3",e);
-                //if (self.currentStates.bathPWMTimeout) {
-                 //   clearTimeout(self.currentStates.bathPWMTimeout);
-		 //   self.currentStates.bathPWMTimeout = undefined;	
-	//	} 
-		if ((self.currentStates.bathPWM === undefined)) {
-		     self.currentStates.bathPWM = 2500;
-	             self.currentStates.bathPWMTimeout = setTimeout(()=> {
-			self.currentStates.bathPWM = undefined;
-		     },30000);	
-		} 
+        self.currentStates.bathPWM = 0;
+        self.currentStates.bathPWMTimeout = undefined;
 
-                self.currentStates.bathPWM += 500;
-                self.currentStates.bathPWM %= 3500;
+
+	    $('dressing b1').on("change",function(e){
+
+            if (!e.value) {
+                let currentHour = (new Date()).getHours();
+
+                if (self.currentStates.bathPWMTimeout) {
+                    // user is playing around. normal cycle behavior  + reset timer
+                    clearTimeout(self.currentStates.bathPWMTimeout);
+		            self.currentStates.bathPWMTimeout = undefined;
+                    self.currentStates.bathPWM += 500;
+                    self.currentStates.bathPWM %= 3500;
+	    	    } else {
+                    // user wants a quick on/off
+                    if (self.currentStates.bathPWM === 0) {
+                        self.currentStates.bathPWM = (currentHour < 9)?500:3000;
+                    } else {
+                        self.currentStates.bathPWM = 0;
+                    }
+                }
+
+                //  in any case.
+                self.currentStates.bathPWMTimeout = setTimeout(()=> {
+                    self.currentStates.bathPWMTimeout = undefined;
+                },5000);
 
                 $('interface-bathroom :out').pwm(self.currentStates.bathPWM);
             }
